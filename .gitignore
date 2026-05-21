@@ -52,11 +52,14 @@ BenchmarkDotNet.Artifacts/
 Thumbs.db
 desktop.ini
 
+## Native build output
+build/native/
+
 ## Native binaries (platform-specific saucer libs)
-runtimes/**/native/*.dll
-runtimes/**/native/*.dylib
-runtimes/**/native/*.so
-!runtimes/**/native/.gitkeep
+**/runtimes/**/native/*.dll
+**/runtimes/**/native/*.dylib
+**/runtimes/**/native/*.so
+!**/runtimes/**/native/.gitkeep
 
 ## Secrets
 *.pfx

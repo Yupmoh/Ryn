@@ -1,9 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Ryn.Core</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Core window management, app lifecycle, and configuration for Ryn</Description>
     <PackageTags>ryn;desktop;webview;native;cross-platform</PackageTags>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ryn.Core.Tests" />
+    <InternalsVisibleTo Include="Ryn.Integration.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
