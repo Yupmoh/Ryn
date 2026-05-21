@@ -1,0 +1,141 @@
+name: Native Libraries
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "vendor/saucer-bindings"
+      - ".github/workflows/native-libs.yml"
+
+permissions:
+  contents: write
+
+env:
+  SAUCER_MODULES: "desktop;loop"
+  SAUCER_INLINE_MODULES: "loop"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            backend: WebKit
+            rid: osx-arm64
+            cmake-args: -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+            lib-prefix: lib
+            lib-ext: .dylib
+            archive-ext: .tar.gz
+
+          - os: ubuntu-latest
+            backend: WebKitGtk
+            rid: linux-x64
+            cmake-args: ""
+            lib-prefix: lib
+            lib-ext: .so
+            archive-ext: .tar.gz
+            container: archlinux:base-devel
+
+          - os: windows-latest
+            backend: WebView2
+            rid: win-x64
+            cmake-args: ""
+            lib-prefix: ""
+            lib-ext: .dll
+            archive-ext: .zip
+
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container || '' }}
+    name: ${{ matrix.rid }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: matrix.rid == 'linux-x64'
+        run: pacman --noconfirm -Syu cmake gcc git ninja gtk4 libadwaita webkitgtk-6.0
+
+      - name: Configure
+        run: >
+          cmake -S vendor/saucer-bindings -B build/native
+          -DCMAKE_BUILD_TYPE=Release
+          -Dsaucer_backend=${{ matrix.backend }}
+          -Dsaucer_bindings_modules="${{ env.SAUCER_MODULES }}"
+          -Dsaucer_bindings_inline_modules="${{ env.SAUCER_INLINE_MODULES }}"
+          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${{ github.workspace }}/native-out"
+          -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="${{ github.workspace }}/native-out"
+          ${{ matrix.cmake-args }}
+
+      - name: Build
+        run: cmake --build build/native --config Release
+
+      - name: Collect libraries
+        shell: bash
+        run: |
+          mkdir -p staging
+          find native-out build/native -maxdepth 3 \
+            \( -name "${{ matrix.lib-prefix }}saucer-bindings${{ matrix.lib-ext }}" \
+            -o -name "${{ matrix.lib-prefix }}saucer-bindings-desktop${{ matrix.lib-ext }}" \) \
+            -exec cp {} staging/ \;
+          ls -la staging/
+
+      - name: Package (tar.gz)
+        if: matrix.archive-ext == '.tar.gz'
+        run: tar -czf saucer-bindings-${{ matrix.rid }}${{ matrix.archive-ext }} -C staging .
+
+      - name: Package (zip)
+        if: matrix.archive-ext == '.zip'
+        shell: bash
+        run: cd staging && 7z a -tzip ../saucer-bindings-${{ matrix.rid }}${{ matrix.archive-ext }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: saucer-bindings-${{ matrix.rid }}
+          path: saucer-bindings-${{ matrix.rid }}${{ matrix.archive-ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get saucer version
+        id: version
+        run: |
+          cd vendor/saucer-bindings
+          COMMIT=$(git rev-parse --short HEAD)
+          VERSION=$(grep -oP 'VERSION \K[0-9.]+' CMakeLists.txt | head -1)
+          echo "tag=native-v${VERSION}-${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "name=Native Libraries v${VERSION} (${COMMIT})" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          NAME="${{ steps.version.outputs.name }}"
+
+          # Delete existing release with same tag if it exists
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+
+          # Create new release
+          gh release create "$TAG" \
+            --title "$NAME" \
+            --notes "Prebuilt saucer-bindings native libraries for all platforms." \
+            --latest \
+            artifacts/saucer-bindings-*.tar.gz \
+            artifacts/saucer-bindings-*.zip

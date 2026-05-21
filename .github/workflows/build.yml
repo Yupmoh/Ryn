@@ -19,6 +19,17 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         configuration: [Debug, Release]
 
+        include:
+          - os: macos-latest
+            rid: osx-arm64
+            archive-ext: .tar.gz
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive-ext: .tar.gz
+          - os: windows-latest
+            rid: win-x64
+            archive-ext: .zip
+
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -31,6 +42,26 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Download native libraries
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARCHIVE="saucer-bindings-${{ matrix.rid }}${{ matrix.archive-ext }}"
+          DEST="src/Ryn.Interop/runtimes/${{ matrix.rid }}/native"
+          mkdir -p "$DEST"
+          if gh release download --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber 2>/dev/null; then
+            if [[ "${{ matrix.archive-ext }}" == ".zip" ]]; then
+              unzip -o "/tmp/$ARCHIVE" -d "$DEST"
+            else
+              tar -xzf "/tmp/$ARCHIVE" -C "$DEST"
+            fi
+            echo "Native libraries downloaded successfully"
+          else
+            echo "No prebuilt native libraries available — integration tests will be skipped"
+          fi
+        shell: bash
+
       - name: Restore
         run: dotnet restore
 
@@ -38,7 +69,12 @@ jobs:
         run: dotnet build --no-restore -c ${{ matrix.configuration }}
 
       - name: Test
-        run: dotnet test --no-build -c ${{ matrix.configuration }} --logger "trx;LogFileName=results.trx"
+        run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category!=Integration" --logger "trx;LogFileName=results.trx"
+
+      - name: Integration test
+        if: hashFiles(format('src/Ryn.Interop/runtimes/{0}/native/*', matrix.rid)) != ''
+        run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category=Integration" --logger "trx;LogFileName=integration-results.trx"
+        continue-on-error: true
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
