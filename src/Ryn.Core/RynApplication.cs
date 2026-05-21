@@ -9,6 +9,7 @@ public sealed partial class RynApplication : IAsyncDisposable
     private readonly IServiceProvider _services;
     private readonly ILogger<RynApplication> _logger;
     private readonly List<IRynPlugin> _plugins = [];
+    private RynWindow? _window;
     private bool _disposed;
 
     internal RynApplication(IServiceProvider services)
@@ -19,10 +20,14 @@ public sealed partial class RynApplication : IAsyncDisposable
 
     public IServiceProvider Services => _services;
 
+    public IRynWindow Window => _window ?? throw new InvalidOperationException("Application is not running");
+
+    public IRynWebView WebView => _window?.WebView ?? throw new InvalidOperationException("Application is not running");
+
     public static RynApplicationBuilder CreateBuilder(RynOptions? options = null) =>
         new(options ?? new RynOptions());
 
-    public async ValueTask RunAsync(CancellationToken cancellationToken = default)
+    public ValueTask RunAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -30,17 +35,21 @@ public sealed partial class RynApplication : IAsyncDisposable
 
         foreach (var plugin in _plugins)
         {
-            await plugin.InitializeAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA1849 // Intentional sync-over-async: no event loop exists yet, so no deadlock risk
+            plugin.InitializeAsync(cancellationToken).AsTask().GetAwaiter().GetResult();
+#pragma warning restore CA1849
         }
 
-        var window = _services.GetRequiredService<IRynWindow>();
-        await window.ShowAsync(cancellationToken).ConfigureAwait(false);
+        var options = _services.GetRequiredService<RynOptions>();
+        _window = new RynWindow(options);
 
         Log.Running(_logger);
 
-        await window.WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
+        _window.Run(cancellationToken);
 
         Log.ShuttingDown(_logger);
+
+        return ValueTask.CompletedTask;
     }
 
     internal void AddPlugin(IRynPlugin plugin) => _plugins.Add(plugin);
@@ -53,6 +62,9 @@ public sealed partial class RynApplication : IAsyncDisposable
         }
 
         _disposed = true;
+
+        _window?.Dispose();
+        _window = null;
 
         foreach (var plugin in _plugins)
         {
