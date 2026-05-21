@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Ryn.Ipc</RootNamespace>
+    <Description>JavaScript to C# IPC bridge with source-generated command routing</Description>
+    <PackageTags>ryn;ipc;interop;source-generator</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+  </ItemGroup>
+</Project>

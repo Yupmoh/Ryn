@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.FileSystem\Ryn.Plugins.FileSystem.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Dialog\Ryn.Plugins.Dialog.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Clipboard\Ryn.Plugins.Clipboard.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Shell\Ryn.Plugins.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
+  </ItemGroup>
+</Project>

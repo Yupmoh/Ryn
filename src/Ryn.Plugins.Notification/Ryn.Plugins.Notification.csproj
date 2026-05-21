@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Ryn.Plugins.Notification</RootNamespace>
+    <Description>Native notification plugin for Ryn applications</Description>
+    <PackageTags>ryn;plugin;notification</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
+  </ItemGroup>
+</Project>

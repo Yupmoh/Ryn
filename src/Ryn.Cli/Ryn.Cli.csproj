@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Ryn.Cli</RootNamespace>
+    <Description>CLI tool for creating, developing, and building Ryn applications</Description>
+    <PackageTags>ryn;cli;tool</PackageTags>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ryn</ToolCommandName>
+    <PublishAot>true</PublishAot>
+    <NoWarn>CA1303</NoWarn>
+  </PropertyGroup>
+
+</Project>

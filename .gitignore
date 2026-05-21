@@ -1,0 +1,65 @@
+## .NET
+bin/
+obj/
+publish/
+out/
+
+## NuGet
+*.nupkg
+*.snupkg
+**/packages/
+*.nuget.props
+*.nuget.targets
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+## Rider
+*.sln.iml
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+## Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+coverage/
+*.coverage
+*.coveragexml
+*.opencover.xml
+
+## Benchmark results
+BenchmarkDotNet.Artifacts/
+
+## OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Native binaries (platform-specific saucer libs)
+runtimes/**/native/*.dll
+runtimes/**/native/*.dylib
+runtimes/**/native/*.so
+!runtimes/**/native/.gitkeep
+
+## Secrets
+*.pfx
+*.snk
+appsettings.*.json
+!appsettings.json

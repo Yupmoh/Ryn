@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Ryn.Plugins.Dialog</RootNamespace>
+    <Description>Native dialog plugin for Ryn applications (open, save, message box)</Description>
+    <PackageTags>ryn;plugin;dialog</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
+  </ItemGroup>
+</Project>

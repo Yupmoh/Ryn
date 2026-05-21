@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Ryn.Benchmarks/Ryn.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Ryn.Cli/Ryn.Cli.csproj" />
+    <Project Path="src/Ryn.Core/Ryn.Core.csproj" />
+    <Project Path="src/Ryn.Interop/Ryn.Interop.csproj" />
+    <Project Path="src/Ryn.Ipc/Ryn.Ipc.csproj" />
+    <Project Path="src/Ryn.Plugins.Clipboard/Ryn.Plugins.Clipboard.csproj" />
+    <Project Path="src/Ryn.Plugins.Dialog/Ryn.Plugins.Dialog.csproj" />
+    <Project Path="src/Ryn.Plugins.FileSystem/Ryn.Plugins.FileSystem.csproj" />
+    <Project Path="src/Ryn.Plugins.Notification/Ryn.Plugins.Notification.csproj" />
+    <Project Path="src/Ryn.Plugins.Shell/Ryn.Plugins.Shell.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ryn.Core.Tests/Ryn.Core.Tests.csproj" />
+    <Project Path="tests/Ryn.Integration.Tests/Ryn.Integration.Tests.csproj" />
+    <Project Path="tests/Ryn.Interop.Tests/Ryn.Interop.Tests.csproj" />
+    <Project Path="tests/Ryn.Ipc.Tests/Ryn.Ipc.Tests.csproj" />
+    <Project Path="tests/Ryn.Plugins.Tests/Ryn.Plugins.Tests.csproj" />
+  </Folder>
+</Solution>
