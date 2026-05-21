@@ -1,0 +1,17 @@
+namespace Ryn.Interop
+{
+    [NativeTypeName("unsigned int")]
+    public enum saucer_webview_event : uint
+    {
+        SAUCER_WEBVIEW_EVENT_PERMISSION,
+        SAUCER_WEBVIEW_EVENT_FULLSCREEN,
+        SAUCER_WEBVIEW_EVENT_DOM_READY,
+        SAUCER_WEBVIEW_EVENT_NAVIGATED,
+        SAUCER_WEBVIEW_EVENT_NAVIGATE,
+        SAUCER_WEBVIEW_EVENT_MESSAGE,
+        SAUCER_WEBVIEW_EVENT_REQUEST,
+        SAUCER_WEBVIEW_EVENT_FAVICON,
+        SAUCER_WEBVIEW_EVENT_TITLE,
+        SAUCER_WEBVIEW_EVENT_LOAD,
+    }
+}

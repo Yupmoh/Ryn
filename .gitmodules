@@ -1,0 +1,3 @@
+[submodule "vendor/saucer-bindings"]
+	path = vendor/saucer-bindings
+	url = https://github.com/saucer/bindings.git

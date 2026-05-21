@@ -4,5 +4,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Auto-generated saucer C bindings for Ryn via ClangSharp</Description>
     <PackageTags>ryn;interop;saucer;webview;pinvoke</PackageTags>
+    <!-- Generated P/Invoke bindings: suppress analyzers that don't apply -->
+    <NoWarn>CA5392;CA1401;CA2101;CA1707;CA1712;IDE0161;IDE0040</NoWarn>
   </PropertyGroup>
 </Project>

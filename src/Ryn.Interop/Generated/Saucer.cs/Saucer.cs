@@ -1,0 +1,581 @@
+using System.Runtime.InteropServices;
+
+namespace Ryn.Interop
+{
+    public static unsafe partial class Saucer
+    {
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_screen_free(saucer_screen* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("const char *")]
+        public static extern sbyte* saucer_screen_name(saucer_screen* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_screen_size(saucer_screen* param0, int* w, int* h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_screen_position(saucer_screen* param0, int* x, int* y);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_options_free(saucer_application_options* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_application_options* saucer_application_options_new([NativeTypeName("const char *")] sbyte* id);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_options_set_argc(saucer_application_options* param0, int param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_options_set_argv(saucer_application_options* param0, [NativeTypeName("char **")] sbyte** param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_options_set_quit_on_last_window_closed(saucer_application_options* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_free(saucer_application* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_application* saucer_application_new(saucer_application_options* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_application_thread_safe(saucer_application* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_screens(saucer_application* param0, saucer_screen** param1, [NativeTypeName("size_t *")] nuint* size);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_post(saucer_application* param0, [NativeTypeName("saucer_post_callback")] delegate* unmanaged[Cdecl]<void*, void> param1, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_quit(saucer_application* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern int saucer_application_run(saucer_application* param0, [NativeTypeName("saucer_run_callback")] delegate* unmanaged[Cdecl]<saucer_application*, void*, void> param1, [NativeTypeName("saucer_finish_callback")] delegate* unmanaged[Cdecl]<saucer_application*, void*, void> param2, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("size_t")]
+        public static extern nuint saucer_application_on(saucer_application* param0, saucer_application_event param1, void* callback, [NativeTypeName("bool")] byte clearable, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_once(saucer_application* param0, saucer_application_event param1, void* callback, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_off(saucer_application* param0, saucer_application_event param1, [NativeTypeName("size_t")] nuint param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_off_all(saucer_application* param0, saucer_application_event param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_application_native(saucer_application* param0, [NativeTypeName("size_t")] nuint idx, void* result, [NativeTypeName("size_t *")] nuint* size);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("const char *")]
+        public static extern sbyte* saucer_version();
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_free(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_window* saucer_window_new(saucer_application* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_visible(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_focused(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_minimized(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_maximized(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_resizable(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_fullscreen(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_always_on_top(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_window_click_through(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_title(saucer_window* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_background(saucer_window* param0, [NativeTypeName("uint8_t *")] byte* r, [NativeTypeName("uint8_t *")] byte* g, [NativeTypeName("uint8_t *")] byte* b, [NativeTypeName("uint8_t *")] byte* a);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern int saucer_window_decorations(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_size(saucer_window* param0, int* w, int* h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_max_size(saucer_window* param0, int* w, int* h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_min_size(saucer_window* param0, int* w, int* h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_position(saucer_window* param0, int* x, int* y);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_screen* saucer_window_screen(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_hide(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_show(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_close(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_focus(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_start_drag(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_start_resize(saucer_window* param0, saucer_window_edge param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_minimized(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_maximized(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_resizable(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_fullscreen(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_always_on_top(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_click_through(saucer_window* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_icon(saucer_window* param0, saucer_icon* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_title(saucer_window* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_background(saucer_window* param0, [NativeTypeName("uint8_t")] byte r, [NativeTypeName("uint8_t")] byte g, [NativeTypeName("uint8_t")] byte b, [NativeTypeName("uint8_t")] byte a);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_decorations(saucer_window* param0, saucer_window_decoration param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_size(saucer_window* param0, int w, int h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_max_size(saucer_window* param0, int w, int h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_min_size(saucer_window* param0, int w, int h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_set_position(saucer_window* param0, int x, int y);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("size_t")]
+        public static extern nuint saucer_window_on(saucer_window* param0, saucer_window_event param1, void* callback, [NativeTypeName("bool")] byte clearable, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_once(saucer_window* param0, saucer_window_event param1, void* callback, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_off(saucer_window* param0, saucer_window_event param1, [NativeTypeName("size_t")] nuint param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_off_all(saucer_window* param0, saucer_window_event param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_window_native(saucer_window* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_free(saucer_webview_options* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_webview_options* saucer_webview_options_new(saucer_window* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_set_attributes(saucer_webview_options* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_set_persistent_cookies(saucer_webview_options* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_set_hardware_acceleration(saucer_webview_options* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_set_storage_path(saucer_webview_options* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_set_user_agent(saucer_webview_options* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_options_append_browser_flag(saucer_webview_options* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_free(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_webview* saucer_webview_new(saucer_webview_options* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_webview_url(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_icon* saucer_webview_favicon(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_page_title(saucer_webview* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_webview_dev_tools(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_webview_context_menu(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_webview_force_dark(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_background(saucer_webview* param0, [NativeTypeName("uint8_t *")] byte* r, [NativeTypeName("uint8_t *")] byte* g, [NativeTypeName("uint8_t *")] byte* b, [NativeTypeName("uint8_t *")] byte* a);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_bounds(saucer_webview* param0, int* x, int* y, int* w, int* h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_url(saucer_webview* param0, saucer_url* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_url_str(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_html(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_dev_tools(saucer_webview* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_context_menu(saucer_webview* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_force_dark(saucer_webview* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_background(saucer_webview* param0, [NativeTypeName("uint8_t")] byte r, [NativeTypeName("uint8_t")] byte g, [NativeTypeName("uint8_t")] byte b, [NativeTypeName("uint8_t")] byte a);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_reset_bounds(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_set_bounds(saucer_webview* param0, int x, int y, int w, int h);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_back(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_forward(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_reload(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_serve(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_embed(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* path, saucer_stash* content, [NativeTypeName("const char *")] sbyte* mime);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_unembed_all(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_unembed(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_execute(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("size_t")]
+        public static extern nuint saucer_webview_inject(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* code, saucer_script_time run_at, [NativeTypeName("bool")] byte no_frames, [NativeTypeName("bool")] byte clearable);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_uninject_all(saucer_webview* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_uninject(saucer_webview* param0, [NativeTypeName("size_t")] nuint param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_handle_scheme(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1, [NativeTypeName("saucer_scheme_handler")] delegate* unmanaged[Cdecl]<saucer_scheme_request*, saucer_scheme_executor*, void*, void> param2, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_remove_scheme(saucer_webview* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("size_t")]
+        public static extern nuint saucer_webview_on(saucer_webview* param0, saucer_webview_event param1, void* callback, [NativeTypeName("bool")] byte clearable, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_once(saucer_webview* param0, saucer_webview_event param1, void* callback, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_off(saucer_webview* param0, saucer_webview_event param1, [NativeTypeName("size_t")] nuint param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_off_all(saucer_webview* param0, saucer_webview_event param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_register_scheme([NativeTypeName("const char *")] sbyte* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_native(saucer_webview* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_icon_empty(saucer_icon* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_icon_data(saucer_icon* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_icon_save(saucer_icon* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_icon_free(saucer_icon* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_icon* saucer_icon_copy(saucer_icon* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_icon* saucer_icon_new_from_file([NativeTypeName("const char *")] sbyte* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_icon* saucer_icon_new_from_stash(saucer_stash* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_icon_native(saucer_icon* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("const uint8_t *")]
+        public static extern byte* saucer_stash_data(saucer_stash* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("size_t")]
+        public static extern nuint saucer_stash_size(saucer_stash* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_stash_free(saucer_stash* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_copy(saucer_stash* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_from([NativeTypeName("uint8_t *")] byte* param0, [NativeTypeName("size_t")] nuint param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_view([NativeTypeName("const uint8_t *")] byte* param0, [NativeTypeName("size_t")] nuint param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_lazy([NativeTypeName("saucer_stash_lazy_callback")] delegate* unmanaged[Cdecl]<void*, saucer_stash*> param0, void* userdata);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_from_str([NativeTypeName("const char *")] sbyte* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_view_str([NativeTypeName("const char *")] sbyte* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_stash_new_empty();
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_free(saucer_url* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_url_copy(saucer_url* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_url_new_parse([NativeTypeName("const char *")] sbyte* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_url_new_from([NativeTypeName("const char *")] sbyte* param0, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_url_new_opts([NativeTypeName("const char *")] sbyte* scheme, [NativeTypeName("const char *")] sbyte* host, [NativeTypeName("size_t *")] nuint* port, [NativeTypeName("const char *")] sbyte* path);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_string(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_path(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_scheme(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_host(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_url_port(saucer_url* param0, [NativeTypeName("size_t *")] nuint* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_user(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_password(saucer_url* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_url_native(saucer_url* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_response_free(saucer_scheme_response* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_scheme_response* saucer_scheme_response_new(saucer_stash* param0, [NativeTypeName("const char *")] sbyte* mime);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_response_append_header(saucer_scheme_response* param0, [NativeTypeName("const char *")] sbyte* param1, [NativeTypeName("const char *")] sbyte* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_response_set_status(saucer_scheme_response* param0, int param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_request_free(saucer_scheme_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_scheme_request* saucer_scheme_request_copy(saucer_scheme_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_scheme_request_url(saucer_scheme_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_request_method(saucer_scheme_request* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_stash* saucer_scheme_request_content(saucer_scheme_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_request_headers(saucer_scheme_request* param0, [NativeTypeName("char *")] sbyte* param1, [NativeTypeName("size_t *")] nuint* param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_executor_free(saucer_scheme_executor* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_scheme_executor* saucer_scheme_executor_copy(saucer_scheme_executor* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_executor_reject(saucer_scheme_executor* param0, saucer_scheme_error param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_scheme_executor_accept(saucer_scheme_executor* param0, saucer_scheme_response* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_navigation_url(saucer_navigation* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_navigation_new_window(saucer_navigation* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_navigation_redirection(saucer_navigation* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("bool")]
+        public static extern byte saucer_navigation_user_initiated(saucer_navigation* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_permission_request_free(saucer_permission_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_permission_request* saucer_permission_request_copy(saucer_permission_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_url* saucer_permission_request_url(saucer_permission_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_permission_type saucer_permission_request_type(saucer_permission_request* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_permission_request_accept(saucer_permission_request* param0, [NativeTypeName("bool")] byte param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_permission_request_native(saucer_permission_request* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_picker_options* saucer_picker_options_new();
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_options_free(saucer_picker_options* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_options_set_initial(saucer_picker_options* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_options_set_filters(saucer_picker_options* param0, [NativeTypeName("const char *")] sbyte* param1, [NativeTypeName("size_t")] nuint param2);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_desktop_free(saucer_desktop* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_desktop* saucer_desktop_new(saucer_application* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_desktop_mouse_position(saucer_desktop* param0, int* x, int* y);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_pick_file(saucer_desktop* param0, saucer_picker_options* param1, [NativeTypeName("char *")] sbyte* param2, [NativeTypeName("size_t *")] nuint* param3, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_pick_folder(saucer_desktop* param0, saucer_picker_options* param1, [NativeTypeName("char *")] sbyte* param2, [NativeTypeName("size_t *")] nuint* param3, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_pick_files(saucer_desktop* param0, saucer_picker_options* param1, [NativeTypeName("char *")] sbyte* param2, [NativeTypeName("size_t *")] nuint* param3, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_picker_save(saucer_desktop* param0, saucer_picker_options* param1, [NativeTypeName("char *")] sbyte* param2, [NativeTypeName("size_t *")] nuint* param3, int* error);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_desktop_open(saucer_desktop* param0, [NativeTypeName("const char *")] sbyte* param1);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_loop_free(saucer_loop* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern saucer_loop* saucer_loop_new(saucer_application* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_loop_run(saucer_loop* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_loop_iteration(saucer_loop* param0);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_loop_quit(saucer_loop* param0);
+    }
+}

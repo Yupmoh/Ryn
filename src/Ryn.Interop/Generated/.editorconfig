@@ -1,0 +1,5 @@
+[*.cs]
+generated_code = true
+
+# Disable all analyzers and style rules on generated code
+dotnet_analyzer_diagnostic.severity = none

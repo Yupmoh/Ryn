@@ -1,0 +1,6 @@
+#pragma once
+
+#define SAUCER_EXPORT
+#define SAUCER_DESKTOP_EXPORT
+#define SAUCER_LOOP_EXPORT
+#define SAUCER_PDF_EXPORT
