@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Ryn.Core.Internal;
 
 namespace Ryn.Core;
 
@@ -24,8 +25,9 @@ public sealed partial class RynApplication : IAsyncDisposable
 
     public IRynWebView WebView => _window?.WebView ?? throw new InvalidOperationException("Application is not running");
 
-    public static RynApplicationBuilder CreateBuilder(RynOptions? options = null) =>
-        new(options ?? new RynOptions());
+    public static RynApplicationBuilder CreateBuilder() => new(programmaticOptions: null);
+
+    public static RynApplicationBuilder CreateBuilder(RynOptions options) => new(options);
 
     public ValueTask RunAsync(CancellationToken cancellationToken = default)
     {
@@ -33,19 +35,29 @@ public sealed partial class RynApplication : IAsyncDisposable
 
         Log.Starting(_logger);
 
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
         foreach (var plugin in _plugins)
         {
 #pragma warning disable CA1849 // Intentional sync-over-async: no event loop exists yet, so no deadlock risk
-            plugin.InitializeAsync(cancellationToken).AsTask().GetAwaiter().GetResult();
+            plugin.InitializeAsync(cts.Token).AsTask().GetAwaiter().GetResult();
 #pragma warning restore CA1849
         }
 
         var options = _services.GetRequiredService<RynOptions>();
         _window = new RynWindow(options);
 
+        var accessor = _services.GetRequiredService<RynWindowAccessor>();
+        accessor.Window = _window;
+
         Log.Running(_logger);
 
-        _window.Run(cancellationToken);
+        _window.Run(cts.Token);
 
         Log.ShuttingDown(_logger);
 
