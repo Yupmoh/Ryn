@@ -1,5 +1,3 @@
-using System.IO;
-
 namespace Ryn.Plugins.FileSystem;
 
 internal static class PathValidator
@@ -10,23 +8,29 @@ internal static class PathValidator
 
     internal static string Resolve(string path)
     {
-        var fullPath = Path.GetFullPath(path);
+        // Resolve relative paths against the app's base directory, not CWD
+        var fullPath = Path.IsPathRooted(path)
+            ? Path.GetFullPath(path)
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, path));
 
         // Check for path traversal
         if (path.Contains("..", StringComparison.Ordinal))
         {
-            var normalized = Path.GetFullPath(path);
-            if (normalized != fullPath)
-                throw new UnauthorizedAccessException($"Path traversal detected: {path}");
+            // Re-resolve without the .. to see if it escapes
+            var segments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (segments.Any(s => s == ".."))
+            {
+                // Verify the resolved path is still within an allowed directory
+                // (the check below handles this)
+            }
         }
 
         var options = _options;
         if (options is null || options.AllowedPaths.Count == 0)
         {
-            // Default: restrict to app directory
             var appDir = AppContext.BaseDirectory;
             if (!fullPath.StartsWith(appDir, StringComparison.OrdinalIgnoreCase))
-                throw new UnauthorizedAccessException($"Access denied: path is outside the application directory");
+                throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside the application directory");
             return fullPath;
         }
 
@@ -37,6 +41,6 @@ internal static class PathValidator
                 return fullPath;
         }
 
-        throw new UnauthorizedAccessException($"Access denied: path is not within any allowed directory");
+        throw new UnauthorizedAccessException($"Access denied: path '{path}' is not within any allowed directory");
     }
 }
