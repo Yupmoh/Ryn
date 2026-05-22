@@ -9,7 +9,7 @@ namespace Ryn.Core;
 
 public sealed class RynWebView : IRynWebView, IDisposable
 {
-    private const string IpcScheme = "ryn-ipc";
+    private const string AppScheme = "ryn";
 
     private static ReadOnlySpan<byte> BridgeScript =>
         """
@@ -23,9 +23,10 @@ public sealed class RynWebView : IRynWebView, IDisposable
             return new Promise(function(resolve, reject) {
               var id = nextId++;
               pending[id] = { resolve: resolve, reject: reject };
+              var body = args ? JSON.stringify(args) : '{}';
               var x = new XMLHttpRequest();
-              x.open('POST', 'ryn-ipc://cmd/' + id + '/' + encodeURIComponent(command), true);
-              x.send(args ? JSON.stringify(args) : '{}');
+              x.open('POST', '/ipc/cmd/' + id + '/' + encodeURIComponent(command), true);
+              x.send(body);
             });
           };
 
@@ -73,7 +74,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
           function __ryn_send(id, ok, data) {
             var x = new XMLHttpRequest();
-            x.open('POST', 'ryn-ipc://eval/' + id + '/' + ok, true);
+            x.open('POST', '/ipc/eval/' + id + '/' + ok, true);
             x.send(data);
           }
         })();
@@ -90,6 +91,9 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     private CommandDispatchHandler? _commandHandler;
 
+    // HTML content to serve from ryn://app/
+    private string? _htmlContent;
+
     private bool _disposed;
 
     internal unsafe RynWebView(saucer_webview* webview, saucer_application* app)
@@ -98,11 +102,21 @@ public sealed class RynWebView : IRynWebView, IDisposable
         _app = (nint)app;
         _selfHandle = (nint)NativeCallbackHelper.Alloc(this);
 
-        RegisterIpcScheme();
+        RegisterAppScheme();
         InjectBridgeScript();
     }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
+
+    internal void SetHtmlContent(string html) => _htmlContent = html;
+
+    internal unsafe void NavigateToAppScheme()
+    {
+        Span<byte> buf = stackalloc byte[64];
+        var str = Utf8String.Create("ryn://app/index.html", buf);
+        Saucer.saucer_webview_set_url_str((saucer_webview*)_webview, str.Pointer);
+        str.Dispose();
+    }
 
     public unsafe ValueTask NavigateAsync(Uri url, CancellationToken cancellationToken = default)
     {
@@ -121,10 +135,9 @@ public sealed class RynWebView : IRynWebView, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        Span<byte> buf = stackalloc byte[256];
-        var str = Utf8String.Create(html, buf);
-        Saucer.saucer_webview_set_html((saucer_webview*)_webview, str.Pointer);
-        str.Dispose();
+        // Serve via app scheme to avoid null-origin CORS issues
+        _htmlContent = html;
+        NavigateToAppScheme();
 
         return ValueTask.CompletedTask;
     }
@@ -194,15 +207,15 @@ public sealed class RynWebView : IRynWebView, IDisposable
         ExecuteOnUiThread($"window.__ryn._emit('{escapedEvent}',{jsonData})");
     }
 
-    private unsafe void RegisterIpcScheme()
+    private unsafe void RegisterAppScheme()
     {
         Span<byte> buf = stackalloc byte[32];
-        var str = Utf8String.Create(IpcScheme, buf);
+        var str = Utf8String.Create(AppScheme, buf);
 
         Saucer.saucer_webview_handle_scheme(
             (saucer_webview*)_webview,
             str.Pointer,
-            (delegate* unmanaged[Cdecl]<saucer_scheme_request*, saucer_scheme_executor*, void*, void>)&OnIpcSchemeRequest,
+            (delegate* unmanaged[Cdecl]<saucer_scheme_request*, saucer_scheme_executor*, void*, void>)&OnAppSchemeRequest,
             (void*)_selfHandle);
 
         str.Dispose();
@@ -222,13 +235,13 @@ public sealed class RynWebView : IRynWebView, IDisposable
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnIpcSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
+    private static unsafe void OnAppSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
     {
         var self = NativeCallbackHelper.Resolve<RynWebView>(userdata);
-        self.HandleIpcRequest(request, executor);
+        self.HandleAppSchemeRequest(request, executor);
     }
 
-    private unsafe void HandleIpcRequest(saucer_scheme_request* request, saucer_scheme_executor* executor)
+    private unsafe void HandleAppSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor)
     {
         var url = Saucer.saucer_scheme_request_url(request);
         var path = SaucerStringReader.ReadUrlPath(url);
@@ -236,10 +249,10 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-        // eval/{id}/{ok} — JS eval response
-        if (parts.Length >= 3 && parts[0] == "eval"
-            && long.TryParse(parts[1], out var evalId)
-            && int.TryParse(parts[2], out var ok))
+        // /ipc/eval/{id}/{ok} — JS eval response
+        if (parts.Length >= 4 && parts[0] == "ipc" && parts[1] == "eval"
+            && long.TryParse(parts[2], out var evalId)
+            && int.TryParse(parts[3], out var ok))
         {
             var body = ReadRequestBody(request);
 
@@ -255,11 +268,11 @@ public sealed class RynWebView : IRynWebView, IDisposable
             return;
         }
 
-        // cmd/{id}/{command} — IPC command invocation
-        if (parts.Length >= 3 && parts[0] == "cmd"
-            && long.TryParse(parts[1], out var cmdId))
+        // /ipc/cmd/{id}/{command} — IPC command invocation
+        if (parts.Length >= 4 && parts[0] == "ipc" && parts[1] == "cmd"
+            && long.TryParse(parts[2], out var cmdId))
         {
-            var command = Uri.UnescapeDataString(parts[2]);
+            var command = Uri.UnescapeDataString(parts[3]);
             var body = ReadRequestBody(request);
             var args = Encoding.UTF8.GetBytes(body);
 
@@ -268,7 +281,24 @@ public sealed class RynWebView : IRynWebView, IDisposable
             return;
         }
 
-        AcceptEmptyResponse(executor);
+        // Serve HTML content for /index.html or /
+        if (_htmlContent is not null && (path is "/" or "/index.html" or ""))
+        {
+            var htmlBytes = Encoding.UTF8.GetBytes(_htmlContent);
+            fixed (byte* ptr = htmlBytes)
+            {
+                var stash = Saucer.saucer_stash_new_from(ptr, (nuint)htmlBytes.Length);
+                Span<byte> mimeBuf = stackalloc byte[16];
+                var mime = Utf8String.Create("text/html", mimeBuf);
+                var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
+                Saucer.saucer_scheme_executor_accept(executor, response);
+                mime.Dispose();
+            }
+            return;
+        }
+
+        // 404 for everything else
+        Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_NOT_FOUND);
     }
 
     private async Task DispatchCommandAsync(long id, string command, byte[] args)
@@ -294,7 +324,6 @@ public sealed class RynWebView : IRynWebView, IDisposable
     {
         if (_app == 0 || _webview == 0) return;
 
-        // Capture values for the closure
         var webview = _webview;
         var app = _app;
 
@@ -391,6 +420,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
         var mime = Utf8String.Create(rynResponse.ContentType, mimeBuf);
         var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
         Saucer.saucer_scheme_response_set_status(response, rynResponse.StatusCode);
+        AppendCorsHeaders(response);
         Saucer.saucer_scheme_executor_accept(executor, response);
         mime.Dispose();
     }
@@ -401,8 +431,21 @@ public sealed class RynWebView : IRynWebView, IDisposable
         Span<byte> mimeBuf = stackalloc byte[16];
         var mime = Utf8String.Create("text/plain", mimeBuf);
         var response = Saucer.saucer_scheme_response_new(emptyStash, mime.Pointer);
+        AppendCorsHeaders(response);
         Saucer.saucer_scheme_executor_accept(executor, response);
         mime.Dispose();
+    }
+
+    private static unsafe void AppendCorsHeaders(saucer_scheme_response* response)
+    {
+        Span<byte> hdrBuf = stackalloc byte[64];
+        Span<byte> valBuf = stackalloc byte[8];
+
+        var hdr = Utf8String.Create("Access-Control-Allow-Origin", hdrBuf);
+        var val = Utf8String.Create("*", valBuf);
+        Saucer.saucer_scheme_response_append_header(response, hdr.Pointer, val.Pointer);
+        hdr.Dispose();
+        val.Dispose();
     }
 
     private static unsafe string ReadRequestBody(saucer_scheme_request* request)

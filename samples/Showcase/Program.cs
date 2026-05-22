@@ -275,12 +275,14 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
 
 <script>
   var callCount = 0;
-  var ryn = window.__ryn;
 
   async function invoke(cmd, args) {
+    if (!window.__ryn || !window.__ryn.invoke) {
+      throw new Error('Ryn bridge not available');
+    }
     callCount++;
     document.getElementById('callCount').textContent = callCount;
-    return await ryn.invoke(cmd, args || {});
+    return await window.__ryn.invoke(cmd, args || {});
   }
 
   function switchTab(name) {
@@ -306,10 +308,15 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
 
   // IPC Commands
   async function doGreet() {
-    var name = document.getElementById('greetName').value;
-    var result = await invoke('app.greet', { name: name });
-    document.getElementById('greetOutput').textContent = result;
-    document.getElementById('greetOutput').className = 'output success';
+    try {
+      var name = document.getElementById('greetName').value;
+      var result = await invoke('app.greet', { name: name });
+      document.getElementById('greetOutput').textContent = result;
+      document.getElementById('greetOutput').className = 'output success';
+    } catch(e) {
+      document.getElementById('greetOutput').textContent = 'Error: ' + e.message;
+      document.getElementById('greetOutput').className = 'output error';
+    }
   }
 
   async function doCalc() {
@@ -446,6 +453,9 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
       document.getElementById('shellOutput').className = 'output error';
     }
   }
+
+  // Load system info on startup
+  loadSysInfo();
 </script>
 </body>
 </html>

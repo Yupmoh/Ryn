@@ -186,15 +186,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_window == null)
             throw new InvalidOperationException($"Failed to create saucer window (error code: {error})");
 
-        // Register IPC scheme before webview creation
+        // Register ryn:// scheme before webview creation (used for both content and IPC)
         Span<byte> schemeBuf = stackalloc byte[32];
-        var schemeStr = Utf8String.Create("ryn-ipc", schemeBuf);
-        Saucer.saucer_webview_register_scheme(schemeStr.Pointer);
-        schemeStr.Dispose();
-
-        // Register ryn:// scheme for user custom schemes
-        schemeBuf = stackalloc byte[32];
-        schemeStr = Utf8String.Create("ryn", schemeBuf);
+        var schemeStr = Utf8String.Create("ryn", schemeBuf);
         Saucer.saucer_webview_register_scheme(schemeStr.Pointer);
         schemeStr.Dispose();
 
@@ -228,10 +222,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
         else if (_options.Html != null)
         {
-            Span<byte> htmlBuf = stackalloc byte[256];
-            var htmlStr = Utf8String.Create(_options.Html, htmlBuf);
-            Saucer.saucer_webview_set_html(_webview, htmlStr.Pointer);
-            htmlStr.Dispose();
+            // Serve HTML via the ryn:// scheme handler (same origin as IPC, no CORS issues)
+            _rynWebView.SetHtmlContent(_options.Html);
+            _rynWebView.NavigateToAppScheme();
         }
 
         // Notify that native resources are ready
