@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CA2007;CA1515;CA1062;IL2026;IL3050</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="ryn.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.FileSystem\Ryn.Plugins.FileSystem.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Clipboard\Ryn.Plugins.Clipboard.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Shell\Ryn.Plugins.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
+  </ItemGroup>
+</Project>

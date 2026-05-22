@@ -1,0 +1,13 @@
+{
+  "capabilities": {
+    "app": true,
+    "fs": {
+      "allow": ["readTextFile", "writeTextFile", "readDir", "exists", "stat"]
+    },
+    "clipboard": true,
+    "shell": {
+      "allow": ["execute", "open"]
+    },
+    "notification": true
+  }
+}
