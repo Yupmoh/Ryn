@@ -61,6 +61,9 @@ build/native/
 **/runtimes/**/native/*.so
 !**/runtimes/**/native/.gitkeep
 
+## Claude
+CLAUDE.md
+
 ## Secrets
 *.pfx
 *.snk
