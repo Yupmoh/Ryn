@@ -95,7 +95,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     // HTML content to serve from ryn://app/
     private string? _htmlContent;
-    private string _corsOrigin = "ryn://app";
+    private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { "ryn://app" };
+    private string _matchedCorsOrigin = "ryn://app";
 
     private bool _disposed;
 
@@ -113,8 +114,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     internal void SetAllowedOrigins(List<string> origins)
     {
-        if (origins.Count > 0)
-            _corsOrigin = string.Join(", ", origins);
+        foreach (var origin in origins)
+            _allowedOrigins.Add(origin);
     }
 
     internal void SetHtmlContent(string html) => _htmlContent = html;
@@ -470,26 +471,28 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     private unsafe void AppendCorsHeaders(saucer_scheme_response* response)
     {
-        AppendHeader(response, "Access-Control-Allow-Origin", _corsOrigin);
+        AppendHeader(response, "Access-Control-Allow-Origin", _matchedCorsOrigin);
     }
 
     private unsafe bool IsOriginAllowed(saucer_scheme_request* request)
     {
         var headers = SaucerStringReader.ReadRequestHeaders(request);
-        // Parse Origin from headers (format: "Header: Value\r\n...")
         foreach (var line in headers.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             if (line.StartsWith("Origin:", StringComparison.OrdinalIgnoreCase))
             {
                 var origin = line[7..].Trim().TrimEnd('\r');
                 if (origin.Length == 0 || string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
-                    return true; // Same-origin (ryn:// scheme sends null origin)
-                if (_corsOrigin.Contains(origin, StringComparison.OrdinalIgnoreCase))
                     return true;
+                if (_allowedOrigins.Contains(origin))
+                {
+                    _matchedCorsOrigin = origin;
+                    return true;
+                }
                 return false;
             }
         }
-        return true; // No Origin header = same-origin request
+        return true;
     }
 
     private static unsafe void AppendHeader(saucer_scheme_response* response, string name, string value)
