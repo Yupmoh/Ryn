@@ -36,27 +36,33 @@ public sealed class RynCommandDispatcher
                 }
                 catch (RynCommandDeniedException)
                 {
-                    _observer?.OnCommandDenied(command);
+                    NotifyObserver(() => _observer?.OnCommandDenied(command));
                     throw;
                 }
 
-                _observer?.OnCommandStarted(command);
+                NotifyObserver(() => _observer?.OnCommandStarted(command));
                 var sw = Stopwatch.StartNew();
                 try
                 {
                     var result = await _routers[i].RouteAsync(command, args, _services, cancellationToken)
                         .ConfigureAwait(false);
-                    _observer?.OnCommandCompleted(command, sw.ElapsedMilliseconds);
+                    NotifyObserver(() => _observer?.OnCommandCompleted(command, sw.ElapsedMilliseconds));
                     return result;
                 }
                 catch (Exception ex)
                 {
-                    _observer?.OnCommandFailed(command, sw.ElapsedMilliseconds, ex);
+                    NotifyObserver(() => _observer?.OnCommandFailed(command, sw.ElapsedMilliseconds, ex));
                     throw;
                 }
             }
         }
 
         throw new RynCommandNotFoundException(command);
+    }
+
+    private static void NotifyObserver(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
     }
 }
