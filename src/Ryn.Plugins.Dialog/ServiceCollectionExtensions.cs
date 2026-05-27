@@ -8,6 +8,7 @@ public static class DialogServiceCollectionExtensions
     {
         services.AddSingleton<DialogPlugin>();
         services.AddDialogCommands(); // generated
+        services.AddPickerCommands(); // generated
         return services;
     }
 }
