@@ -32,8 +32,9 @@ public static class ShellCommands
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
+        var stderrTask = process.StandardError.ReadToEndAsync();
         var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stderr = stderrTask.GetAwaiter().GetResult();
         process.WaitForExit();
 
         var output = new ProcessOutput(stdout, stderr, process.ExitCode);
@@ -54,18 +55,28 @@ public static class ShellCommands
     internal static void ValidateCommand(string command)
     {
         var options = _options;
-        if (options is not null && options.AllowedCommands.Count > 0)
-        {
-            var cmdName = Path.GetFileName(command);
-            if (!options.AllowedCommands.Contains(cmdName, StringComparer.OrdinalIgnoreCase)
-                && !options.AllowedCommands.Contains(command, StringComparer.OrdinalIgnoreCase))
-            {
-                throw new UnauthorizedAccessException($"Command '{command}' is not in the allowed list");
-            }
-        }
-        else if (options is not null && options.AllowedCommands.Count == 0)
-        {
+        if (options is null)
+            return;
+
+        if (options.AllowedCommands.Count == 0)
             throw new UnauthorizedAccessException("Shell execution is disabled (no commands in allowlist)");
+
+        ArgumentNullException.ThrowIfNull(command);
+
+        var hasPathSeparator = command.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            || command.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+
+        if (hasPathSeparator)
+        {
+            // Full paths must match exactly — no basename matching
+            if (!options.AllowedCommands.Contains(command, StringComparer.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Command path '{command}' is not in the allowed list");
+        }
+        else
+        {
+            // Bare command names match against bare allowlist entries only
+            if (!options.AllowedCommands.Contains(command, StringComparer.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Command '{command}' is not in the allowed list");
         }
     }
 

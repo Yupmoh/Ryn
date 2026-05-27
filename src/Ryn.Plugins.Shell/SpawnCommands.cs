@@ -21,20 +21,7 @@ public sealed class SpawnCommands : IDisposable
     [RynCommand("shell.spawn")]
     public int Spawn(string command, string argsJson)
     {
-        var options = ShellCommands.Options;
-        if (options is not null && options.AllowedCommands.Count > 0)
-        {
-            var cmdName = Path.GetFileName(command);
-            if (!options.AllowedCommands.Contains(cmdName, StringComparer.OrdinalIgnoreCase)
-                && !options.AllowedCommands.Contains(command, StringComparer.OrdinalIgnoreCase))
-            {
-                throw new UnauthorizedAccessException($"Command '{command}' is not in the allowed list");
-            }
-        }
-        else if (options is not null && options.AllowedCommands.Count == 0)
-        {
-            throw new UnauthorizedAccessException("Shell execution is disabled (no commands in allowlist)");
-        }
+        ShellCommands.ValidateCommand(command);
 
         var psi = new ProcessStartInfo
         {
@@ -80,14 +67,17 @@ public sealed class SpawnCommands : IDisposable
         {
             process.WaitForExit();
 
-            stdoutBatcher.FlushNow();
-            stderrBatcher.FlushNow();
+            // TryRemove claims ownership — if Kill already removed it, skip cleanup
+            if (!_processes.TryRemove(pid, out var owned))
+                return;
+
+            owned.StdoutBatcher.FlushNow();
+            owned.StderrBatcher.FlushNow();
 
             var exitCode = process.ExitCode.ToString(CultureInfo.InvariantCulture);
             _webView.EmitEvent($"shell.exit.{pidStr}", exitCode);
 
-            if (_processes.TryRemove(pid, out var removed))
-                removed.Dispose();
+            owned.Dispose();
         });
 
         return pid;
