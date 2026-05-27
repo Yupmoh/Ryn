@@ -43,6 +43,13 @@ internal static unsafe class SaucerStringReader
         return ReadWithSize((sbyte* buf, nuint* sz) => Saucer.saucer_scheme_request_method(request, buf, sz), size);
     }
 
+    internal static string ReadRequestHeaders(saucer_scheme_request* request)
+    {
+        nuint size = 0;
+        Saucer.saucer_scheme_request_headers(request, null, &size);
+        return ReadWithSize((sbyte* buf, nuint* sz) => Saucer.saucer_scheme_request_headers(request, buf, sz), size);
+    }
+
     internal static string ReadWebViewPageTitle(saucer_webview* webview)
     {
         nuint size = 0;

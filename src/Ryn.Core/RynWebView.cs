@@ -259,6 +259,13 @@ public sealed class RynWebView : IRynWebView, IDisposable
             return;
         }
 
+        // Validate request origin for IPC endpoints
+        if (path.StartsWith("/ipc/", StringComparison.Ordinal) && !IsOriginAllowed(request))
+        {
+            Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
+            return;
+        }
+
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
         // /ipc/eval/{id}/{ok} — JS eval response
@@ -464,6 +471,25 @@ public sealed class RynWebView : IRynWebView, IDisposable
     private unsafe void AppendCorsHeaders(saucer_scheme_response* response)
     {
         AppendHeader(response, "Access-Control-Allow-Origin", _corsOrigin);
+    }
+
+    private unsafe bool IsOriginAllowed(saucer_scheme_request* request)
+    {
+        var headers = SaucerStringReader.ReadRequestHeaders(request);
+        // Parse Origin from headers (format: "Header: Value\r\n...")
+        foreach (var line in headers.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.StartsWith("Origin:", StringComparison.OrdinalIgnoreCase))
+            {
+                var origin = line[7..].Trim().TrimEnd('\r');
+                if (origin.Length == 0 || string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
+                    return true; // Same-origin (ryn:// scheme sends null origin)
+                if (_corsOrigin.Contains(origin, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                return false;
+            }
+        }
+        return true; // No Origin header = same-origin request
     }
 
     private static unsafe void AppendHeader(saucer_scheme_response* response, string name, string value)
