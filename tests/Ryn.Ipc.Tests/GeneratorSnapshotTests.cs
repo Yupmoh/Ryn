@@ -168,6 +168,98 @@ public sealed class GeneratorSnapshotTests
         return VerifyGenerator(source);
     }
 
+    [Fact]
+    public Task JsonElementParameter()
+    {
+        var source = """
+            using System.Text.Json;
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class DataCommands
+            {
+                [RynCommand]
+                public static string ProcessData(string name, JsonElement data) => name;
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
+    public Task ArrayParameter()
+    {
+        var source = """
+            using System.Linq;
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class ArrayCommands
+            {
+                [RynCommand]
+                public static int Sum(int[] values) => values.Sum();
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
+    public Task ArrayReturn()
+    {
+        var source = """
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class ArrayReturnCommands
+            {
+                [RynCommand]
+                public static string[] GetTags(string prefix) => new[] { prefix + "a", prefix + "b" };
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
+    public Task NullableParameter()
+    {
+        var source = """
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class NullableCommands
+            {
+                [RynCommand]
+                public static string Format(int? value) => value.HasValue ? value.Value.ToString() : "null";
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
+    public Task NullableReturn()
+    {
+        var source = """
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class NullableReturnCommands
+            {
+                [RynCommand]
+                public static int? FindIndex(string name) => name == "missing" ? null : 42;
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
     private static Task VerifyGenerator(string source)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
@@ -182,6 +274,8 @@ public sealed class GeneratorSnapshotTests
         var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
         references.Add(MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Runtime.dll")));
         references.Add(MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Threading.Tasks.dll")));
+        references.Add(MetadataReference.CreateFromFile(typeof(System.Text.Json.JsonElement).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location));
 
         var compilation = CSharpCompilation.Create(
             "TestAssembly",

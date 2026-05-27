@@ -7,7 +7,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor UnsupportedParameterType = new(
         id: "RYN001",
         title: "Unsupported parameter type",
-        messageFormat: "Parameter '{0}' has unsupported type '{1}'",
+        messageFormat: "Parameter '{0}' has unsupported type '{1}' (expected a primitive, JsonElement, nullable primitive, or primitive array)",
         category: "Ryn.Ipc",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -15,7 +15,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor UnsupportedReturnType = new(
         id: "RYN002",
         title: "Unsupported return type",
-        messageFormat: "Return type '{0}' is not supported",
+        messageFormat: "Return type '{0}' is not supported (expected void, a primitive, nullable primitive, or primitive array)",
         category: "Ryn.Ipc",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

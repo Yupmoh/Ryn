@@ -85,25 +85,50 @@ public sealed class RynCommandGenerator : IIncrementalGenerator
         var parameters = ImmutableArray.CreateBuilder<ParameterInfo>();
         foreach (var p in method.Parameters)
         {
+            var isJsonElement = p.Type.ToDisplayString() == "System.Text.Json.JsonElement";
+            var isArray = false;
+            var arrayElementSpecialType = SpecialType.None;
+            var isNullable = false;
+            var nullableUnderlyingSpecialType = SpecialType.None;
+
+            if (p.Type is IArrayTypeSymbol arrayType)
+            {
+                isArray = true;
+                arrayElementSpecialType = arrayType.ElementType.SpecialType;
+            }
+            else if (p.Type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                     && p.Type is INamedTypeSymbol namedNullable)
+            {
+                isNullable = true;
+                nullableUnderlyingSpecialType = namedNullable.TypeArguments[0].SpecialType;
+            }
+
             parameters.Add(new ParameterInfo(
                 p.Name,
                 p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 p.Type.SpecialType,
-                IsCancellationToken(p.Type)));
+                IsCancellationToken(p.Type),
+                isJsonElement,
+                isArray,
+                arrayElementSpecialType,
+                isNullable,
+                nullableUnderlyingSpecialType));
         }
 
         var returnTypeDisplay = method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var isAsync = false;
         var innerReturnType = returnTypeDisplay;
         var innerSpecialType = method.ReturnType.SpecialType;
+        ITypeSymbol innerReturnTypeSymbol = method.ReturnType;
 
         if (method.ReturnType is INamedTypeSymbol namedReturn)
         {
             if (namedReturn.OriginalDefinition.ToDisplayString() == "System.Threading.Tasks.ValueTask<TResult>")
             {
                 isAsync = true;
-                innerReturnType = namedReturn.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                innerSpecialType = namedReturn.TypeArguments[0].SpecialType;
+                innerReturnTypeSymbol = namedReturn.TypeArguments[0];
+                innerReturnType = innerReturnTypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                innerSpecialType = innerReturnTypeSymbol.SpecialType;
             }
             else if (namedReturn.ToDisplayString() == "System.Threading.Tasks.ValueTask")
             {
@@ -111,6 +136,23 @@ public sealed class RynCommandGenerator : IIncrementalGenerator
                 innerReturnType = "void";
                 innerSpecialType = SpecialType.System_Void;
             }
+        }
+
+        var isReturnArray = false;
+        var returnArrayElementSpecialType = SpecialType.None;
+        var isReturnNullable = false;
+        var returnNullableUnderlyingSpecialType = SpecialType.None;
+
+        if (innerReturnTypeSymbol is IArrayTypeSymbol returnArrayType)
+        {
+            isReturnArray = true;
+            returnArrayElementSpecialType = returnArrayType.ElementType.SpecialType;
+        }
+        else if (innerReturnTypeSymbol.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                 && innerReturnTypeSymbol is INamedTypeSymbol namedNullableReturn)
+        {
+            isReturnNullable = true;
+            returnNullableUnderlyingSpecialType = namedNullableReturn.TypeArguments[0].SpecialType;
         }
 
         var location = ctx.TargetNode.GetLocation();
@@ -129,6 +171,10 @@ public sealed class RynCommandGenerator : IIncrementalGenerator
             InnerReturnSpecialType: innerSpecialType,
             IsAsync: isAsync,
             IsVoidReturn: innerSpecialType == SpecialType.System_Void,
+            IsReturnArray: isReturnArray,
+            ReturnArrayElementSpecialType: returnArrayElementSpecialType,
+            IsReturnNullable: isReturnNullable,
+            ReturnNullableUnderlyingSpecialType: returnNullableUnderlyingSpecialType,
             Location: location);
     }
 
@@ -162,13 +208,22 @@ internal readonly record struct CommandInfo(
     SpecialType InnerReturnSpecialType,
     bool IsAsync,
     bool IsVoidReturn,
+    bool IsReturnArray,
+    SpecialType ReturnArrayElementSpecialType,
+    bool IsReturnNullable,
+    SpecialType ReturnNullableUnderlyingSpecialType,
     Location Location);
 
 internal readonly record struct ParameterInfo(
     string Name,
     string TypeDisplay,
     SpecialType SpecialType,
-    bool IsCancellationToken);
+    bool IsCancellationToken,
+    bool IsJsonElement,
+    bool IsArray,
+    SpecialType ArrayElementSpecialType,
+    bool IsNullable,
+    SpecialType NullableUnderlyingSpecialType);
 
 internal readonly record struct CommandGroup(
     string TypeFullName,

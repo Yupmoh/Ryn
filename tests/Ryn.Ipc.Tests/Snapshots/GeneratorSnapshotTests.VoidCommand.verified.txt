@@ -7,7 +7,7 @@
           SyntaxTree: {
             FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/ActionCommandsRouter.g.cs,
             Encoding: utf-8,
-            Length: 1228,
+            Length: 1247,
             HasCompilationUnitRoot: true,
             Options: {
               LanguageVersion: CSharp13,
@@ -23,6 +23,7 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -63,7 +64,7 @@ public static class ActionCommandsRynExtensions
     }
 }
 ,
-            Length: 1228,
+            Length: 1247,
             ChecksumAlgorithm: Sha1,
             CanBeEmbedded: true,
             Container: {},
@@ -122,554 +123,568 @@ public static class ActionCommandsRynExtensions
               {
                 LineNumber: 4,
                 Start: 54,
-                End: 77,
-                EndIncludingLineBreak: 78,
+                End: 72,
+                EndIncludingLineBreak: 73,
                 Span: {
                   Start: 54,
-                  Length: 23
+                  Length: 18
                 },
                 SpanIncludingLineBreak: {
                   Start: 54,
-                  Length: 24
+                  Length: 19
                 }
               },
               {
                 LineNumber: 5,
-                Start: 78,
-                End: 101,
-                EndIncludingLineBreak: 102,
+                Start: 73,
+                End: 96,
+                EndIncludingLineBreak: 97,
                 Span: {
-                  Start: 78,
+                  Start: 73,
                   Length: 23
                 },
                 SpanIncludingLineBreak: {
-                  Start: 78,
+                  Start: 73,
                   Length: 24
                 }
               },
               {
                 LineNumber: 6,
-                Start: 102,
-                End: 131,
-                EndIncludingLineBreak: 132,
+                Start: 97,
+                End: 120,
+                EndIncludingLineBreak: 121,
                 Span: {
-                  Start: 102,
-                  Length: 29
+                  Start: 97,
+                  Length: 23
                 },
                 SpanIncludingLineBreak: {
-                  Start: 102,
-                  Length: 30
+                  Start: 97,
+                  Length: 24
                 }
               },
               {
                 LineNumber: 7,
-                Start: 132,
-                End: 179,
-                EndIncludingLineBreak: 180,
+                Start: 121,
+                End: 150,
+                EndIncludingLineBreak: 151,
                 Span: {
-                  Start: 132,
-                  Length: 47
+                  Start: 121,
+                  Length: 29
                 },
                 SpanIncludingLineBreak: {
-                  Start: 132,
-                  Length: 48
+                  Start: 121,
+                  Length: 30
                 }
               },
               {
                 LineNumber: 8,
-                Start: 180,
-                End: 194,
-                EndIncludingLineBreak: 195,
+                Start: 151,
+                End: 198,
+                EndIncludingLineBreak: 199,
                 Span: {
-                  Start: 180,
-                  Length: 14
+                  Start: 151,
+                  Length: 47
                 },
                 SpanIncludingLineBreak: {
-                  Start: 180,
-                  Length: 15
+                  Start: 151,
+                  Length: 48
                 }
               },
               {
                 LineNumber: 9,
-                Start: 195,
-                End: 195,
-                EndIncludingLineBreak: 196,
+                Start: 199,
+                End: 213,
+                EndIncludingLineBreak: 214,
                 Span: {
-                  Start: 195
+                  Start: 199,
+                  Length: 14
                 },
                 SpanIncludingLineBreak: {
-                  Start: 195,
-                  Length: 1
+                  Start: 199,
+                  Length: 15
                 }
               },
               {
                 LineNumber: 10,
-                Start: 196,
+                Start: 214,
                 End: 214,
                 EndIncludingLineBreak: 215,
                 Span: {
-                  Start: 196,
-                  Length: 18
+                  Start: 214
                 },
                 SpanIncludingLineBreak: {
-                  Start: 196,
-                  Length: 19
+                  Start: 214,
+                  Length: 1
                 }
               },
               {
                 LineNumber: 11,
                 Start: 215,
-                End: 215,
-                EndIncludingLineBreak: 216,
+                End: 233,
+                EndIncludingLineBreak: 234,
                 Span: {
-                  Start: 215
+                  Start: 215,
+                  Length: 18
                 },
                 SpanIncludingLineBreak: {
                   Start: 215,
-                  Length: 1
+                  Length: 19
                 }
               },
               {
                 LineNumber: 12,
-                Start: 216,
-                End: 271,
-                EndIncludingLineBreak: 272,
+                Start: 234,
+                End: 234,
+                EndIncludingLineBreak: 235,
                 Span: {
-                  Start: 216,
-                  Length: 55
+                  Start: 234
                 },
                 SpanIncludingLineBreak: {
-                  Start: 216,
-                  Length: 56
+                  Start: 234,
+                  Length: 1
                 }
               },
               {
                 LineNumber: 13,
-                Start: 272,
-                End: 273,
-                EndIncludingLineBreak: 274,
+                Start: 235,
+                End: 290,
+                EndIncludingLineBreak: 291,
                 Span: {
-                  Start: 272,
-                  Length: 1
-                },
-                SpanIncludingLineBreak: {
-                  Start: 272,
-                  Length: 2
-                }
-              },
-              {
-                LineNumber: 14,
-                Start: 274,
-                End: 337,
-                EndIncludingLineBreak: 338,
-                Span: {
-                  Start: 274,
-                  Length: 63
-                },
-                SpanIncludingLineBreak: {
-                  Start: 274,
-                  Length: 64
-                }
-              },
-              {
-                LineNumber: 15,
-                Start: 338,
-                End: 338,
-                EndIncludingLineBreak: 339,
-                Span: {
-                  Start: 338
-                },
-                SpanIncludingLineBreak: {
-                  Start: 338,
-                  Length: 1
-                }
-              },
-              {
-                LineNumber: 16,
-                Start: 339,
-                End: 385,
-                EndIncludingLineBreak: 386,
-                Span: {
-                  Start: 339,
-                  Length: 46
-                },
-                SpanIncludingLineBreak: {
-                  Start: 339,
-                  Length: 47
-                }
-              },
-              {
-                LineNumber: 17,
-                Start: 386,
-                End: 500,
-                EndIncludingLineBreak: 501,
-                Span: {
-                  Start: 386,
-                  Length: 114
-                },
-                SpanIncludingLineBreak: {
-                  Start: 386,
-                  Length: 115
-                }
-              },
-              {
-                LineNumber: 18,
-                Start: 501,
-                End: 506,
-                EndIncludingLineBreak: 507,
-                Span: {
-                  Start: 501,
-                  Length: 5
-                },
-                SpanIncludingLineBreak: {
-                  Start: 501,
-                  Length: 6
-                }
-              },
-              {
-                LineNumber: 19,
-                Start: 507,
-                End: 531,
-                EndIncludingLineBreak: 532,
-                Span: {
-                  Start: 507,
-                  Length: 24
-                },
-                SpanIncludingLineBreak: {
-                  Start: 507,
-                  Length: 25
-                }
-              },
-              {
-                LineNumber: 20,
-                Start: 532,
-                End: 541,
-                EndIncludingLineBreak: 542,
-                Span: {
-                  Start: 532,
-                  Length: 9
-                },
-                SpanIncludingLineBreak: {
-                  Start: 532,
-                  Length: 10
-                }
-              },
-              {
-                LineNumber: 21,
-                Start: 542,
-                End: 567,
-                EndIncludingLineBreak: 568,
-                Span: {
-                  Start: 542,
-                  Length: 25
-                },
-                SpanIncludingLineBreak: {
-                  Start: 542,
-                  Length: 26
-                }
-              },
-              {
-                LineNumber: 22,
-                Start: 568,
-                End: 581,
-                EndIncludingLineBreak: 582,
-                Span: {
-                  Start: 568,
-                  Length: 13
-                },
-                SpanIncludingLineBreak: {
-                  Start: 568,
-                  Length: 14
-                }
-              },
-              {
-                LineNumber: 23,
-                Start: 582,
-                End: 637,
-                EndIncludingLineBreak: 638,
-                Span: {
-                  Start: 582,
+                  Start: 235,
                   Length: 55
                 },
                 SpanIncludingLineBreak: {
-                  Start: 582,
+                  Start: 235,
                   Length: 56
                 }
               },
               {
-                LineNumber: 24,
-                Start: 638,
-                End: 668,
-                EndIncludingLineBreak: 669,
+                LineNumber: 14,
+                Start: 291,
+                End: 292,
+                EndIncludingLineBreak: 293,
                 Span: {
-                  Start: 638,
-                  Length: 30
+                  Start: 291,
+                  Length: 1
                 },
                 SpanIncludingLineBreak: {
-                  Start: 638,
-                  Length: 31
+                  Start: 291,
+                  Length: 2
                 }
               },
               {
-                LineNumber: 25,
-                Start: 669,
-                End: 682,
-                EndIncludingLineBreak: 683,
+                LineNumber: 15,
+                Start: 293,
+                End: 356,
+                EndIncludingLineBreak: 357,
                 Span: {
-                  Start: 669,
-                  Length: 13
-                },
-                SpanIncludingLineBreak: {
-                  Start: 669,
-                  Length: 14
-                }
-              },
-              {
-                LineNumber: 26,
-                Start: 683,
-                End: 703,
-                EndIncludingLineBreak: 704,
-                Span: {
-                  Start: 683,
-                  Length: 20
-                },
-                SpanIncludingLineBreak: {
-                  Start: 683,
-                  Length: 21
-                }
-              },
-              {
-                LineNumber: 27,
-                Start: 704,
-                End: 767,
-                EndIncludingLineBreak: 768,
-                Span: {
-                  Start: 704,
+                  Start: 293,
                   Length: 63
                 },
                 SpanIncludingLineBreak: {
-                  Start: 704,
+                  Start: 293,
                   Length: 64
                 }
               },
               {
-                LineNumber: 28,
-                Start: 768,
-                End: 777,
-                EndIncludingLineBreak: 778,
+                LineNumber: 16,
+                Start: 357,
+                End: 357,
+                EndIncludingLineBreak: 358,
                 Span: {
-                  Start: 768,
-                  Length: 9
+                  Start: 357
                 },
                 SpanIncludingLineBreak: {
-                  Start: 768,
-                  Length: 10
-                }
-              },
-              {
-                LineNumber: 29,
-                Start: 778,
-                End: 783,
-                EndIncludingLineBreak: 784,
-                Span: {
-                  Start: 778,
-                  Length: 5
-                },
-                SpanIncludingLineBreak: {
-                  Start: 778,
-                  Length: 6
-                }
-              },
-              {
-                LineNumber: 30,
-                Start: 784,
-                End: 784,
-                EndIncludingLineBreak: 785,
-                Span: {
-                  Start: 784
-                },
-                SpanIncludingLineBreak: {
-                  Start: 784,
+                  Start: 357,
                   Length: 1
                 }
               },
               {
-                LineNumber: 31,
-                Start: 785,
-                End: 836,
-                EndIncludingLineBreak: 837,
+                LineNumber: 17,
+                Start: 358,
+                End: 404,
+                EndIncludingLineBreak: 405,
                 Span: {
-                  Start: 785,
-                  Length: 51
+                  Start: 358,
+                  Length: 46
                 },
                 SpanIncludingLineBreak: {
-                  Start: 785,
-                  Length: 52
-                }
-              },
-              {
-                LineNumber: 32,
-                Start: 837,
-                End: 975,
-                EndIncludingLineBreak: 976,
-                Span: {
-                  Start: 837,
-                  Length: 138
-                },
-                SpanIncludingLineBreak: {
-                  Start: 837,
-                  Length: 139
-                }
-              },
-              {
-                LineNumber: 33,
-                Start: 976,
-                End: 977,
-                EndIncludingLineBreak: 978,
-                Span: {
-                  Start: 976,
-                  Length: 1
-                },
-                SpanIncludingLineBreak: {
-                  Start: 976,
-                  Length: 2
-                }
-              },
-              {
-                LineNumber: 34,
-                Start: 978,
-                End: 978,
-                EndIncludingLineBreak: 979,
-                Span: {
-                  Start: 978
-                },
-                SpanIncludingLineBreak: {
-                  Start: 978,
-                  Length: 1
-                }
-              },
-              {
-                LineNumber: 35,
-                Start: 979,
-                End: 1026,
-                EndIncludingLineBreak: 1027,
-                Span: {
-                  Start: 979,
+                  Start: 358,
                   Length: 47
-                },
-                SpanIncludingLineBreak: {
-                  Start: 979,
-                  Length: 48
                 }
               },
               {
-                LineNumber: 36,
-                Start: 1027,
-                End: 1028,
-                EndIncludingLineBreak: 1029,
+                LineNumber: 18,
+                Start: 405,
+                End: 519,
+                EndIncludingLineBreak: 520,
                 Span: {
-                  Start: 1027,
-                  Length: 1
+                  Start: 405,
+                  Length: 114
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1027,
-                  Length: 2
+                  Start: 405,
+                  Length: 115
                 }
               },
               {
-                LineNumber: 37,
-                Start: 1029,
-                End: 1117,
-                EndIncludingLineBreak: 1118,
+                LineNumber: 19,
+                Start: 520,
+                End: 525,
+                EndIncludingLineBreak: 526,
                 Span: {
-                  Start: 1029,
-                  Length: 88
-                },
-                SpanIncludingLineBreak: {
-                  Start: 1029,
-                  Length: 89
-                }
-              },
-              {
-                LineNumber: 38,
-                Start: 1118,
-                End: 1123,
-                EndIncludingLineBreak: 1124,
-                Span: {
-                  Start: 1118,
+                  Start: 520,
                   Length: 5
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1118,
+                  Start: 520,
                   Length: 6
                 }
               },
               {
-                LineNumber: 39,
-                Start: 1124,
-                End: 1194,
-                EndIncludingLineBreak: 1195,
+                LineNumber: 20,
+                Start: 526,
+                End: 550,
+                EndIncludingLineBreak: 551,
                 Span: {
-                  Start: 1124,
-                  Length: 70
-                },
-                SpanIncludingLineBreak: {
-                  Start: 1124,
-                  Length: 71
-                }
-              },
-              {
-                LineNumber: 40,
-                Start: 1195,
-                End: 1219,
-                EndIncludingLineBreak: 1220,
-                Span: {
-                  Start: 1195,
+                  Start: 526,
                   Length: 24
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1195,
+                  Start: 526,
                   Length: 25
                 }
               },
               {
-                LineNumber: 41,
-                Start: 1220,
-                End: 1225,
-                EndIncludingLineBreak: 1226,
+                LineNumber: 21,
+                Start: 551,
+                End: 560,
+                EndIncludingLineBreak: 561,
                 Span: {
-                  Start: 1220,
+                  Start: 551,
+                  Length: 9
+                },
+                SpanIncludingLineBreak: {
+                  Start: 551,
+                  Length: 10
+                }
+              },
+              {
+                LineNumber: 22,
+                Start: 561,
+                End: 586,
+                EndIncludingLineBreak: 587,
+                Span: {
+                  Start: 561,
+                  Length: 25
+                },
+                SpanIncludingLineBreak: {
+                  Start: 561,
+                  Length: 26
+                }
+              },
+              {
+                LineNumber: 23,
+                Start: 587,
+                End: 600,
+                EndIncludingLineBreak: 601,
+                Span: {
+                  Start: 587,
+                  Length: 13
+                },
+                SpanIncludingLineBreak: {
+                  Start: 587,
+                  Length: 14
+                }
+              },
+              {
+                LineNumber: 24,
+                Start: 601,
+                End: 656,
+                EndIncludingLineBreak: 657,
+                Span: {
+                  Start: 601,
+                  Length: 55
+                },
+                SpanIncludingLineBreak: {
+                  Start: 601,
+                  Length: 56
+                }
+              },
+              {
+                LineNumber: 25,
+                Start: 657,
+                End: 687,
+                EndIncludingLineBreak: 688,
+                Span: {
+                  Start: 657,
+                  Length: 30
+                },
+                SpanIncludingLineBreak: {
+                  Start: 657,
+                  Length: 31
+                }
+              },
+              {
+                LineNumber: 26,
+                Start: 688,
+                End: 701,
+                EndIncludingLineBreak: 702,
+                Span: {
+                  Start: 688,
+                  Length: 13
+                },
+                SpanIncludingLineBreak: {
+                  Start: 688,
+                  Length: 14
+                }
+              },
+              {
+                LineNumber: 27,
+                Start: 702,
+                End: 722,
+                EndIncludingLineBreak: 723,
+                Span: {
+                  Start: 702,
+                  Length: 20
+                },
+                SpanIncludingLineBreak: {
+                  Start: 702,
+                  Length: 21
+                }
+              },
+              {
+                LineNumber: 28,
+                Start: 723,
+                End: 786,
+                EndIncludingLineBreak: 787,
+                Span: {
+                  Start: 723,
+                  Length: 63
+                },
+                SpanIncludingLineBreak: {
+                  Start: 723,
+                  Length: 64
+                }
+              },
+              {
+                LineNumber: 29,
+                Start: 787,
+                End: 796,
+                EndIncludingLineBreak: 797,
+                Span: {
+                  Start: 787,
+                  Length: 9
+                },
+                SpanIncludingLineBreak: {
+                  Start: 787,
+                  Length: 10
+                }
+              },
+              {
+                LineNumber: 30,
+                Start: 797,
+                End: 802,
+                EndIncludingLineBreak: 803,
+                Span: {
+                  Start: 797,
                   Length: 5
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1220,
+                  Start: 797,
                   Length: 6
                 }
               },
               {
-                LineNumber: 42,
-                Start: 1226,
-                End: 1227,
-                EndIncludingLineBreak: 1228,
+                LineNumber: 31,
+                Start: 803,
+                End: 803,
+                EndIncludingLineBreak: 804,
                 Span: {
-                  Start: 1226,
+                  Start: 803
+                },
+                SpanIncludingLineBreak: {
+                  Start: 803,
+                  Length: 1
+                }
+              },
+              {
+                LineNumber: 32,
+                Start: 804,
+                End: 855,
+                EndIncludingLineBreak: 856,
+                Span: {
+                  Start: 804,
+                  Length: 51
+                },
+                SpanIncludingLineBreak: {
+                  Start: 804,
+                  Length: 52
+                }
+              },
+              {
+                LineNumber: 33,
+                Start: 856,
+                End: 994,
+                EndIncludingLineBreak: 995,
+                Span: {
+                  Start: 856,
+                  Length: 138
+                },
+                SpanIncludingLineBreak: {
+                  Start: 856,
+                  Length: 139
+                }
+              },
+              {
+                LineNumber: 34,
+                Start: 995,
+                End: 996,
+                EndIncludingLineBreak: 997,
+                Span: {
+                  Start: 995,
                   Length: 1
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1226,
+                  Start: 995,
                   Length: 2
                 }
               },
               {
-                LineNumber: 43,
-                Start: 1228,
-                End: 1228,
-                EndIncludingLineBreak: 1228,
+                LineNumber: 35,
+                Start: 997,
+                End: 997,
+                EndIncludingLineBreak: 998,
                 Span: {
-                  Start: 1228
+                  Start: 997
                 },
                 SpanIncludingLineBreak: {
-                  Start: 1228
+                  Start: 997,
+                  Length: 1
+                }
+              },
+              {
+                LineNumber: 36,
+                Start: 998,
+                End: 1045,
+                EndIncludingLineBreak: 1046,
+                Span: {
+                  Start: 998,
+                  Length: 47
+                },
+                SpanIncludingLineBreak: {
+                  Start: 998,
+                  Length: 48
+                }
+              },
+              {
+                LineNumber: 37,
+                Start: 1046,
+                End: 1047,
+                EndIncludingLineBreak: 1048,
+                Span: {
+                  Start: 1046,
+                  Length: 1
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1046,
+                  Length: 2
+                }
+              },
+              {
+                LineNumber: 38,
+                Start: 1048,
+                End: 1136,
+                EndIncludingLineBreak: 1137,
+                Span: {
+                  Start: 1048,
+                  Length: 88
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1048,
+                  Length: 89
+                }
+              },
+              {
+                LineNumber: 39,
+                Start: 1137,
+                End: 1142,
+                EndIncludingLineBreak: 1143,
+                Span: {
+                  Start: 1137,
+                  Length: 5
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1137,
+                  Length: 6
+                }
+              },
+              {
+                LineNumber: 40,
+                Start: 1143,
+                End: 1213,
+                EndIncludingLineBreak: 1214,
+                Span: {
+                  Start: 1143,
+                  Length: 70
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1143,
+                  Length: 71
+                }
+              },
+              {
+                LineNumber: 41,
+                Start: 1214,
+                End: 1238,
+                EndIncludingLineBreak: 1239,
+                Span: {
+                  Start: 1214,
+                  Length: 24
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1214,
+                  Length: 25
+                }
+              },
+              {
+                LineNumber: 42,
+                Start: 1239,
+                End: 1244,
+                EndIncludingLineBreak: 1245,
+                Span: {
+                  Start: 1239,
+                  Length: 5
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1239,
+                  Length: 6
+                }
+              },
+              {
+                LineNumber: 43,
+                Start: 1245,
+                End: 1246,
+                EndIncludingLineBreak: 1247,
+                Span: {
+                  Start: 1245,
+                  Length: 1
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1245,
+                  Length: 2
+                }
+              },
+              {
+                LineNumber: 44,
+                Start: 1247,
+                End: 1247,
+                EndIncludingLineBreak: 1247,
+                Span: {
+                  Start: 1247
+                },
+                SpanIncludingLineBreak: {
+                  Start: 1247
                 }
               }
             ]
@@ -685,7 +700,7 @@ public static class ActionCommandsRynExtensions
     {
       FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/ActionCommandsRouter.g.cs,
       Encoding: utf-8,
-      Length: 1228,
+      Length: 1247,
       HasCompilationUnitRoot: true,
       Options: {
         LanguageVersion: CSharp13,

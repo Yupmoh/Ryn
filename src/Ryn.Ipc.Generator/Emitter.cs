@@ -16,6 +16,7 @@ internal static class Emitter
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.Linq;");
         sb.AppendLine("using System.Text.Json;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
@@ -98,28 +99,42 @@ internal static class Emitter
         return valid;
     }
 
-    private static bool IsParameterTypeSupported(ParameterInfo p) =>
-        p.SpecialType is
-            SpecialType.System_Int32 or
-            SpecialType.System_Int64 or
-            SpecialType.System_Single or
-            SpecialType.System_Double or
-            SpecialType.System_Boolean or
-            SpecialType.System_String;
+    private static bool IsParameterTypeSupported(ParameterInfo p)
+    {
+        if (p.IsJsonElement)
+            return true;
+
+        if (p.IsArray)
+            return IsPrimitiveSpecialType(p.ArrayElementSpecialType);
+
+        if (p.IsNullable)
+            return IsPrimitiveSpecialType(p.NullableUnderlyingSpecialType);
+
+        return IsPrimitiveSpecialType(p.SpecialType);
+    }
 
     private static bool IsReturnTypeSupported(CommandInfo cmd)
     {
         if (cmd.IsVoidReturn)
             return true;
 
-        return cmd.InnerReturnSpecialType is
+        if (cmd.IsReturnArray)
+            return IsPrimitiveSpecialType(cmd.ReturnArrayElementSpecialType);
+
+        if (cmd.IsReturnNullable)
+            return IsPrimitiveSpecialType(cmd.ReturnNullableUnderlyingSpecialType);
+
+        return IsPrimitiveSpecialType(cmd.InnerReturnSpecialType);
+    }
+
+    private static bool IsPrimitiveSpecialType(SpecialType type) =>
+        type is
             SpecialType.System_Int32 or
             SpecialType.System_Int64 or
             SpecialType.System_Single or
             SpecialType.System_Double or
             SpecialType.System_Boolean or
             SpecialType.System_String;
-    }
 
     private static void EmitRouter(StringBuilder sb, CommandGroup group)
     {
@@ -167,9 +182,8 @@ internal static class Emitter
             for (var i = 0; i < jsonParams.Count; i++)
             {
                 var p = jsonParams[i];
-                var getter = GetJsonGetter(p);
                 var camelName = ToCamelCase(p.Name);
-                sb.AppendLine($"                var __p{i} = __root.GetProperty(\"{camelName}\"){getter};");
+                EmitParameterExtraction(sb, p, i, camelName);
             }
         }
 
@@ -222,14 +236,38 @@ internal static class Emitter
                 sb.AppendLine($"                var __result = {target}({callArgs});");
             }
 
-            var serializer = GetResultSerializer(cmd);
-            sb.AppendLine($"                return {serializer};");
+            EmitResultSerializer(sb, cmd);
         }
 
         sb.AppendLine("            }");
     }
 
-    private static string GetJsonGetter(ParameterInfo p) => p.SpecialType switch
+    private static void EmitParameterExtraction(StringBuilder sb, ParameterInfo p, int index, string camelName)
+    {
+        if (p.IsJsonElement)
+        {
+            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\");");
+        }
+        else if (p.IsArray)
+        {
+            var elementGetter = GetElementGetter(p.ArrayElementSpecialType);
+            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\").EnumerateArray().Select(e => e{elementGetter}).ToArray();");
+        }
+        else if (p.IsNullable)
+        {
+            var elementGetter = GetElementGetter(p.NullableUnderlyingSpecialType);
+            var csType = GetCSharpTypeName(p.NullableUnderlyingSpecialType);
+            sb.AppendLine($"                var __prop{index} = __root.GetProperty(\"{camelName}\");");
+            sb.AppendLine($"                var __p{index} = __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null ? ({csType}?)null : __prop{index}{elementGetter};");
+        }
+        else
+        {
+            var getter = GetElementGetter(p.SpecialType);
+            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\"){getter};");
+        }
+    }
+
+    private static string GetElementGetter(SpecialType type) => type switch
     {
         SpecialType.System_Int32 => ".GetInt32()",
         SpecialType.System_Int64 => ".GetInt64()",
@@ -240,16 +278,70 @@ internal static class Emitter
         _ => ".GetRawText()",
     };
 
-    private static string GetResultSerializer(CommandInfo cmd) => cmd.InnerReturnSpecialType switch
+    private static string GetCSharpTypeName(SpecialType type) => type switch
     {
-        SpecialType.System_Int32 => "__result.ToString(System.Globalization.CultureInfo.InvariantCulture)",
-        SpecialType.System_Int64 => "__result.ToString(System.Globalization.CultureInfo.InvariantCulture)",
-        SpecialType.System_Single => "__result.ToString(System.Globalization.CultureInfo.InvariantCulture)",
-        SpecialType.System_Double => "__result.ToString(System.Globalization.CultureInfo.InvariantCulture)",
-        SpecialType.System_Boolean => "__result ? \"true\" : \"false\"",
-        SpecialType.System_String => "__ToJson(__result)",
-        _ => "__result.ToString()",
+        SpecialType.System_Int32 => "int",
+        SpecialType.System_Int64 => "long",
+        SpecialType.System_Single => "float",
+        SpecialType.System_Double => "double",
+        SpecialType.System_Boolean => "bool",
+        SpecialType.System_String => "string",
+        _ => "object",
     };
+
+    private static void EmitResultSerializer(StringBuilder sb, CommandInfo cmd)
+    {
+        if (cmd.IsReturnArray)
+        {
+            EmitArraySerializer(sb, cmd.ReturnArrayElementSpecialType);
+        }
+        else if (cmd.IsReturnNullable)
+        {
+            var innerSerializer = GetScalarSerializer("__result.Value", cmd.ReturnNullableUnderlyingSpecialType);
+            sb.AppendLine($"                return __result.HasValue ? {innerSerializer} : \"null\";");
+        }
+        else
+        {
+            var serializer = GetScalarSerializer("__result", cmd.InnerReturnSpecialType);
+            sb.AppendLine($"                return {serializer};");
+        }
+    }
+
+    private static string GetScalarSerializer(string varName, SpecialType type) => type switch
+    {
+        SpecialType.System_Int32 => $"{varName}.ToString(System.Globalization.CultureInfo.InvariantCulture)",
+        SpecialType.System_Int64 => $"{varName}.ToString(System.Globalization.CultureInfo.InvariantCulture)",
+        SpecialType.System_Single => $"{varName}.ToString(System.Globalization.CultureInfo.InvariantCulture)",
+        SpecialType.System_Double => $"{varName}.ToString(System.Globalization.CultureInfo.InvariantCulture)",
+        SpecialType.System_Boolean => $"{varName} ? \"true\" : \"false\"",
+        SpecialType.System_String => $"__ToJson({varName})",
+        _ => $"{varName}.ToString()",
+    };
+
+    private static void EmitArraySerializer(StringBuilder sb, SpecialType elementType)
+    {
+        sb.AppendLine("                var __sb = new System.Text.StringBuilder(\"[\");");
+        sb.AppendLine("                for (var __i = 0; __i < __result.Length; __i++)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    if (__i > 0) __sb.Append(',');");
+
+        if (elementType == SpecialType.System_String)
+        {
+            sb.AppendLine("                    __sb.Append(__ToJson(__result[__i]));");
+        }
+        else if (elementType == SpecialType.System_Boolean)
+        {
+            sb.AppendLine("                    __sb.Append(__result[__i] ? \"true\" : \"false\");");
+        }
+        else
+        {
+            sb.AppendLine("                    __sb.Append(__result[__i].ToString(System.Globalization.CultureInfo.InvariantCulture));");
+        }
+
+        sb.AppendLine("                }");
+        sb.AppendLine("                __sb.Append(']');");
+        sb.AppendLine("                return __sb.ToString();");
+    }
 
     private static void EmitExtensions(StringBuilder sb, CommandGroup group)
     {
