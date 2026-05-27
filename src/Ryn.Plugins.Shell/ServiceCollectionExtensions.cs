@@ -20,6 +20,7 @@ public static class ShellServiceCollectionExtensions
         services.AddSingleton<ShellPlugin>();
         services.AddSingleton<IRynPlugin>(sp => sp.GetRequiredService<ShellPlugin>());
         services.AddShellCommands(); // generated
+        services.AddSpawnCommands(); // generated
         return services;
     }
 }

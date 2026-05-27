@@ -1,24 +1,16 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using Ryn.Core;
 using Ryn.Ipc;
 
 namespace Ryn.Plugins.Shell;
 
-public sealed class ShellCommands
+public static class ShellCommands
 {
     private static ShellOptions? _options;
 
-    private readonly IRynWebView _webView;
-    private readonly ConcurrentDictionary<int, Process> _processes = new();
-    private static int _nextPid;
+    internal static ShellOptions? Options => _options;
 
-    public ShellCommands(IRynWebView webView)
-    {
-        _webView = webView;
-    }
 
     internal static void Configure(ShellOptions options) => _options = options;
 
@@ -48,88 +40,6 @@ public sealed class ShellCommands
 
         var output = new ProcessOutput(stdout, stderr, process.ExitCode);
         return JsonSerializer.Serialize(output, ShellJsonContext.Default.ProcessOutput);
-    }
-
-    [RynCommand("shell.spawn")]
-    public string Spawn(string command, string argsJson)
-    {
-        ValidateCommand(command);
-
-        var args = ParseArgs(argsJson);
-        var pid = Interlocked.Increment(ref _nextPid);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = command,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process: {command}");
-
-        _processes[pid] = process;
-
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                var json = JsonSerializer.Serialize(e.Data, ShellJsonContext.Default.String);
-                _webView.EmitEvent($"shell.stdout.{pid.ToString(CultureInfo.InvariantCulture)}", json);
-            }
-        };
-
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                var json = JsonSerializer.Serialize(e.Data, ShellJsonContext.Default.String);
-                _webView.EmitEvent($"shell.stderr.{pid.ToString(CultureInfo.InvariantCulture)}", json);
-            }
-        };
-
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) =>
-        {
-            var exitCode = process.ExitCode.ToString(CultureInfo.InvariantCulture);
-            _webView.EmitEvent($"shell.exit.{pid.ToString(CultureInfo.InvariantCulture)}", exitCode);
-            _processes.TryRemove(pid, out _);
-            process.Dispose();
-        };
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        return pid.ToString(CultureInfo.InvariantCulture);
-    }
-
-    [RynCommand("shell.kill")]
-    public string Kill(int pid)
-    {
-        if (!_processes.TryRemove(pid, out var process))
-        {
-            return JsonSerializer.Serialize(
-                new KillResult(false, $"No spawned process with pid {pid.ToString(CultureInfo.InvariantCulture)}"),
-                ShellJsonContext.Default.KillResult);
-        }
-
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (InvalidOperationException)
-        {
-            // Process already exited
-        }
-        finally
-        {
-            process.Dispose();
-        }
-
-        return JsonSerializer.Serialize(new KillResult(true, null), ShellJsonContext.Default.KillResult);
     }
 
     [RynCommand("shell.open")]

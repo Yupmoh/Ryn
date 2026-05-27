@@ -41,7 +41,7 @@ public sealed class ShellCommandsTests
     {
         ShellCommands.Configure(new ShellOptions { AllowedCommands = ["echo"] });
         var webView = Substitute.For<IRynWebView>();
-        var commands = new ShellCommands(webView);
+        using var commands = new SpawnCommands(webView);
 
         var act = () => commands.Spawn("rm", "[\"-rf\", \"/\"]");
         act.Should().Throw<UnauthorizedAccessException>();
@@ -52,10 +52,9 @@ public sealed class ShellCommandsTests
     {
         ShellCommands.Configure(new ShellOptions { AllowedCommands = ["echo"] });
         var webView = Substitute.For<IRynWebView>();
-        var commands = new ShellCommands(webView);
+        using var commands = new SpawnCommands(webView);
 
         var result = commands.Kill(99999);
-        result.Should().Contain("\"success\":false");
-        result.Should().Contain("No spawned process with pid 99999");
+        result.Should().BeFalse();
     }
 }
