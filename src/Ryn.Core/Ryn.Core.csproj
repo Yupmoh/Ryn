@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ryn.Core.Tests" />
     <InternalsVisibleTo Include="Ryn.Integration.Tests" />
+    <InternalsVisibleTo Include="Ryn.Plugins.Dialog" />
   </ItemGroup>
 
   <ItemGroup>
