@@ -90,7 +90,7 @@ public static class AsyncVoidCommandsRynExtensions
 }
 ,
             Length: {Scrubbed},
-            ChecksumAlgorithm: Sha1,
+            ChecksumAlgorithm: {Scrubbed},
             CanBeEmbedded: true,
             Container: {},
             Lines: [

@@ -93,7 +93,7 @@ public static class NullableReturnCommandsRynExtensions
 }
 ,
             Length: {Scrubbed},
-            ChecksumAlgorithm: Sha1,
+            ChecksumAlgorithm: {Scrubbed},
             CanBeEmbedded: true,
             Container: {},
             Lines: [

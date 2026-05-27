@@ -112,7 +112,7 @@ public static class CalculatorRynExtensions
 }
 ,
             Length: {Scrubbed},
-            ChecksumAlgorithm: Sha1,
+            ChecksumAlgorithm: {Scrubbed},
             CanBeEmbedded: true,
             Container: {},
             Lines: [

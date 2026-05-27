@@ -343,6 +343,8 @@ public sealed class GeneratorSnapshotTests
 
         return Verifier.Verify(runResult)
             .UseDirectory("Snapshots")
-            .ScrubMember("Length");
+            .ScrubMember("Length")
+            .ScrubMember("ChecksumAlgorithm")
+            .ScrubMember("Checksum");
     }
 }

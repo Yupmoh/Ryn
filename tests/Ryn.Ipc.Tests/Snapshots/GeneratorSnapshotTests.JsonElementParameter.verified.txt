@@ -94,7 +94,7 @@ public static class DataCommandsRynExtensions
 }
 ,
             Length: {Scrubbed},
-            ChecksumAlgorithm: Sha1,
+            ChecksumAlgorithm: {Scrubbed},
             CanBeEmbedded: true,
             Container: {},
             Lines: [
