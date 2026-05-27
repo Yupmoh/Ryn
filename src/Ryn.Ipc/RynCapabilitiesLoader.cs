@@ -12,8 +12,27 @@ public static class RynCapabilitiesLoader
         if (!File.Exists(path))
             return RynCapabilities.AllowAll();
 
-        var json = File.ReadAllText(path);
-        return Parse(json);
+        string json;
+        try
+        {
+            json = File.ReadAllText(path);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"Failed to read ryn.json at '{path}': {ex.Message}", ex);
+        }
+
+        try
+        {
+            return Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Invalid ryn.json at '{path}': {ex.Message}. " +
+                "Expected format: { \"capabilities\": { \"pluginName\": true | false | { \"allow\": [...], \"deny\": [...] } } }",
+                ex);
+        }
     }
 
     internal static RynCapabilities Parse(string json)
