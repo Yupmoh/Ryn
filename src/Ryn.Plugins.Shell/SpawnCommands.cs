@@ -36,23 +36,15 @@ public sealed class SpawnCommands : IDisposable
             throw new UnauthorizedAccessException("Shell execution is disabled (no commands in allowlist)");
         }
 
-        var args = string.Empty;
-        if (!string.IsNullOrEmpty(argsJson) && argsJson != "{}")
-        {
-            var argsArray = JsonSerializer.Deserialize(argsJson, ShellJsonContext.Default.StringArray);
-            if (argsArray is not null)
-                args = string.Join(' ', argsArray.Select(a => a.Contains(' ', StringComparison.Ordinal) ? $"\"{a}\"" : a));
-        }
-
         var psi = new ProcessStartInfo
         {
             FileName = command,
-            Arguments = args,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        ShellCommands.PopulateArguments(psi, argsJson);
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process: {command}");
@@ -81,9 +73,13 @@ public sealed class SpawnCommands : IDisposable
                 stderrBatcher.Add(JsonSerializer.Serialize(e.Data, ShellJsonContext.Default.String));
         };
 
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) =>
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        _ = Task.Run(() =>
         {
+            process.WaitForExit();
+
             stdoutBatcher.FlushNow();
             stderrBatcher.FlushNow();
 
@@ -92,10 +88,7 @@ public sealed class SpawnCommands : IDisposable
 
             if (_processes.TryRemove(pid, out var removed))
                 removed.Dispose();
-        };
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        });
 
         return pid;
     }

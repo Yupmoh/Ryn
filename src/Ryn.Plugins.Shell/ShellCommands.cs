@@ -19,17 +19,15 @@ public static class ShellCommands
     {
         ValidateCommand(command);
 
-        var args = ParseArgs(argsJson);
-
         var psi = new ProcessStartInfo
         {
             FileName = command,
-            Arguments = args,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        PopulateArguments(psi, argsJson);
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start process: {command}");
@@ -71,16 +69,17 @@ public static class ShellCommands
         }
     }
 
-    private static string ParseArgs(string argsJson)
+    internal static void PopulateArguments(ProcessStartInfo psi, string argsJson)
     {
         if (string.IsNullOrEmpty(argsJson) || argsJson == "{}")
-            return string.Empty;
+            return;
 
         var argsArray = JsonSerializer.Deserialize(argsJson, ShellJsonContext.Default.StringArray);
         if (argsArray is null)
-            return string.Empty;
+            return;
 
-        return string.Join(' ', argsArray.Select(a => a.Contains(' ', StringComparison.Ordinal) ? $"\"{a}\"" : a));
+        foreach (var arg in argsArray)
+            psi.ArgumentList.Add(arg);
     }
 }
 
