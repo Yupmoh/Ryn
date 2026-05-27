@@ -74,12 +74,12 @@ public sealed class PtyCommands : IDisposable
             return false;
 
         var bytes = Convert.FromBase64String(base64Data);
-        var remaining = bytes;
-        while (remaining.Length > 0)
+        var offset = 0;
+        while (offset < bytes.Length)
         {
-            var written = PtyNative.Write(session.MasterFd, remaining, remaining.Length);
+            var written = PtyNative.Write(session.MasterFd, bytes, offset, bytes.Length - offset);
             if (written <= 0) return false;
-            remaining = remaining[written..];
+            offset += written;
         }
         return true;
     }
@@ -266,10 +266,16 @@ internal static partial class PtyNative
         return (int)libc_read(fd, buf, count);
     }
 
-    internal static int Write(int fd, byte[] buf, int count)
+    internal static unsafe int Write(int fd, byte[] buf, int offset, int count)
     {
-        return (int)libc_write(fd, buf, count);
+        fixed (byte* ptr = buf)
+        {
+            return (int)libc_write_ptr(fd, ptr + offset, count);
+        }
     }
+
+    [DllImport("libc", EntryPoint = "write", SetLastError = true)]
+    private static extern unsafe nint libc_write_ptr(int fd, byte* buf, nint count);
 
     internal static int Close(int fd)
     {

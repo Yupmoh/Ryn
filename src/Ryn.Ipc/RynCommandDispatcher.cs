@@ -36,22 +36,22 @@ public sealed class RynCommandDispatcher
                 }
                 catch (RynCommandDeniedException)
                 {
-                    NotifyObserver(() => _observer?.OnCommandDenied(command));
+                    NotifyDenied(_observer, command);
                     throw;
                 }
 
-                NotifyObserver(() => _observer?.OnCommandStarted(command));
+                NotifyStarted(_observer, command);
                 var sw = Stopwatch.StartNew();
                 try
                 {
                     var result = await _routers[i].RouteAsync(command, args, _services, cancellationToken)
                         .ConfigureAwait(false);
-                    NotifyObserver(() => _observer?.OnCommandCompleted(command, sw.ElapsedMilliseconds));
+                    NotifyCompleted(_observer, command, sw.ElapsedMilliseconds);
                     return result;
                 }
                 catch (Exception ex)
                 {
-                    NotifyObserver(() => _observer?.OnCommandFailed(command, sw.ElapsedMilliseconds, ex));
+                    NotifyFailed(_observer, command, sw.ElapsedMilliseconds, ex);
                     throw;
                 }
             }
@@ -60,9 +60,31 @@ public sealed class RynCommandDispatcher
         throw new RynCommandNotFoundException(command);
     }
 
-    private static void NotifyObserver(Action action)
+    private static void NotifyStarted(IIpcObserver? observer, string command)
     {
-        try { action(); }
+        if (observer is null) return;
+        try { observer.OnCommandStarted(command); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
+    private static void NotifyCompleted(IIpcObserver? observer, string command, long elapsedMs)
+    {
+        if (observer is null) return;
+        try { observer.OnCommandCompleted(command, elapsedMs); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
+    private static void NotifyFailed(IIpcObserver? observer, string command, long elapsedMs, Exception exception)
+    {
+        if (observer is null) return;
+        try { observer.OnCommandFailed(command, elapsedMs, exception); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
+    private static void NotifyDenied(IIpcObserver? observer, string command)
+    {
+        if (observer is null) return;
+        try { observer.OnCommandDenied(command); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
     }
 }

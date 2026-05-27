@@ -10,6 +10,8 @@ internal sealed class EventBatcher : IDisposable
     private readonly Timer _flushTimer;
     private readonly Channel<string> _channel;
     private readonly Lock _flushLock = new();
+    private readonly List<string> _flushBuffer = new(MaxBatchSize);
+    private readonly StringBuilder _sb = new();
     private bool _disposed;
     private long _addedCount;
     private long _flushedCount;
@@ -60,42 +62,40 @@ internal sealed class EventBatcher : IDisposable
 
     private void FlushBatchLocked()
     {
-        var items = new List<string>();
-        while (items.Count < MaxBatchSize && _channel.Reader.TryRead(out var item))
-            items.Add(item);
+        _flushBuffer.Clear();
+        while (_flushBuffer.Count < MaxBatchSize && _channel.Reader.TryRead(out var item))
+            _flushBuffer.Add(item);
 
-        if (items.Count == 0) return;
-        EmitBatch(items);
+        if (_flushBuffer.Count == 0) return;
+        EmitBatch(_flushBuffer);
     }
 
     private void FlushAllLocked()
     {
-        var items = new List<string>();
-        while (_channel.Reader.TryRead(out var item))
-            items.Add(item);
-
-        if (items.Count == 0) return;
-
-        for (var offset = 0; offset < items.Count; offset += MaxBatchSize)
+        while (true)
         {
-            var count = Math.Min(MaxBatchSize, items.Count - offset);
-            EmitBatch(items.GetRange(offset, count));
+            _flushBuffer.Clear();
+            while (_flushBuffer.Count < MaxBatchSize && _channel.Reader.TryRead(out var item))
+                _flushBuffer.Add(item);
+
+            if (_flushBuffer.Count == 0) break;
+            EmitBatch(_flushBuffer);
         }
     }
 
     private void EmitBatch(List<string> items)
     {
-        var sb = new StringBuilder();
-        sb.Append('[');
+        _sb.Clear();
+        _sb.Append('[');
         for (var i = 0; i < items.Count; i++)
         {
-            if (i > 0) sb.Append(',');
-            sb.Append(items[i]);
+            if (i > 0) _sb.Append(',');
+            _sb.Append(items[i]);
         }
-        sb.Append(']');
+        _sb.Append(']');
 
         Interlocked.Add(ref _flushedCount, items.Count);
-        _webView.EmitEvent(_eventName, sb.ToString());
+        _webView.EmitEvent(_eventName, _sb.ToString());
     }
 
     public void Dispose()

@@ -3,6 +3,7 @@
     <RootNamespace>Ryn.Plugins.Shell</RootNamespace>
     <Description>Shell command execution plugin for Ryn applications</Description>
     <PackageTags>ryn;plugin;shell</PackageTags>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>IL2026;IL3050;CA2227;CA1002;CA1054;CA5392</NoWarn>
   </PropertyGroup>
 
