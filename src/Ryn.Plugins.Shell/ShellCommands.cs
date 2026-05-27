@@ -15,7 +15,7 @@ public static class ShellCommands
     internal static void Configure(ShellOptions options)
     {
         _options = options;
-        _resolvedAllowlist = ResolveAllowlist(options.AllowedCommands);
+        (_resolvedBareCommands, _allowedFullPaths) = ResolveAllowlist(options.AllowedCommands);
     }
 
     [RynCommand("shell.execute")]
@@ -72,37 +72,25 @@ public static class ShellCommands
         if (hasPathSeparator)
         {
             var canonical = Path.GetFullPath(command);
-            if (_resolvedAllowlist is not null
-                && _resolvedAllowlist.TryGetValue(canonical, out var allowed))
-                return allowed;
-            if (_options.AllowedCommands.Contains(canonical, StringComparer.OrdinalIgnoreCase))
+            if (_allowedFullPaths is not null && _allowedFullPaths.Contains(canonical))
                 return canonical;
             throw new UnauthorizedAccessException($"Command path '{command}' is not in the allowed list");
         }
 
-        // Bare command: resolve to canonical path via the pre-resolved allowlist
-        if (_resolvedAllowlist is not null)
-        {
-            foreach (var kvp in _resolvedAllowlist)
-            {
-                var name = Path.GetFileNameWithoutExtension(kvp.Key);
-                if (string.Equals(name, command, StringComparison.OrdinalIgnoreCase))
-                    return kvp.Value;
-            }
-        }
-
-        // Fallback: if command is in the allowlist by name (no PATH resolution available)
-        if (_options.AllowedCommands.Contains(command, StringComparer.OrdinalIgnoreCase))
-            return command;
+        if (_resolvedBareCommands is not null
+            && _resolvedBareCommands.TryGetValue(command, out var resolvedPath))
+            return resolvedPath;
 
         throw new UnauthorizedAccessException($"Command '{command}' is not in the allowed list");
     }
 
-    private static Dictionary<string, string>? _resolvedAllowlist;
+    private static Dictionary<string, string>? _resolvedBareCommands;
+    private static HashSet<string>? _allowedFullPaths;
 
-    private static Dictionary<string, string> ResolveAllowlist(List<string> commands)
+    private static (Dictionary<string, string> bare, HashSet<string> full) ResolveAllowlist(List<string> commands)
     {
-        var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var bare = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var full = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         var separator = OperatingSystem.IsWindows() ? ';' : ':';
         var dirs = pathEnv.Split(separator, StringSplitOptions.RemoveEmptyEntries);
@@ -114,38 +102,39 @@ public static class ShellCommands
 
             if (hasPath)
             {
-                var full = Path.GetFullPath(cmd);
-                resolved[full] = full;
+                full.Add(Path.GetFullPath(cmd));
                 continue;
             }
 
-            foreach (var dir in dirs)
-            {
-                var candidate = Path.Combine(dir, cmd);
-                if (File.Exists(candidate))
-                {
-                    resolved[Path.GetFullPath(candidate)] = Path.GetFullPath(candidate);
-                    break;
-                }
+            var resolved = FindInPath(cmd, dirs);
+            if (resolved is not null)
+                bare[cmd] = resolved;
+            // If bare command can't be found in PATH at config time, it is
+            // silently excluded — fail closed. The command will be rejected
+            // at invocation time since it won't be in either map.
+        }
+        return (bare, full);
+    }
 
-                if (OperatingSystem.IsWindows())
+    private static string? FindInPath(string command, string[] dirs)
+    {
+        foreach (var dir in dirs)
+        {
+            var candidate = Path.Combine(dir, command);
+            if (File.Exists(candidate))
+                return Path.GetFullPath(candidate);
+
+            if (OperatingSystem.IsWindows())
+            {
+                foreach (var ext in new[] { ".exe", ".cmd", ".bat" })
                 {
-                    var found = false;
-                    foreach (var ext in new[] { ".exe", ".cmd", ".bat" })
-                    {
-                        var withExt = candidate + ext;
-                        if (File.Exists(withExt))
-                        {
-                            resolved[Path.GetFullPath(withExt)] = Path.GetFullPath(withExt);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
+                    var withExt = candidate + ext;
+                    if (File.Exists(withExt))
+                        return Path.GetFullPath(withExt);
                 }
             }
         }
-        return resolved;
+        return null;
     }
 
     internal static void PopulateArguments(ProcessStartInfo psi, string argsJson)
