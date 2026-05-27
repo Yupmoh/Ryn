@@ -15,6 +15,7 @@ internal sealed class EventBatcher : IDisposable
     private bool _disposed;
     private long _addedCount;
     private long _flushedCount;
+    private long _droppedCount;
 
     private const int FlushIntervalMs = 16;
     private const int MaxBatchSize = 100;
@@ -26,7 +27,7 @@ internal sealed class EventBatcher : IDisposable
         _eventName = eventName;
         _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(capacity)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.DropWrite,
             SingleReader = true,
         });
         _flushTimer = new Timer(_ => Flush(), null, FlushIntervalMs, FlushIntervalMs);
@@ -34,13 +35,15 @@ internal sealed class EventBatcher : IDisposable
 
     internal long AddedCount => Interlocked.Read(ref _addedCount);
     internal long FlushedCount => Interlocked.Read(ref _flushedCount);
-    internal long Backlog => AddedCount - FlushedCount;
+    internal long DroppedCount => Interlocked.Read(ref _droppedCount);
 
     internal void Add(string jsonData)
     {
         if (_disposed) return;
-        _channel.Writer.TryWrite(jsonData);
-        Interlocked.Increment(ref _addedCount);
+        if (_channel.Writer.TryWrite(jsonData))
+            Interlocked.Increment(ref _addedCount);
+        else
+            Interlocked.Increment(ref _droppedCount);
     }
 
     internal void FlushNow()
