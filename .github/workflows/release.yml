@@ -31,6 +31,29 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
+      - name: Download native libraries for all platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for RID in osx-arm64 linux-x64 win-x64; do
+            EXT=".tar.gz"
+            if [ "$RID" = "win-x64" ]; then EXT=".zip"; fi
+            ARCHIVE="saucer-bindings-${RID}${EXT}"
+            DEST="src/Ryn.Interop/runtimes/${RID}/native"
+            mkdir -p "$DEST"
+            if gh release download --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber 2>/dev/null; then
+              if [ "$EXT" = ".zip" ]; then
+                unzip -o "/tmp/$ARCHIVE" -d "$DEST"
+              else
+                tar -xzf "/tmp/$ARCHIVE" -C "$DEST"
+              fi
+              echo "Downloaded native libs for $RID"
+            else
+              echo "WARNING: No native libs for $RID"
+            fi
+          done
+          find src/Ryn.Interop/runtimes -type f | head -20
+
       - name: Restore
         run: dotnet restore
 
