@@ -3,18 +3,33 @@ namespace Ryn.Ipc;
 public sealed class RynCapabilities
 {
     private readonly Dictionary<string, CapabilityRule> _rules;
+    private readonly Dictionary<string, CapabilityScope> _scopes;
     private readonly bool _enforced;
 
-    private RynCapabilities(bool enforced, Dictionary<string, CapabilityRule>? rules = null)
+    private RynCapabilities(bool enforced, Dictionary<string, CapabilityRule>? rules = null, Dictionary<string, CapabilityScope>? scopes = null)
     {
         _enforced = enforced;
         _rules = rules ?? new Dictionary<string, CapabilityRule>(StringComparer.OrdinalIgnoreCase);
+        _scopes = scopes ?? new Dictionary<string, CapabilityScope>(StringComparer.OrdinalIgnoreCase);
     }
+
+    public bool IsEnforced => _enforced;
 
     public static RynCapabilities AllowAll() => new(enforced: false);
 
     public static RynCapabilities FromRules(Dictionary<string, CapabilityRule> rules) =>
         new(enforced: true, rules);
+
+    internal static RynCapabilities FromRulesAndScopes(
+        Dictionary<string, CapabilityRule> rules,
+        Dictionary<string, CapabilityScope> scopes) =>
+        new(enforced: true, rules, scopes);
+
+    public CapabilityScope? GetScope(string pluginPrefix)
+    {
+        if (!_enforced) return null;
+        return _scopes.TryGetValue(pluginPrefix, out var scope) ? scope : null;
+    }
 
     public void ThrowIfDenied(string command)
     {

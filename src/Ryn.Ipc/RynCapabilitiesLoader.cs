@@ -4,6 +4,8 @@ namespace Ryn.Ipc;
 
 public static class RynCapabilitiesLoader
 {
+    private const string AppDataVariable = "$APP_DATA";
+
     public static RynCapabilities Load()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "ryn.json");
@@ -23,6 +25,7 @@ public static class RynCapabilitiesLoader
             return RynCapabilities.AllowAll();
 
         var rules = new Dictionary<string, CapabilityRule>(StringComparer.OrdinalIgnoreCase);
+        var scopes = new Dictionary<string, CapabilityScope>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var prop in caps.EnumerateObject())
         {
@@ -69,6 +72,12 @@ public static class RynCapabilitiesLoader
 
                 var allowAll = allow is null && deny is not null;
                 rules[pluginName] = new CapabilityRule { AllowAll = allowAll, Allow = allow, Deny = deny };
+
+                // Parse resource-level scopes
+                var scope = ParseScope(prop.Value);
+                if (scope is not null)
+                    scopes[pluginName] = scope;
+
                 continue;
             }
 
@@ -76,6 +85,52 @@ public static class RynCapabilitiesLoader
                 $"Invalid capability value for plugin '{pluginName}': expected true, false, or object");
         }
 
-        return RynCapabilities.FromRules(rules);
+        return RynCapabilities.FromRulesAndScopes(rules, scopes);
+    }
+
+    private static CapabilityScope? ParseScope(JsonElement pluginElement)
+    {
+        List<string>? paths = null;
+        List<string>? commands = null;
+
+        if (pluginElement.TryGetProperty("scope", out var scopeArray)
+            && scopeArray.ValueKind == JsonValueKind.Array)
+        {
+            paths = [];
+            foreach (var item in scopeArray.EnumerateArray())
+            {
+                if (item.GetString() is { } raw)
+                    paths.Add(ResolveScopePath(raw));
+            }
+        }
+
+        if (pluginElement.TryGetProperty("commands", out var commandsArray)
+            && commandsArray.ValueKind == JsonValueKind.Array)
+        {
+            commands = [];
+            foreach (var item in commandsArray.EnumerateArray())
+            {
+                if (item.GetString() is { } cmd)
+                    commands.Add(cmd);
+            }
+        }
+
+        if (paths is null && commands is null)
+            return null;
+
+        return new CapabilityScope(
+            paths?.AsReadOnly() ?? (IReadOnlyList<string>)[],
+            commands?.AsReadOnly() ?? (IReadOnlyList<string>)[]);
+    }
+
+    internal static string ResolveScopePath(string raw)
+    {
+        if (raw.StartsWith(AppDataVariable, StringComparison.Ordinal))
+        {
+            var suffix = raw[AppDataVariable.Length..];
+            return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, suffix.TrimStart('/', '\\')));
+        }
+
+        return Path.GetFullPath(raw);
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Ryn.Ipc;
 
 namespace Ryn.Plugins.Shell;
 
@@ -8,7 +9,13 @@ public static class ShellServiceCollectionExtensions
     {
         var options = new ShellOptions();
         configure?.Invoke(options);
-        services.AddSingleton(options);
+        services.AddSingleton(sp =>
+        {
+            var caps = sp.GetService<RynCapabilities>();
+            if (caps is not null)
+                CapabilityScopeMerger.MergeShellScope(caps, options);
+            return options;
+        });
         services.AddSingleton<ShellPlugin>();
         services.AddShellCommands(); // generated
         return services;

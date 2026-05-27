@@ -166,4 +166,102 @@ public sealed class CapabilityTests
         var denied = () => caps.ThrowIfDenied("fs.remove");
         denied.Should().Throw<RynCommandDeniedException>();
     }
+
+    [Fact]
+    public void ParsesScope_PathsAndCommands()
+    {
+        var json = """
+        {
+          "capabilities": {
+            "fs": {
+              "allow": ["readTextFile", "writeTextFile"],
+              "scope": ["/tmp/workspace", "$APP_DATA"]
+            },
+            "shell": {
+              "allow": ["execute"],
+              "commands": ["echo", "date", "git"]
+            }
+          }
+        }
+        """;
+
+        var caps = RynCapabilitiesLoader.Parse(json);
+
+        var fsScope = caps.GetScope("fs");
+        fsScope.Should().NotBeNull();
+        fsScope!.AllowedPaths.Should().HaveCount(2);
+        fsScope.AllowedPaths[0].Should().Be(Path.GetFullPath("/tmp/workspace"));
+        fsScope.AllowedPaths[1].Should().Be(Path.GetFullPath(AppContext.BaseDirectory));
+        fsScope.HasPathRestrictions.Should().BeTrue();
+        fsScope.HasCommandRestrictions.Should().BeFalse();
+
+        var shellScope = caps.GetScope("shell");
+        shellScope.Should().NotBeNull();
+        shellScope!.AllowedCommands.Should().BeEquivalentTo(["echo", "date", "git"]);
+        shellScope.HasCommandRestrictions.Should().BeTrue();
+        shellScope.HasPathRestrictions.Should().BeFalse();
+    }
+
+    [Fact]
+    public void GetScope_ReturnsNull_WhenNoScope()
+    {
+        var json = """
+        {
+          "capabilities": {
+            "fs": {
+              "allow": ["readTextFile"]
+            },
+            "dialog": true
+          }
+        }
+        """;
+
+        var caps = RynCapabilitiesLoader.Parse(json);
+
+        caps.GetScope("fs").Should().BeNull();
+        caps.GetScope("dialog").Should().BeNull();
+        caps.GetScope("nonexistent").Should().BeNull();
+    }
+
+    [Fact]
+    public void GetScope_ReturnsNull_WhenNotEnforced()
+    {
+        var caps = RynCapabilities.AllowAll();
+
+        caps.GetScope("fs").Should().BeNull();
+        caps.GetScope("shell").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParsesScope_AppDataVariable_ResolvesToBaseDirectory()
+    {
+        var resolved = RynCapabilitiesLoader.ResolveScopePath("$APP_DATA");
+        resolved.Should().Be(Path.GetFullPath(AppContext.BaseDirectory));
+    }
+
+    [Fact]
+    public void ParsesScope_AppDataVariable_WithSubpath()
+    {
+        var resolved = RynCapabilitiesLoader.ResolveScopePath("$APP_DATA/data/logs");
+        var expected = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "data", "logs"));
+        resolved.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ParsesScope_BooleanPlugin_HasNoScope()
+    {
+        var json = """
+        {
+          "capabilities": {
+            "clipboard": true,
+            "notification": true
+          }
+        }
+        """;
+
+        var caps = RynCapabilitiesLoader.Parse(json);
+
+        caps.GetScope("clipboard").Should().BeNull();
+        caps.GetScope("notification").Should().BeNull();
+    }
 }
