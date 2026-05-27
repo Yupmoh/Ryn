@@ -142,7 +142,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
         return ValueTask.CompletedTask;
     }
 
-    public unsafe ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default)
+    public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -161,12 +161,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
         _pendingEvals[id] = tcs;
 
         var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
-        var evalCall = $"window.__ryn.eval({id},'{base64}')";
-
-        Span<byte> buf = stackalloc byte[256];
-        var str = Utf8String.Create(evalCall, buf);
-        Saucer.saucer_webview_execute((saucer_webview*)_webview, str.Pointer);
-        str.Dispose();
+        ExecuteOnUiThread($"window.__ryn.eval({id},'{base64}')");
 
         return new ValueTask<string>(tcs.Task);
     }

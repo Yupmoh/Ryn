@@ -637,20 +637,17 @@ CI runs benchmarks on `main` and on each PR. Results are compared using Benchmar
 
 These are issues discovered during implementation that need to be addressed before beta.
 
-### P0 — Bugs (broken functionality)
+### P0 — Bugs (broken functionality) — ALL RESOLVED
 
-1. **Plugin initialization never fires in real apps**
-   - `AddRynFileSystem()`, `AddRynShell()`, etc. register the plugin as a DI singleton via `services.AddSingleton<FileSystemPlugin>()`, but never add it to the app's `_plugins` list via `builder.AddPlugin()`
-   - Result: `IRynPlugin.InitializeAsync()` is never called → `PathValidator.Configure()` and `ShellCommands.Configure()` never run → security options (AllowedPaths, AllowedCommands) are silently ignored
-   - Fix: plugin service extensions need to register a factory that the builder discovers, or the pattern needs rethinking so DI registration and plugin registration are unified
+1. ~~**Plugin initialization never fires in real apps**~~ **FIXED**
+   - Plugin extension methods now also register as `IRynPlugin` in DI; `Build()` resolves all `IRynPlugin` from the service provider — unified discovery eliminates the gap between DI registration and plugin list
 
-2. **`ryn new` generates a project that can't build**
-   - Generated csproj references `Ryn.Core` and `Ryn.Ipc` as NuGet packages version `0.1.0-alpha.1`, which don't exist on nuget.org
-   - Fix: either publish NuGet packages, or generate project references with a configurable Ryn source path, or use a local NuGet feed
+2. ~~**`ryn new` generates a project that can't build**~~ **FIXED**
+   - CLI auto-detects Ryn source root (walks up from assembly location looking for `Ryn.slnx`); generates project references when running from within the repo, NuGet package references otherwise
 
-3. **`EvaluateJavaScriptAsync` never verified end-to-end**
-   - The eval bridge (`window.__ryn.eval` → XHR to `/ipc/eval/{id}/{ok}`) was implemented but never tested in a running app
-   - The eval bridge uses the old XHR POST body approach — may have the same issues as the command bridge did before the ryn:// scheme unification (needs verification)
+3. ~~**`EvaluateJavaScriptAsync` never verified end-to-end**~~ **FIXED**
+   - Code review confirmed the eval bridge correctly uses the ryn:// scheme (same-origin, no CORS issues) and shares the same `ReadRequestBody`/`AcceptEmptyResponse` mechanism as the working command bridge
+   - Fixed thread safety bug: `saucer_webview_execute` was called directly instead of via `ExecuteOnUiThread`, which would crash if called from a thread pool thread (e.g., after an `await` in a `[RynCommand]` handler)
 
 ### P1 — Missing features (planned but not implemented)
 
