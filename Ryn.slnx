@@ -25,5 +25,6 @@
     <Project Path="tests/Ryn.Interop.Tests/Ryn.Interop.Tests.csproj" />
     <Project Path="tests/Ryn.Ipc.Tests/Ryn.Ipc.Tests.csproj" />
     <Project Path="tests/Ryn.Plugins.Tests/Ryn.Plugins.Tests.csproj" />
+    <Project Path="tests/Ryn.Cli.Tests/Ryn.Cli.Tests.csproj" />
   </Folder>
 </Solution>
