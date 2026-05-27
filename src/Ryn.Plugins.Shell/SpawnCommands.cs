@@ -83,6 +83,23 @@ public sealed class SpawnCommands : IDisposable
         return pid;
     }
 
+    [RynCommand("shell.metrics")]
+    public string Metrics()
+    {
+        var entries = new List<ProcessMetrics>();
+        foreach (var kvp in _processes)
+        {
+            var pid = kvp.Key;
+            var sp = kvp.Value;
+            entries.Add(new ProcessMetrics(
+                pid,
+                sp.StdoutBatcher.AddedCount + sp.StderrBatcher.AddedCount,
+                sp.StdoutBatcher.FlushedCount + sp.StderrBatcher.FlushedCount,
+                sp.StdoutBatcher.DroppedCount + sp.StderrBatcher.DroppedCount));
+        }
+        return JsonSerializer.Serialize(entries, ShellJsonContext.Default.ListProcessMetrics);
+    }
+
     [RynCommand("shell.kill")]
     public bool Kill(int pid)
     {

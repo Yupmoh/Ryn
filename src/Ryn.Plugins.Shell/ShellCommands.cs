@@ -155,9 +155,12 @@ internal record ProcessOutput(string Stdout, string Stderr, int ExitCode);
 
 internal record KillResult(bool Success, string? Error);
 
+internal record ProcessMetrics(int Pid, long Added, long Flushed, long Dropped);
+
 [System.Text.Json.Serialization.JsonSerializable(typeof(string))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(ProcessOutput))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(KillResult))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(List<ProcessMetrics>))]
 [System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNamingPolicy = System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
 internal partial class ShellJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
