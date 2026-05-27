@@ -360,6 +360,10 @@ internal static class Emitter
             var serializer = GetScalarSerializer("__result", cmd.InnerReturnSpecialType);
             sb.AppendLine($"                return {serializer};");
         }
+        else if (cmd.InnerReturnType.EndsWith("JsonElement", System.StringComparison.Ordinal))
+        {
+            sb.AppendLine("                return __result.GetRawText();");
+        }
         else if (jsonContextType is not null)
         {
             // Complex return type — serialize via the user-supplied JsonSerializerContext
