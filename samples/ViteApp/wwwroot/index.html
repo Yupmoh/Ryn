@@ -66,9 +66,17 @@
             }
         }
 
-        // Auto-test on load
-        if (window.__ryn) testIpc();
-        else setTimeout(testIpc, 500);
+        // Auto-test on load (only inside RYN webview)
+        function tryAutoTest() {
+            if (window.__ryn) {
+                testIpc();
+            } else {
+                document.getElementById('status').className = 'status';
+                document.getElementById('status').textContent = 'Not running inside RYN — open with: dotnet run --project samples/ViteApp';
+                document.getElementById('result').textContent = 'IPC bridge not available (window.__ryn is undefined)';
+            }
+        }
+        setTimeout(tryAutoTest, 300);
     </script>
 </body>
 </html>
