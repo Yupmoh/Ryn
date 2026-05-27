@@ -1,4 +1,6 @@
 using FluentAssertions;
+using NSubstitute;
+using Ryn.Core;
 using Ryn.Plugins.Shell;
 using Xunit;
 
@@ -32,5 +34,28 @@ public sealed class ShellCommandsTests
 
         var act = () => ShellCommands.Execute("rm", "[\"-rf\", \"/\"]");
         act.Should().Throw<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public void Spawn_RejectsDisallowedCommand()
+    {
+        ShellCommands.Configure(new ShellOptions { AllowedCommands = ["echo"] });
+        var webView = Substitute.For<IRynWebView>();
+        var commands = new ShellCommands(webView);
+
+        var act = () => commands.Spawn("rm", "[\"-rf\", \"/\"]");
+        act.Should().Throw<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public void Kill_ReturnsErrorForUnknownPid()
+    {
+        ShellCommands.Configure(new ShellOptions { AllowedCommands = ["echo"] });
+        var webView = Substitute.For<IRynWebView>();
+        var commands = new ShellCommands(webView);
+
+        var result = commands.Kill(99999);
+        result.Should().Contain("\"success\":false");
+        result.Should().Contain("No spawned process with pid 99999");
     }
 }
