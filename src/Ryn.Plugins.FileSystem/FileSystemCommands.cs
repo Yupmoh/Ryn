@@ -14,6 +14,23 @@ public static class FileSystemCommands
         return File.ReadAllText(resolved);
     }
 
+    [RynCommand("fs.readFile")]
+    public static string ReadFile(string path)
+    {
+        var resolved = PathValidator.Resolve(path);
+        return Convert.ToBase64String(File.ReadAllBytes(resolved));
+    }
+
+    [RynCommand("fs.writeFile")]
+    public static string WriteFile(string path, string data)
+    {
+        var resolved = PathValidator.Resolve(path);
+        var dir = Path.GetDirectoryName(resolved);
+        if (dir is not null) Directory.CreateDirectory(dir);
+        File.WriteAllBytes(resolved, Convert.FromBase64String(data));
+        return resolved;
+    }
+
     [RynCommand("fs.writeTextFile")]
     public static void WriteTextFile(string path, string text)
     {

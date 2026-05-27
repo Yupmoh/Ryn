@@ -82,6 +82,31 @@ public sealed class FileSystemCommandsTests : IDisposable
     }
 
     [Fact]
+    public void WriteAndReadFile_BinaryRoundTrips()
+    {
+        var path = Path.Combine(_testDir, "binary.bin");
+        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(256);
+        var base64 = Convert.ToBase64String(bytes);
+
+        FileSystemCommands.WriteFile(path, base64);
+
+        var result = FileSystemCommands.ReadFile(path);
+        Convert.FromBase64String(result).Should().Equal(bytes);
+    }
+
+    [Fact]
+    public void WriteFile_CreatesParentDirectories()
+    {
+        var path = Path.Combine(_testDir, "nested", "deep", "file.bin");
+        var data = Convert.ToBase64String([0x01, 0x02, 0x03]);
+
+        var resolved = FileSystemCommands.WriteFile(path, data);
+
+        File.Exists(resolved).Should().BeTrue();
+        File.ReadAllBytes(resolved).Should().Equal(0x01, 0x02, 0x03);
+    }
+
+    [Fact]
     public void PathTraversal_Rejected()
     {
         var act = () => FileSystemCommands.ReadTextFile(Path.Combine(_testDir, "..", "..", "etc", "passwd"));
