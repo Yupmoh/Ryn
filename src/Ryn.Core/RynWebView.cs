@@ -96,7 +96,6 @@ public sealed class RynWebView : IRynWebView, IDisposable
     // HTML content to serve from ryn://app/
     private string? _htmlContent;
     private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { "ryn://app" };
-    private string _matchedCorsOrigin = "ryn://app";
 
     private bool _disposed;
 
@@ -252,16 +251,19 @@ public sealed class RynWebView : IRynWebView, IDisposable
         var path = SaucerStringReader.ReadUrlPath(url);
         Saucer.saucer_url_free(url);
 
+        var requestOrigin = ParseRequestOrigin(request);
+        var matchedOrigin = ResolveAllowedOrigin(requestOrigin);
+
         // CORS preflight for cross-origin dev server requests
         var method = SaucerStringReader.ReadRequestMethod(request);
         if (string.Equals(method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
         {
-            AcceptCorsPreflightResponse(executor);
+            AcceptCorsPreflightResponse(executor, matchedOrigin);
             return;
         }
 
         // Validate request origin for IPC endpoints
-        if (path.StartsWith("/ipc/", StringComparison.Ordinal) && !IsOriginAllowed(request))
+        if (path.StartsWith("/ipc/", StringComparison.Ordinal) && matchedOrigin is null && requestOrigin is not null)
         {
             Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
             return;
@@ -284,7 +286,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
                     tcs.TrySetException(new JavaScriptException(body));
             }
 
-            AcceptEmptyResponse(executor);
+            AcceptEmptyResponse(executor, matchedOrigin);
             return;
         }
 
@@ -296,7 +298,7 @@ public sealed class RynWebView : IRynWebView, IDisposable
             var body = ReadRequestBody(request);
             var args = Encoding.UTF8.GetBytes(body);
 
-            AcceptEmptyResponse(executor);
+            AcceptEmptyResponse(executor, matchedOrigin);
             _ = DispatchCommandAsync(cmdId, command, args);
             return;
         }
@@ -445,36 +447,38 @@ public sealed class RynWebView : IRynWebView, IDisposable
         mime.Dispose();
     }
 
-    private unsafe void AcceptEmptyResponse(saucer_scheme_executor* executor)
+    private unsafe void AcceptEmptyResponse(saucer_scheme_executor* executor, string? origin = null)
     {
         var emptyStash = Saucer.saucer_stash_new_empty();
         Span<byte> mimeBuf = stackalloc byte[16];
         var mime = Utf8String.Create("text/plain", mimeBuf);
         var response = Saucer.saucer_scheme_response_new(emptyStash, mime.Pointer);
-        AppendCorsHeaders(response);
+        AppendCorsHeaders(response, origin);
         Saucer.saucer_scheme_executor_accept(executor, response);
         mime.Dispose();
     }
 
-    private unsafe void AcceptCorsPreflightResponse(saucer_scheme_executor* executor)
+    private unsafe void AcceptCorsPreflightResponse(saucer_scheme_executor* executor, string? matchedOrigin)
     {
         var emptyStash = Saucer.saucer_stash_new_empty();
         Span<byte> mimeBuf = stackalloc byte[16];
         var mime = Utf8String.Create("text/plain", mimeBuf);
         var response = Saucer.saucer_scheme_response_new(emptyStash, mime.Pointer);
-        AppendCorsHeaders(response);
+        AppendCorsHeaders(response, matchedOrigin);
         AppendHeader(response, "Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         AppendHeader(response, "Access-Control-Allow-Headers", "Content-Type");
+        AppendHeader(response, "Vary", "Origin");
         Saucer.saucer_scheme_executor_accept(executor, response);
         mime.Dispose();
     }
 
-    private unsafe void AppendCorsHeaders(saucer_scheme_response* response)
+    private static unsafe void AppendCorsHeaders(saucer_scheme_response* response, string? origin)
     {
-        AppendHeader(response, "Access-Control-Allow-Origin", _matchedCorsOrigin);
+        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? "ryn://app");
+        AppendHeader(response, "Vary", "Origin");
     }
 
-    private unsafe bool IsOriginAllowed(saucer_scheme_request* request)
+    private static unsafe string? ParseRequestOrigin(saucer_scheme_request* request)
     {
         var headers = SaucerStringReader.ReadRequestHeaders(request);
         foreach (var line in headers.Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -483,16 +487,18 @@ public sealed class RynWebView : IRynWebView, IDisposable
             {
                 var origin = line[7..].Trim().TrimEnd('\r');
                 if (origin.Length == 0 || string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
-                    return true;
-                if (_allowedOrigins.Contains(origin))
-                {
-                    _matchedCorsOrigin = origin;
-                    return true;
-                }
-                return false;
+                    return null;
+                return origin;
             }
         }
-        return true;
+        return null;
+    }
+
+    private string? ResolveAllowedOrigin(string? requestOrigin)
+    {
+        if (requestOrigin is null)
+            return "ryn://app";
+        return _allowedOrigins.Contains(requestOrigin) ? requestOrigin : null;
     }
 
     private static unsafe void AppendHeader(saucer_scheme_response* response, string name, string value)
