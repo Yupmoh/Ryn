@@ -1,5 +1,4 @@
 using System.Text;
-using System.Threading.Channels;
 
 namespace Ryn.Core.Internal;
 
@@ -8,9 +7,10 @@ internal sealed class EventBatcher : IDisposable
     private readonly IRynWebView _webView;
     private readonly string _eventName;
     private readonly Timer _flushTimer;
-    private readonly Channel<string> _channel;
-    private readonly Lock _flushLock = new();
-    private readonly List<string> _flushBuffer = new(MaxBatchSize);
+    private readonly int _capacity;
+    private readonly Lock _lock = new();
+    private readonly Queue<string> _queue;
+    private readonly List<string> _flushBuffer;
     private readonly StringBuilder _sb = new();
     private bool _disposed;
     private long _addedCount;
@@ -25,11 +25,9 @@ internal sealed class EventBatcher : IDisposable
     {
         _webView = webView;
         _eventName = eventName;
-        _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(capacity)
-        {
-            FullMode = BoundedChannelFullMode.DropWrite,
-            SingleReader = true,
-        });
+        _capacity = capacity;
+        _queue = new Queue<string>(Math.Min(capacity, MaxBatchSize * 2));
+        _flushBuffer = new List<string>(MaxBatchSize);
         _flushTimer = new Timer(_ => Flush(), null, FlushIntervalMs, FlushIntervalMs);
     }
 
@@ -39,16 +37,27 @@ internal sealed class EventBatcher : IDisposable
 
     internal void Add(string jsonData)
     {
-        if (_disposed) return;
-        if (_channel.Writer.TryWrite(jsonData))
+        lock (_lock)
+        {
+            if (_disposed) return;
+
+            if (_queue.Count >= _capacity)
+            {
+                Interlocked.Increment(ref _droppedCount);
+                return;
+            }
+
+            _queue.Enqueue(jsonData);
             Interlocked.Increment(ref _addedCount);
-        else
-            Interlocked.Increment(ref _droppedCount);
+
+            if (_queue.Count >= MaxBatchSize)
+                FlushBatchLocked();
+        }
     }
 
     internal void FlushNow()
     {
-        lock (_flushLock)
+        lock (_lock)
         {
             FlushAllLocked();
         }
@@ -56,7 +65,7 @@ internal sealed class EventBatcher : IDisposable
 
     private void Flush()
     {
-        lock (_flushLock)
+        lock (_lock)
         {
             if (_disposed) return;
             FlushBatchLocked();
@@ -66,8 +75,8 @@ internal sealed class EventBatcher : IDisposable
     private void FlushBatchLocked()
     {
         _flushBuffer.Clear();
-        while (_flushBuffer.Count < MaxBatchSize && _channel.Reader.TryRead(out var item))
-            _flushBuffer.Add(item);
+        while (_flushBuffer.Count < MaxBatchSize && _queue.Count > 0)
+            _flushBuffer.Add(_queue.Dequeue());
 
         if (_flushBuffer.Count == 0) return;
         EmitBatch(_flushBuffer);
@@ -75,11 +84,11 @@ internal sealed class EventBatcher : IDisposable
 
     private void FlushAllLocked()
     {
-        while (true)
+        while (_queue.Count > 0)
         {
             _flushBuffer.Clear();
-            while (_flushBuffer.Count < MaxBatchSize && _channel.Reader.TryRead(out var item))
-                _flushBuffer.Add(item);
+            while (_flushBuffer.Count < MaxBatchSize && _queue.Count > 0)
+                _flushBuffer.Add(_queue.Dequeue());
 
             if (_flushBuffer.Count == 0) break;
             EmitBatch(_flushBuffer);
@@ -103,12 +112,11 @@ internal sealed class EventBatcher : IDisposable
 
     public void Dispose()
     {
-        lock (_flushLock)
+        lock (_lock)
         {
             if (_disposed) return;
             _disposed = true;
             _flushTimer.Dispose();
-            _channel.Writer.Complete();
             FlushAllLocked();
         }
     }
