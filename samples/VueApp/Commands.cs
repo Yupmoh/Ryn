@@ -16,6 +16,7 @@ public record SystemInfo(
 public record TodoItem(int Id, string Text, bool Done);
 public record TodoList(TodoItem[] Items, int DoneCount);
 
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SystemInfo))]
 [JsonSerializable(typeof(TodoList))]
 internal partial class AppJsonContext : JsonSerializerContext { }
