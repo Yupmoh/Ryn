@@ -7,7 +7,7 @@
           SyntaxTree: {
             FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/GreeterServiceRouter.g.cs,
             Encoding: utf-8,
-            Length: 2357,
+            Length: {Scrubbed},
             HasCompilationUnitRoot: true,
             Options: {
               LanguageVersion: CSharp13,
@@ -94,7 +94,7 @@ public static class GreeterServiceRynExtensions
     }
 }
 ,
-            Length: 2357,
+            Length: {Scrubbed},
             ChecksumAlgorithm: Sha1,
             CanBeEmbedded: true,
             Container: {},
@@ -103,10 +103,10 @@ public static class GreeterServiceRynExtensions
                 End: 21,
                 EndIncludingLineBreak: 22,
                 Span: {
-                  Length: 21
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Length: 22
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -116,11 +116,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 39,
                 Span: {
                   Start: 22,
-                  Length: 16
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 22,
-                  Length: 17
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -129,11 +129,12 @@ public static class GreeterServiceRynExtensions
                 End: 39,
                 EndIncludingLineBreak: 40,
                 Span: {
-                  Start: 39
+                  Start: 39,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 39,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -143,11 +144,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 54,
                 Span: {
                   Start: 40,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 40,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -157,11 +158,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 73,
                 Span: {
                   Start: 54,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 54,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -171,11 +172,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 97,
                 Span: {
                   Start: 73,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 73,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -185,11 +186,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 121,
                 Span: {
                   Start: 97,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 97,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -199,11 +200,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 151,
                 Span: {
                   Start: 121,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 121,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -213,11 +214,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 199,
                 Span: {
                   Start: 151,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 151,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -227,11 +228,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 214,
                 Span: {
                   Start: 199,
-                  Length: 14
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 199,
-                  Length: 15
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -240,11 +241,12 @@ public static class GreeterServiceRynExtensions
                 End: 214,
                 EndIncludingLineBreak: 215,
                 Span: {
-                  Start: 214
+                  Start: 214,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 214,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -254,11 +256,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 234,
                 Span: {
                   Start: 215,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 215,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -267,11 +269,12 @@ public static class GreeterServiceRynExtensions
                 End: 234,
                 EndIncludingLineBreak: 235,
                 Span: {
-                  Start: 234
+                  Start: 234,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 234,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -281,11 +284,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 291,
                 Span: {
                   Start: 235,
-                  Length: 55
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 235,
-                  Length: 56
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -295,11 +298,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 293,
                 Span: {
                   Start: 291,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 291,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -309,11 +312,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 357,
                 Span: {
                   Start: 293,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 293,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -322,11 +325,12 @@ public static class GreeterServiceRynExtensions
                 End: 357,
                 EndIncludingLineBreak: 358,
                 Span: {
-                  Start: 357
+                  Start: 357,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 357,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -336,11 +340,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 405,
                 Span: {
                   Start: 358,
-                  Length: 46
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 358,
-                  Length: 47
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -350,11 +354,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 520,
                 Span: {
                   Start: 405,
-                  Length: 114
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 405,
-                  Length: 115
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -364,11 +368,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 526,
                 Span: {
                   Start: 520,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 520,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -378,11 +382,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 551,
                 Span: {
                   Start: 526,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 526,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -392,11 +396,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 561,
                 Span: {
                   Start: 551,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 551,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -406,11 +410,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 587,
                 Span: {
                   Start: 561,
-                  Length: 25
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 561,
-                  Length: 26
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -420,11 +424,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 601,
                 Span: {
                   Start: 587,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 587,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -434,11 +438,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 661,
                 Span: {
                   Start: 601,
-                  Length: 59
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 601,
-                  Length: 60
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -448,11 +452,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 709,
                 Span: {
                   Start: 661,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 661,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -462,11 +466,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 777,
                 Span: {
                   Start: 709,
-                  Length: 67
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 709,
-                  Length: 68
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -476,11 +480,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 873,
                 Span: {
                   Start: 777,
-                  Length: 95
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 777,
-                  Length: 96
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -490,11 +494,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 928,
                 Span: {
                   Start: 873,
-                  Length: 54
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 873,
-                  Length: 55
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -504,11 +508,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 971,
                 Span: {
                   Start: 928,
-                  Length: 42
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 928,
-                  Length: 43
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -518,11 +522,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 985,
                 Span: {
                   Start: 971,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 971,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -532,11 +536,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1006,
                 Span: {
                   Start: 985,
-                  Length: 20
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 985,
-                  Length: 21
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -546,11 +550,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1070,
                 Span: {
                   Start: 1006,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1006,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -560,11 +564,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1080,
                 Span: {
                   Start: 1070,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1070,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -574,11 +578,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1086,
                 Span: {
                   Start: 1080,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1080,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -587,11 +591,12 @@ public static class GreeterServiceRynExtensions
                 End: 1086,
                 EndIncludingLineBreak: 1087,
                 Span: {
-                  Start: 1086
+                  Start: 1086,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1086,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -601,11 +606,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1137,
                 Span: {
                   Start: 1087,
-                  Length: 49
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1087,
-                  Length: 50
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -615,11 +620,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1143,
                 Span: {
                   Start: 1137,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1137,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -629,11 +634,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1185,
                 Span: {
                   Start: 1143,
-                  Length: 41
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1143,
-                  Length: 42
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -643,11 +648,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1251,
                 Span: {
                   Start: 1185,
-                  Length: 65
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1185,
-                  Length: 66
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -657,11 +662,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1275,
                 Span: {
                   Start: 1251,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1251,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -671,11 +676,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1308,
                 Span: {
                   Start: 1275,
-                  Length: 32
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1275,
-                  Length: 33
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -685,11 +690,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1318,
                 Span: {
                   Start: 1308,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1308,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -699,11 +704,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1341,
                 Span: {
                   Start: 1318,
-                  Length: 22
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1318,
-                  Length: 23
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -713,11 +718,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1355,
                 Span: {
                   Start: 1341,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1341,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -727,11 +732,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1408,
                 Span: {
                   Start: 1355,
-                  Length: 52
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1355,
-                  Length: 53
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -741,11 +746,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1460,
                 Span: {
                   Start: 1408,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1408,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -755,11 +760,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1512,
                 Span: {
                   Start: 1460,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1460,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -769,11 +774,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1564,
                 Span: {
                   Start: 1512,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1512,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -783,11 +788,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1616,
                 Span: {
                   Start: 1564,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1564,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -797,11 +802,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1668,
                 Span: {
                   Start: 1616,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1616,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -811,11 +816,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1720,
                 Span: {
                   Start: 1668,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1668,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -825,11 +830,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1745,
                 Span: {
                   Start: 1720,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1720,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -839,11 +844,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1812,
                 Span: {
                   Start: 1745,
-                  Length: 66
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1745,
-                  Length: 67
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -853,11 +858,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1866,
                 Span: {
                   Start: 1812,
-                  Length: 53
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1812,
-                  Length: 54
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -867,11 +872,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1891,
                 Span: {
                   Start: 1866,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1866,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -881,11 +886,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1929,
                 Span: {
                   Start: 1891,
-                  Length: 37
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1891,
-                  Length: 38
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -895,11 +900,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1956,
                 Span: {
                   Start: 1929,
-                  Length: 26
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1929,
-                  Length: 27
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -909,11 +914,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1970,
                 Span: {
                   Start: 1956,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1956,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -923,11 +928,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 1980,
                 Span: {
                   Start: 1970,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1970,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -937,11 +942,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2004,
                 Span: {
                   Start: 1980,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1980,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -951,11 +956,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2034,
                 Span: {
                   Start: 2004,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2004,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -965,11 +970,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2040,
                 Span: {
                   Start: 2034,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2034,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -979,11 +984,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2042,
                 Span: {
                   Start: 2040,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2040,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -992,11 +997,12 @@ public static class GreeterServiceRynExtensions
                 End: 2042,
                 EndIncludingLineBreak: 2043,
                 Span: {
-                  Start: 2042
+                  Start: 2042,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2042,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1006,11 +1012,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2091,
                 Span: {
                   Start: 2043,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2043,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1020,11 +1026,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2093,
                 Span: {
                   Start: 2091,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2091,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1034,11 +1040,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2182,
                 Span: {
                   Start: 2093,
-                  Length: 88
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2093,
-                  Length: 89
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1048,11 +1054,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2188,
                 Span: {
                   Start: 2182,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2182,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1062,11 +1068,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2259,
                 Span: {
                   Start: 2188,
-                  Length: 70
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2188,
-                  Length: 71
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1076,11 +1082,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2324,
                 Span: {
                   Start: 2259,
-                  Length: 64
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2259,
-                  Length: 65
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1090,11 +1096,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2349,
                 Span: {
                   Start: 2324,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2324,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1104,11 +1110,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2355,
                 Span: {
                   Start: 2349,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2349,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1118,11 +1124,11 @@ public static class GreeterServiceRynExtensions
                 EndIncludingLineBreak: 2357,
                 Span: {
                   Start: 2355,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2355,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1131,10 +1137,12 @@ public static class GreeterServiceRynExtensions
                 End: 2357,
                 EndIncludingLineBreak: 2357,
                 Span: {
-                  Start: 2357
+                  Start: 2357,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Start: 2357
+                  Start: 2357,
+                  Length: {Scrubbed}
                 }
               }
             ]
@@ -1150,7 +1158,7 @@ public static class GreeterServiceRynExtensions
     {
       FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/GreeterServiceRouter.g.cs,
       Encoding: utf-8,
-      Length: 2357,
+      Length: {Scrubbed},
       HasCompilationUnitRoot: true,
       Options: {
         LanguageVersion: CSharp13,

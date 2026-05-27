@@ -7,7 +7,7 @@
           SyntaxTree: {
             FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/NullableReturnCommandsRouter.g.cs,
             Encoding: utf-8,
-            Length: 2353,
+            Length: {Scrubbed},
             HasCompilationUnitRoot: true,
             Options: {
               LanguageVersion: CSharp13,
@@ -92,7 +92,7 @@ public static class NullableReturnCommandsRynExtensions
     }
 }
 ,
-            Length: 2353,
+            Length: {Scrubbed},
             ChecksumAlgorithm: Sha1,
             CanBeEmbedded: true,
             Container: {},
@@ -101,10 +101,10 @@ public static class NullableReturnCommandsRynExtensions
                 End: 21,
                 EndIncludingLineBreak: 22,
                 Span: {
-                  Length: 21
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Length: 22
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -114,11 +114,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 39,
                 Span: {
                   Start: 22,
-                  Length: 16
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 22,
-                  Length: 17
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -127,11 +127,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 39,
                 EndIncludingLineBreak: 40,
                 Span: {
-                  Start: 39
+                  Start: 39,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 39,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -141,11 +142,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 54,
                 Span: {
                   Start: 40,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 40,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -155,11 +156,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 73,
                 Span: {
                   Start: 54,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 54,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -169,11 +170,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 97,
                 Span: {
                   Start: 73,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 73,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -183,11 +184,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 121,
                 Span: {
                   Start: 97,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 97,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -197,11 +198,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 151,
                 Span: {
                   Start: 121,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 121,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -211,11 +212,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 199,
                 Span: {
                   Start: 151,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 151,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -225,11 +226,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 214,
                 Span: {
                   Start: 199,
-                  Length: 14
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 199,
-                  Length: 15
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -238,11 +239,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 214,
                 EndIncludingLineBreak: 215,
                 Span: {
-                  Start: 214
+                  Start: 214,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 214,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -252,11 +254,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 234,
                 Span: {
                   Start: 215,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 215,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -265,11 +267,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 234,
                 EndIncludingLineBreak: 235,
                 Span: {
-                  Start: 234
+                  Start: 234,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 234,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -279,11 +282,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 299,
                 Span: {
                   Start: 235,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 235,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -293,11 +296,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 301,
                 Span: {
                   Start: 299,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 299,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -307,11 +310,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 369,
                 Span: {
                   Start: 301,
-                  Length: 67
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 301,
-                  Length: 68
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -320,11 +323,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 369,
                 EndIncludingLineBreak: 370,
                 Span: {
-                  Start: 369
+                  Start: 369,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 369,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -334,11 +338,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 417,
                 Span: {
                   Start: 370,
-                  Length: 46
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 370,
-                  Length: 47
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -348,11 +352,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 532,
                 Span: {
                   Start: 417,
-                  Length: 114
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 417,
-                  Length: 115
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -362,11 +366,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 538,
                 Span: {
                   Start: 532,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 532,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -376,11 +380,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 563,
                 Span: {
                   Start: 538,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 538,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -390,11 +394,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 573,
                 Span: {
                   Start: 563,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 563,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -404,11 +408,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 603,
                 Span: {
                   Start: 573,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 573,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -418,11 +422,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 617,
                 Span: {
                   Start: 603,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 603,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -432,11 +436,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 677,
                 Span: {
                   Start: 617,
-                  Length: 59
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 617,
-                  Length: 60
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -446,11 +450,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 725,
                 Span: {
                   Start: 677,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 677,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -460,11 +464,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 793,
                 Span: {
                   Start: 725,
-                  Length: 67
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 725,
-                  Length: 68
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -474,11 +478,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 880,
                 Span: {
                   Start: 793,
-                  Length: 86
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 793,
-                  Length: 87
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -488,11 +492,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1008,
                 Span: {
                   Start: 880,
-                  Length: 127
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 880,
-                  Length: 128
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -502,11 +506,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1022,
                 Span: {
                   Start: 1008,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1008,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -516,11 +520,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1043,
                 Span: {
                   Start: 1022,
-                  Length: 20
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1022,
-                  Length: 21
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -530,11 +534,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1107,
                 Span: {
                   Start: 1043,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1043,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -544,11 +548,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1117,
                 Span: {
                   Start: 1107,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1107,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -558,11 +562,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1123,
                 Span: {
                   Start: 1117,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1117,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -571,11 +575,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 1123,
                 EndIncludingLineBreak: 1124,
                 Span: {
-                  Start: 1123
+                  Start: 1123,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1123,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -585,11 +590,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1174,
                 Span: {
                   Start: 1124,
-                  Length: 49
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1124,
-                  Length: 50
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -599,11 +604,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1180,
                 Span: {
                   Start: 1174,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1174,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -613,11 +618,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1222,
                 Span: {
                   Start: 1180,
-                  Length: 41
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1180,
-                  Length: 42
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -627,11 +632,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1288,
                 Span: {
                   Start: 1222,
-                  Length: 65
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1222,
-                  Length: 66
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -641,11 +646,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1312,
                 Span: {
                   Start: 1288,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1288,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -655,11 +660,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1345,
                 Span: {
                   Start: 1312,
-                  Length: 32
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1312,
-                  Length: 33
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -669,11 +674,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1355,
                 Span: {
                   Start: 1345,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1345,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -683,11 +688,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1378,
                 Span: {
                   Start: 1355,
-                  Length: 22
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1355,
-                  Length: 23
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -697,11 +702,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1392,
                 Span: {
                   Start: 1378,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1378,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -711,11 +716,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1445,
                 Span: {
                   Start: 1392,
-                  Length: 52
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1392,
-                  Length: 53
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -725,11 +730,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1497,
                 Span: {
                   Start: 1445,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1445,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -739,11 +744,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1549,
                 Span: {
                   Start: 1497,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1497,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -753,11 +758,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1601,
                 Span: {
                   Start: 1549,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1549,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -767,11 +772,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1653,
                 Span: {
                   Start: 1601,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1601,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -781,11 +786,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1705,
                 Span: {
                   Start: 1653,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1653,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -795,11 +800,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1757,
                 Span: {
                   Start: 1705,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1705,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -809,11 +814,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1782,
                 Span: {
                   Start: 1757,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1757,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -823,11 +828,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1849,
                 Span: {
                   Start: 1782,
-                  Length: 66
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1782,
-                  Length: 67
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -837,11 +842,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1903,
                 Span: {
                   Start: 1849,
-                  Length: 53
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1849,
-                  Length: 54
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -851,11 +856,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1928,
                 Span: {
                   Start: 1903,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1903,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -865,11 +870,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1966,
                 Span: {
                   Start: 1928,
-                  Length: 37
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1928,
-                  Length: 38
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -879,11 +884,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 1993,
                 Span: {
                   Start: 1966,
-                  Length: 26
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1966,
-                  Length: 27
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -893,11 +898,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2007,
                 Span: {
                   Start: 1993,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1993,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -907,11 +912,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2017,
                 Span: {
                   Start: 2007,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2007,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -921,11 +926,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2041,
                 Span: {
                   Start: 2017,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2017,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -935,11 +940,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2071,
                 Span: {
                   Start: 2041,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2041,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -949,11 +954,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2077,
                 Span: {
                   Start: 2071,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2071,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -963,11 +968,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2079,
                 Span: {
                   Start: 2077,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2077,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -976,11 +981,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 2079,
                 EndIncludingLineBreak: 2080,
                 Span: {
-                  Start: 2079
+                  Start: 2079,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2079,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -990,11 +996,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2136,
                 Span: {
                   Start: 2080,
-                  Length: 55
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2080,
-                  Length: 56
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1004,11 +1010,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2138,
                 Span: {
                   Start: 2136,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2136,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1018,11 +1024,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2235,
                 Span: {
                   Start: 2138,
-                  Length: 96
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2138,
-                  Length: 97
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1032,11 +1038,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2241,
                 Span: {
                   Start: 2235,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2235,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1046,11 +1052,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2320,
                 Span: {
                   Start: 2241,
-                  Length: 78
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2241,
-                  Length: 79
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1060,11 +1066,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2345,
                 Span: {
                   Start: 2320,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2320,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1074,11 +1080,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2351,
                 Span: {
                   Start: 2345,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2345,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1088,11 +1094,11 @@ public static class NullableReturnCommandsRynExtensions
                 EndIncludingLineBreak: 2353,
                 Span: {
                   Start: 2351,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2351,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1101,10 +1107,12 @@ public static class NullableReturnCommandsRynExtensions
                 End: 2353,
                 EndIncludingLineBreak: 2353,
                 Span: {
-                  Start: 2353
+                  Start: 2353,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Start: 2353
+                  Start: 2353,
+                  Length: {Scrubbed}
                 }
               }
             ]
@@ -1120,7 +1128,7 @@ public static class NullableReturnCommandsRynExtensions
     {
       FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/NullableReturnCommandsRouter.g.cs,
       Encoding: utf-8,
-      Length: 2353,
+      Length: {Scrubbed},
       HasCompilationUnitRoot: true,
       Options: {
         LanguageVersion: CSharp13,

@@ -343,6 +343,6 @@ public sealed class GeneratorSnapshotTests
 
         return Verifier.Verify(runResult)
             .UseDirectory("Snapshots")
-            .ScrubLinesContaining("Length:");
+            .ScrubMember("Length");
     }
 }

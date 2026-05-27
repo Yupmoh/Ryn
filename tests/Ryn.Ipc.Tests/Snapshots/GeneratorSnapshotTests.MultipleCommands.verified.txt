@@ -7,7 +7,7 @@
           SyntaxTree: {
             FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/CalculatorRouter.g.cs,
             Encoding: utf-8,
-            Length: 3256,
+            Length: {Scrubbed},
             HasCompilationUnitRoot: true,
             Options: {
               LanguageVersion: CSharp13,
@@ -111,7 +111,7 @@ public static class CalculatorRynExtensions
     }
 }
 ,
-            Length: 3256,
+            Length: {Scrubbed},
             ChecksumAlgorithm: Sha1,
             CanBeEmbedded: true,
             Container: {},
@@ -120,10 +120,10 @@ public static class CalculatorRynExtensions
                 End: 21,
                 EndIncludingLineBreak: 22,
                 Span: {
-                  Length: 21
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Length: 22
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -133,11 +133,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 39,
                 Span: {
                   Start: 22,
-                  Length: 16
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 22,
-                  Length: 17
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -146,11 +146,12 @@ public static class CalculatorRynExtensions
                 End: 39,
                 EndIncludingLineBreak: 40,
                 Span: {
-                  Start: 39
+                  Start: 39,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 39,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -160,11 +161,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 54,
                 Span: {
                   Start: 40,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 40,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -174,11 +175,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 73,
                 Span: {
                   Start: 54,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 54,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -188,11 +189,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 97,
                 Span: {
                   Start: 73,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 73,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -202,11 +203,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 121,
                 Span: {
                   Start: 97,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 97,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -216,11 +217,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 151,
                 Span: {
                   Start: 121,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 121,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -230,11 +231,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 199,
                 Span: {
                   Start: 151,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 151,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -244,11 +245,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 214,
                 Span: {
                   Start: 199,
-                  Length: 14
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 199,
-                  Length: 15
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -257,11 +258,12 @@ public static class CalculatorRynExtensions
                 End: 214,
                 EndIncludingLineBreak: 215,
                 Span: {
-                  Start: 214
+                  Start: 214,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 214,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -271,11 +273,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 234,
                 Span: {
                   Start: 215,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 215,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -284,11 +286,12 @@ public static class CalculatorRynExtensions
                 End: 234,
                 EndIncludingLineBreak: 235,
                 Span: {
-                  Start: 234
+                  Start: 234,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 234,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -298,11 +301,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 287,
                 Span: {
                   Start: 235,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 235,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -312,11 +315,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 289,
                 Span: {
                   Start: 287,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 287,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -326,11 +329,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 377,
                 Span: {
                   Start: 289,
-                  Length: 87
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 289,
-                  Length: 88
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -339,11 +342,12 @@ public static class CalculatorRynExtensions
                 End: 377,
                 EndIncludingLineBreak: 378,
                 Span: {
-                  Start: 377
+                  Start: 377,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 377,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -353,11 +357,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 425,
                 Span: {
                   Start: 378,
-                  Length: 46
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 378,
-                  Length: 47
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -367,11 +371,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 540,
                 Span: {
                   Start: 425,
-                  Length: 114
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 425,
-                  Length: 115
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -381,11 +385,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 546,
                 Span: {
                   Start: 540,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 540,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -395,11 +399,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 571,
                 Span: {
                   Start: 546,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 546,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -409,11 +413,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 581,
                 Span: {
                   Start: 571,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 571,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -423,11 +427,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 605,
                 Span: {
                   Start: 581,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 581,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -437,11 +441,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 619,
                 Span: {
                   Start: 605,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 605,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -451,11 +455,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 679,
                 Span: {
                   Start: 619,
-                  Length: 59
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 619,
-                  Length: 60
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -465,11 +469,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 727,
                 Span: {
                   Start: 679,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 679,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -479,11 +483,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 790,
                 Span: {
                   Start: 727,
-                  Length: 62
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 727,
-                  Length: 63
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -493,11 +497,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 853,
                 Span: {
                   Start: 790,
-                  Length: 62
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 790,
-                  Length: 63
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -507,11 +511,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 928,
                 Span: {
                   Start: 853,
-                  Length: 74
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 853,
-                  Length: 75
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -521,11 +525,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1021,
                 Span: {
                   Start: 928,
-                  Length: 92
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 928,
-                  Length: 93
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -535,11 +539,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1035,
                 Span: {
                   Start: 1021,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1021,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -549,11 +553,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1064,
                 Span: {
                   Start: 1035,
-                  Length: 28
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1035,
-                  Length: 29
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -563,11 +567,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1078,
                 Span: {
                   Start: 1064,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1064,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -577,11 +581,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1138,
                 Span: {
                   Start: 1078,
-                  Length: 59
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1078,
-                  Length: 60
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -591,11 +595,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1186,
                 Span: {
                   Start: 1138,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1138,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -605,11 +609,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1249,
                 Span: {
                   Start: 1186,
-                  Length: 62
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1186,
-                  Length: 63
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -619,11 +623,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1312,
                 Span: {
                   Start: 1249,
-                  Length: 62
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1249,
-                  Length: 63
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -633,11 +637,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1392,
                 Span: {
                   Start: 1312,
-                  Length: 79
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1312,
-                  Length: 80
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -647,11 +651,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1485,
                 Span: {
                   Start: 1392,
-                  Length: 92
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1392,
-                  Length: 93
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -661,11 +665,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1499,
                 Span: {
                   Start: 1485,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1485,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -675,11 +679,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1526,
                 Span: {
                   Start: 1499,
-                  Length: 26
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1499,
-                  Length: 27
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -689,11 +693,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1540,
                 Span: {
                   Start: 1526,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1526,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -703,11 +707,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1600,
                 Span: {
                   Start: 1540,
-                  Length: 59
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1540,
-                  Length: 60
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -717,11 +721,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1648,
                 Span: {
                   Start: 1600,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1600,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -731,11 +735,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1712,
                 Span: {
                   Start: 1648,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1648,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -745,11 +749,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1776,
                 Span: {
                   Start: 1712,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1712,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -759,11 +763,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1854,
                 Span: {
                   Start: 1776,
-                  Length: 77
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1776,
-                  Length: 78
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -773,11 +777,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1947,
                 Span: {
                   Start: 1854,
-                  Length: 92
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1854,
-                  Length: 93
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -787,11 +791,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1961,
                 Span: {
                   Start: 1947,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1947,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -801,11 +805,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 1982,
                 Span: {
                   Start: 1961,
-                  Length: 20
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1961,
-                  Length: 21
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -815,11 +819,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2046,
                 Span: {
                   Start: 1982,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1982,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -829,11 +833,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2056,
                 Span: {
                   Start: 2046,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2046,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -843,11 +847,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2062,
                 Span: {
                   Start: 2056,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2056,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -856,11 +860,12 @@ public static class CalculatorRynExtensions
                 End: 2062,
                 EndIncludingLineBreak: 2063,
                 Span: {
-                  Start: 2062
+                  Start: 2062,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2062,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -870,11 +875,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2113,
                 Span: {
                   Start: 2063,
-                  Length: 49
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2063,
-                  Length: 50
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -884,11 +889,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2119,
                 Span: {
                   Start: 2113,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2113,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -898,11 +903,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2161,
                 Span: {
                   Start: 2119,
-                  Length: 41
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2119,
-                  Length: 42
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -912,11 +917,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2227,
                 Span: {
                   Start: 2161,
-                  Length: 65
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2161,
-                  Length: 66
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -926,11 +931,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2251,
                 Span: {
                   Start: 2227,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2227,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -940,11 +945,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2284,
                 Span: {
                   Start: 2251,
-                  Length: 32
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2251,
-                  Length: 33
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -954,11 +959,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2294,
                 Span: {
                   Start: 2284,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2284,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -968,11 +973,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2317,
                 Span: {
                   Start: 2294,
-                  Length: 22
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2294,
-                  Length: 23
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -982,11 +987,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2331,
                 Span: {
                   Start: 2317,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2317,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -996,11 +1001,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2384,
                 Span: {
                   Start: 2331,
-                  Length: 52
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2331,
-                  Length: 53
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1010,11 +1015,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2436,
                 Span: {
                   Start: 2384,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2384,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1024,11 +1029,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2488,
                 Span: {
                   Start: 2436,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2436,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1038,11 +1043,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2540,
                 Span: {
                   Start: 2488,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2488,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1052,11 +1057,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2592,
                 Span: {
                   Start: 2540,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2540,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1066,11 +1071,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2644,
                 Span: {
                   Start: 2592,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2592,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1080,11 +1085,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2696,
                 Span: {
                   Start: 2644,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2644,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1094,11 +1099,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2721,
                 Span: {
                   Start: 2696,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2696,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1108,11 +1113,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2788,
                 Span: {
                   Start: 2721,
-                  Length: 66
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2721,
-                  Length: 67
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1122,11 +1127,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2842,
                 Span: {
                   Start: 2788,
-                  Length: 53
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2788,
-                  Length: 54
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1136,11 +1141,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2867,
                 Span: {
                   Start: 2842,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2842,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1150,11 +1155,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2905,
                 Span: {
                   Start: 2867,
-                  Length: 37
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2867,
-                  Length: 38
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1164,11 +1169,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2932,
                 Span: {
                   Start: 2905,
-                  Length: 26
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2905,
-                  Length: 27
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1178,11 +1183,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2946,
                 Span: {
                   Start: 2932,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2932,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1192,11 +1197,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2956,
                 Span: {
                   Start: 2946,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2946,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1206,11 +1211,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 2980,
                 Span: {
                   Start: 2956,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2956,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1220,11 +1225,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3010,
                 Span: {
                   Start: 2980,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2980,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1234,11 +1239,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3016,
                 Span: {
                   Start: 3010,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3010,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1248,11 +1253,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3018,
                 Span: {
                   Start: 3016,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3016,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1261,11 +1266,12 @@ public static class CalculatorRynExtensions
                 End: 3018,
                 EndIncludingLineBreak: 3019,
                 Span: {
-                  Start: 3018
+                  Start: 3018,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3018,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1275,11 +1281,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3063,
                 Span: {
                   Start: 3019,
-                  Length: 43
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3019,
-                  Length: 44
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1289,11 +1295,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3065,
                 Span: {
                   Start: 3063,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3063,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1303,11 +1309,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3150,
                 Span: {
                   Start: 3065,
-                  Length: 84
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3065,
-                  Length: 85
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1317,11 +1323,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3156,
                 Span: {
                   Start: 3150,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3150,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1331,11 +1337,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3223,
                 Span: {
                   Start: 3156,
-                  Length: 66
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3156,
-                  Length: 67
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1345,11 +1351,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3248,
                 Span: {
                   Start: 3223,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3223,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1359,11 +1365,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3254,
                 Span: {
                   Start: 3248,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3248,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1373,11 +1379,11 @@ public static class CalculatorRynExtensions
                 EndIncludingLineBreak: 3256,
                 Span: {
                   Start: 3254,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 3254,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1386,10 +1392,12 @@ public static class CalculatorRynExtensions
                 End: 3256,
                 EndIncludingLineBreak: 3256,
                 Span: {
-                  Start: 3256
+                  Start: 3256,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Start: 3256
+                  Start: 3256,
+                  Length: {Scrubbed}
                 }
               }
             ]
@@ -1405,7 +1413,7 @@ public static class CalculatorRynExtensions
     {
       FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/CalculatorRouter.g.cs,
       Encoding: utf-8,
-      Length: 3256,
+      Length: {Scrubbed},
       HasCompilationUnitRoot: true,
       Options: {
         LanguageVersion: CSharp13,

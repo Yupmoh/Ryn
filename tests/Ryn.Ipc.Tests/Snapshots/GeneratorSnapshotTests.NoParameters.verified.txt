@@ -7,7 +7,7 @@
           SyntaxTree: {
             FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/StatusCommandsRouter.g.cs,
             Encoding: utf-8,
-            Length: 2048,
+            Length: {Scrubbed},
             HasCompilationUnitRoot: true,
             Options: {
               LanguageVersion: CSharp13,
@@ -89,7 +89,7 @@ public static class StatusCommandsRynExtensions
     }
 }
 ,
-            Length: 2048,
+            Length: {Scrubbed},
             ChecksumAlgorithm: Sha1,
             CanBeEmbedded: true,
             Container: {},
@@ -98,10 +98,10 @@ public static class StatusCommandsRynExtensions
                 End: 21,
                 EndIncludingLineBreak: 22,
                 Span: {
-                  Length: 21
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Length: 22
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -111,11 +111,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 39,
                 Span: {
                   Start: 22,
-                  Length: 16
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 22,
-                  Length: 17
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -124,11 +124,12 @@ public static class StatusCommandsRynExtensions
                 End: 39,
                 EndIncludingLineBreak: 40,
                 Span: {
-                  Start: 39
+                  Start: 39,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 39,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -138,11 +139,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 54,
                 Span: {
                   Start: 40,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 40,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -152,11 +153,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 73,
                 Span: {
                   Start: 54,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 54,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -166,11 +167,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 97,
                 Span: {
                   Start: 73,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 73,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -180,11 +181,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 121,
                 Span: {
                   Start: 97,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 97,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -194,11 +195,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 151,
                 Span: {
                   Start: 121,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 121,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -208,11 +209,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 199,
                 Span: {
                   Start: 151,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 151,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -222,11 +223,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 214,
                 Span: {
                   Start: 199,
-                  Length: 14
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 199,
-                  Length: 15
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -235,11 +236,12 @@ public static class StatusCommandsRynExtensions
                 End: 214,
                 EndIncludingLineBreak: 215,
                 Span: {
-                  Start: 214
+                  Start: 214,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 214,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -249,11 +251,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 234,
                 Span: {
                   Start: 215,
-                  Length: 18
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 215,
-                  Length: 19
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -262,11 +264,12 @@ public static class StatusCommandsRynExtensions
                 End: 234,
                 EndIncludingLineBreak: 235,
                 Span: {
-                  Start: 234
+                  Start: 234,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 234,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -276,11 +279,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 291,
                 Span: {
                   Start: 235,
-                  Length: 55
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 235,
-                  Length: 56
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -290,11 +293,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 293,
                 Span: {
                   Start: 291,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 291,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -304,11 +307,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 361,
                 Span: {
                   Start: 293,
-                  Length: 67
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 293,
-                  Length: 68
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -317,11 +320,12 @@ public static class StatusCommandsRynExtensions
                 End: 361,
                 EndIncludingLineBreak: 362,
                 Span: {
-                  Start: 361
+                  Start: 361,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 361,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -331,11 +335,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 409,
                 Span: {
                   Start: 362,
-                  Length: 46
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 362,
-                  Length: 47
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -345,11 +349,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 524,
                 Span: {
                   Start: 409,
-                  Length: 114
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 409,
-                  Length: 115
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -359,11 +363,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 530,
                 Span: {
                   Start: 524,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 524,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -373,11 +377,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 555,
                 Span: {
                   Start: 530,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 530,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -387,11 +391,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 565,
                 Span: {
                   Start: 555,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 555,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -401,11 +405,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 595,
                 Span: {
                   Start: 565,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 565,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -415,11 +419,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 609,
                 Span: {
                   Start: 595,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 595,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -429,11 +433,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 684,
                 Span: {
                   Start: 609,
-                  Length: 74
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 609,
-                  Length: 75
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -443,11 +447,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 727,
                 Span: {
                   Start: 684,
-                  Length: 42
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 684,
-                  Length: 43
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -457,11 +461,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 741,
                 Span: {
                   Start: 727,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 727,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -471,11 +475,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 762,
                 Span: {
                   Start: 741,
-                  Length: 20
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 741,
-                  Length: 21
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -485,11 +489,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 826,
                 Span: {
                   Start: 762,
-                  Length: 63
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 762,
-                  Length: 64
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -499,11 +503,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 836,
                 Span: {
                   Start: 826,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 826,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -513,11 +517,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 842,
                 Span: {
                   Start: 836,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 836,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -526,11 +530,12 @@ public static class StatusCommandsRynExtensions
                 End: 842,
                 EndIncludingLineBreak: 843,
                 Span: {
-                  Start: 842
+                  Start: 842,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 842,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -540,11 +545,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 893,
                 Span: {
                   Start: 843,
-                  Length: 49
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 843,
-                  Length: 50
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -554,11 +559,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 899,
                 Span: {
                   Start: 893,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 893,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -568,11 +573,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 941,
                 Span: {
                   Start: 899,
-                  Length: 41
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 899,
-                  Length: 42
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -582,11 +587,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1007,
                 Span: {
                   Start: 941,
-                  Length: 65
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 941,
-                  Length: 66
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -596,11 +601,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1031,
                 Span: {
                   Start: 1007,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1007,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -610,11 +615,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1064,
                 Span: {
                   Start: 1031,
-                  Length: 32
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1031,
-                  Length: 33
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -624,11 +629,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1074,
                 Span: {
                   Start: 1064,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1064,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -638,11 +643,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1097,
                 Span: {
                   Start: 1074,
-                  Length: 22
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1074,
-                  Length: 23
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -652,11 +657,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1111,
                 Span: {
                   Start: 1097,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1097,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -666,11 +671,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1164,
                 Span: {
                   Start: 1111,
-                  Length: 52
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1111,
-                  Length: 53
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -680,11 +685,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1216,
                 Span: {
                   Start: 1164,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1164,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -694,11 +699,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1268,
                 Span: {
                   Start: 1216,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1216,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -708,11 +713,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1320,
                 Span: {
                   Start: 1268,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1268,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -722,11 +727,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1372,
                 Span: {
                   Start: 1320,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1320,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -736,11 +741,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1424,
                 Span: {
                   Start: 1372,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1372,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -750,11 +755,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1476,
                 Span: {
                   Start: 1424,
-                  Length: 51
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1424,
-                  Length: 52
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -764,11 +769,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1501,
                 Span: {
                   Start: 1476,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1476,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -778,11 +783,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1568,
                 Span: {
                   Start: 1501,
-                  Length: 66
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1501,
-                  Length: 67
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -792,11 +797,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1622,
                 Span: {
                   Start: 1568,
-                  Length: 53
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1568,
-                  Length: 54
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -806,11 +811,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1647,
                 Span: {
                   Start: 1622,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1622,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -820,11 +825,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1685,
                 Span: {
                   Start: 1647,
-                  Length: 37
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1647,
-                  Length: 38
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -834,11 +839,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1712,
                 Span: {
                   Start: 1685,
-                  Length: 26
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1685,
-                  Length: 27
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -848,11 +853,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1726,
                 Span: {
                   Start: 1712,
-                  Length: 13
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1712,
-                  Length: 14
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -862,11 +867,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1736,
                 Span: {
                   Start: 1726,
-                  Length: 9
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1726,
-                  Length: 10
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -876,11 +881,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1760,
                 Span: {
                   Start: 1736,
-                  Length: 23
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1736,
-                  Length: 24
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -890,11 +895,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1790,
                 Span: {
                   Start: 1760,
-                  Length: 29
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1760,
-                  Length: 30
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -904,11 +909,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1796,
                 Span: {
                   Start: 1790,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1790,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -918,11 +923,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1798,
                 Span: {
                   Start: 1796,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1796,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -931,11 +936,12 @@ public static class StatusCommandsRynExtensions
                 End: 1798,
                 EndIncludingLineBreak: 1799,
                 Span: {
-                  Start: 1798
+                  Start: 1798,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1798,
-                  Length: 1
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -945,11 +951,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1847,
                 Span: {
                   Start: 1799,
-                  Length: 47
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1799,
-                  Length: 48
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -959,11 +965,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1849,
                 Span: {
                   Start: 1847,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1847,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -973,11 +979,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1938,
                 Span: {
                   Start: 1849,
-                  Length: 88
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1849,
-                  Length: 89
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -987,11 +993,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 1944,
                 Span: {
                   Start: 1938,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1938,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1001,11 +1007,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 2015,
                 Span: {
                   Start: 1944,
-                  Length: 70
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 1944,
-                  Length: 71
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1015,11 +1021,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 2040,
                 Span: {
                   Start: 2015,
-                  Length: 24
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2015,
-                  Length: 25
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1029,11 +1035,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 2046,
                 Span: {
                   Start: 2040,
-                  Length: 5
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2040,
-                  Length: 6
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1043,11 +1049,11 @@ public static class StatusCommandsRynExtensions
                 EndIncludingLineBreak: 2048,
                 Span: {
                   Start: 2046,
-                  Length: 1
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
                   Start: 2046,
-                  Length: 2
+                  Length: {Scrubbed}
                 }
               },
               {
@@ -1056,10 +1062,12 @@ public static class StatusCommandsRynExtensions
                 End: 2048,
                 EndIncludingLineBreak: 2048,
                 Span: {
-                  Start: 2048
+                  Start: 2048,
+                  Length: {Scrubbed}
                 },
                 SpanIncludingLineBreak: {
-                  Start: 2048
+                  Start: 2048,
+                  Length: {Scrubbed}
                 }
               }
             ]
@@ -1075,7 +1083,7 @@ public static class StatusCommandsRynExtensions
     {
       FilePath: Ryn.Ipc.Generator/Ryn.Ipc.Generator.RynCommandGenerator/StatusCommandsRouter.g.cs,
       Encoding: utf-8,
-      Length: 2048,
+      Length: {Scrubbed},
       HasCompilationUnitRoot: true,
       Options: {
         LanguageVersion: CSharp13,
