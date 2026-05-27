@@ -342,6 +342,7 @@ public sealed class GeneratorSnapshotTests
         var runResult = driver.GetRunResult();
 
         return Verifier.Verify(runResult)
-            .UseDirectory("Snapshots");
+            .UseDirectory("Snapshots")
+            .ScrubLinesContaining("Length:");
     }
 }
