@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
@@ -34,6 +36,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     internal async Task StartAsync()
     {
+        var port = FindAvailablePort();
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
 
@@ -45,14 +48,14 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
             builder.WebHost.ConfigureKestrel(k =>
             {
-                k.Listen(IPAddress.Loopback, 0, o => o.UseHttps(_cert));
+                k.Listen(IPAddress.Loopback, port, o => o.UseHttps(_cert));
             });
         }
         else
         {
             builder.WebHost.ConfigureKestrel(k =>
             {
-                k.Listen(IPAddress.Loopback, 0);
+                k.Listen(IPAddress.Loopback, port);
             });
         }
 
@@ -62,14 +65,30 @@ internal sealed class LocalWebServer : IAsyncDisposable
         _app.MapPost("/ipc/eval/{id}/{ok}", HandleIpcEval);
 
         var fileProvider = new PhysicalFileProvider(_contentDirectory);
-        _app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
+        _app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = fileProvider,
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                ctx.Context.Response.Headers["Pragma"] = "no-cache";
+                ctx.Context.Response.Headers["Expires"] = "0";
+            }
+        });
         _app.MapFallback(async context =>
         {
             var indexPath = Path.Combine(_contentDirectory, "index.html");
             if (File.Exists(indexPath))
             {
+                var html = await File.ReadAllTextAsync(indexPath).ConfigureAwait(false);
+                var bust = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                    .ToString(CultureInfo.InvariantCulture);
+                html = html.Replace(".css\"", $".css?v={bust}\"", StringComparison.Ordinal)
+                           .Replace(".js\"", $".js?v={bust}\"", StringComparison.Ordinal);
+
                 context.Response.ContentType = "text/html";
-                await context.Response.SendFileAsync(indexPath).ConfigureAwait(false);
+                context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                await context.Response.WriteAsync(html).ConfigureAwait(false);
             }
             else
             {
@@ -79,11 +98,17 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
         await _app.StartAsync().ConfigureAwait(false);
 
-        var serverAddresses = _app.Services
-            .GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
-            .Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
-        Url = serverAddresses?.Addresses.First()
-            ?? throw new InvalidOperationException("Local server failed to bind to a port");
+        var scheme = _useHttps ? "https" : "http";
+        Url = $"{scheme}://localhost:{port}";
+    }
+
+    private static int FindAvailablePort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 
     private async Task HandleIpcCommand(HttpContext ctx)

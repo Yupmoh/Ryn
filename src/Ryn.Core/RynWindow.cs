@@ -127,6 +127,33 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _rynWebView?.EvaluateJavaScriptAsync(script, cancellationToken)
             ?? new ValueTask<string>(string.Empty);
 
+    public unsafe void Minimize()
+    {
+        if (_window != null)
+            Saucer.saucer_window_set_minimized(_window, 1);
+    }
+
+    public unsafe void ToggleMaximize()
+    {
+        if (_window != null)
+        {
+            var isMax = Saucer.saucer_window_maximized(_window) != 0;
+            Saucer.saucer_window_set_maximized(_window, (byte)(isMax ? 0 : 1));
+        }
+    }
+
+    public unsafe void StartDrag()
+    {
+        if (_window != null)
+            Saucer.saucer_window_start_drag(_window);
+    }
+
+    public unsafe void StartResize(WindowEdge edge)
+    {
+        if (_window != null)
+            Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge);
+    }
+
     internal void Run(CancellationToken cancellationToken)
     {
         NativeLibraryResolver.Register();
