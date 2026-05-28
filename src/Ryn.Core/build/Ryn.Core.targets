@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup Condition="'$(RynEmbedContent)' == 'true' AND Exists('ryn_embedded_content.zip')">
+    <EmbeddedResource Include="ryn_embedded_content.zip"
+                      LogicalName="ryn_embedded_content.zip" />
+  </ItemGroup>
+</Project>

@@ -7,6 +7,7 @@ using Ryn.Core.Internal;
 
 namespace Ryn.Core;
 
+/// <summary>Builds a <see cref="RynApplication"/> with configured options, services, and plugins.</summary>
 public sealed class RynApplicationBuilder
 {
     private readonly RynOptions? _programmaticOptions;
@@ -20,22 +21,27 @@ public sealed class RynApplicationBuilder
         _configurationBuilder.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
     }
 
+    /// <summary>The current options instance, or a new default if none were provided.</summary>
     public RynOptions Options => _programmaticOptions ?? new RynOptions();
 
+    /// <summary>The configuration builder for adding configuration sources (e.g. JSON files).</summary>
     public IConfigurationBuilder Configuration => _configurationBuilder;
 
+    /// <summary>Registers services with the dependency injection container.</summary>
     public RynApplicationBuilder ConfigureServices(Action<IServiceCollection> configure)
     {
         _configureActions.Add(configure);
         return this;
     }
 
+    /// <summary>Configures application options such as window size, title, and content source.</summary>
     public RynApplicationBuilder ConfigureOptions(Action<RynOptions> configure)
     {
         _configureOptionsActions.Add(configure);
         return this;
     }
 
+    /// <summary>Registers a plugin by type. The plugin is resolved from DI and initialized before the window opens.</summary>
     public RynApplicationBuilder AddPlugin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPlugin>()
         where TPlugin : class, IRynPlugin
     {
@@ -44,12 +50,14 @@ public sealed class RynApplicationBuilder
         return this;
     }
 
+    /// <summary>Registers a plugin using a factory delegate.</summary>
     public RynApplicationBuilder AddPlugin(Func<IServiceProvider, IRynPlugin> factory)
     {
         _services.AddSingleton<IRynPlugin>(factory);
         return this;
     }
 
+    /// <summary>Builds the application, wiring up configuration, DI, options, and plugins.</summary>
     public RynApplication Build()
     {
         // 1. Build configuration
@@ -71,6 +79,13 @@ public sealed class RynApplicationBuilder
         foreach (var action in _configureOptionsActions)
         {
             action(options);
+        }
+
+        if (options.UseEmbeddedContent && options.ContentDirectory is null)
+        {
+            var extractedDir = Internal.EmbeddedContentExtractor.TryExtract();
+            if (extractedDir is not null)
+                options.ContentDirectory = extractedDir;
         }
 
         _services.AddSingleton(options);
