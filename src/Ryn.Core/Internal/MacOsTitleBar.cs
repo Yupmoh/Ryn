@@ -9,24 +9,27 @@ internal static partial class MacOsTitleBar
     private static nint _dragViewClass;
     private static bool _classRegistered;
 
-    internal static unsafe void ApplyHiddenTitleBar(nint nsWindowPtr)
+    internal static unsafe void Apply(nint nsWindowPtr, bool overlay)
     {
         if (nsWindowPtr == 0) return;
 
         var nsWindow = (void*)nsWindowPtr;
 
-        // Transparent title bar + no title text
-        objc_msgSend_bool(nsWindow, sel_registerName("setTitlebarAppearsTransparent:"), 1);
+        // Hide title text, make title bar transparent
         objc_msgSend_nint(nsWindow, sel_registerName("setTitleVisibility:"), 1);
+        objc_msgSend_bool(nsWindow, sel_registerName("setTitlebarAppearsTransparent:"), 1);
 
-        // Content extends under title bar (clean frameless look)
-        var mask = objc_msgSend_ret_nint(nsWindow, sel_registerName("styleMask"));
-        objc_msgSend_nint(nsWindow, sel_registerName("setStyleMask:"), mask | (1 << 15));
+        if (overlay)
+        {
+            // Overlay: content extends under title bar
+            var mask = objc_msgSend_ret_nint(nsWindow, sel_registerName("styleMask"));
+            objc_msgSend_nint(nsWindow, sel_registerName("setStyleMask:"), mask | (1 << 15));
 
-        // Add an invisible native drag view on top of the webview in the title bar area.
-        // This intercepts mouse events the webview would otherwise consume,
-        // and forwards them to performWindowDragWithEvent: for native drag.
-        AddDragView(nsWindow);
+            // Native drag view on top of webview in the title bar region
+            AddDragView(nsWindow);
+        }
+        // Hidden: no fullSizeContentView — title bar stays as a separate native strip
+        // with drag and traffic lights. Content renders below it.
     }
 
     private static unsafe void AddDragView(void* nsWindow)

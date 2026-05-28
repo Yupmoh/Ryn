@@ -127,6 +127,12 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _rynWebView?.EvaluateJavaScriptAsync(script, cancellationToken)
             ?? new ValueTask<string>(string.Empty);
 
+    public unsafe void Close()
+    {
+        if (_window != null)
+            Saucer.saucer_window_close(_window);
+    }
+
     public unsafe void Minimize()
     {
         if (_window != null)
@@ -302,20 +308,25 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         Saucer.saucer_window_set_resizable(_window, (byte)(_options.Resizable ? 1 : 0));
 
         // Decorations
-        if (_options.Frameless)
+        switch (_options.TitleBarStyle)
         {
-            Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_NONE);
-        }
-        else if (_options.HideTitleBar)
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                ApplyMacOsTransparentTitleBar();
-            }
-            else
-            {
-                Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_PARTIAL);
-            }
+            case TitleBarStyle.Hidden:
+                if (OperatingSystem.IsMacOS())
+                    ApplyMacOsTitleBar(overlay: false);
+                else
+                    Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_PARTIAL);
+                break;
+
+            case TitleBarStyle.Overlay:
+                if (OperatingSystem.IsMacOS())
+                    ApplyMacOsTitleBar(overlay: true);
+                else
+                    Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_PARTIAL);
+                break;
+
+            case TitleBarStyle.Frameless:
+                Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_NONE);
+                break;
         }
 
         // Icon
@@ -343,7 +354,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("macos")]
-    private void ApplyMacOsTransparentTitleBar()
+    private void ApplyMacOsTitleBar(bool overlay)
     {
         nuint size;
         System.Runtime.CompilerServices.Unsafe.SkipInit(out size);
@@ -356,7 +367,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             Saucer.saucer_window_native(_window, 0, ptr, &size);
             var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf);
             if (nsWindow != 0)
-                MacOsTitleBar.ApplyHiddenTitleBar(nsWindow);
+                MacOsTitleBar.Apply(nsWindow, overlay);
         }
     }
 

@@ -14,6 +14,7 @@ public interface IRynWindow
     public ValueTask NavigateAsync(Uri url, CancellationToken cancellationToken = default);
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default);
 
+    public void Close();
     public void Minimize();
     public void ToggleMaximize();
     public void StartDrag();

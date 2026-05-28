@@ -121,8 +121,8 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.Resizable)] is { } resizable && bool.TryParse(resizable, out var r))
             options.Resizable = r;
 
-        if (section[nameof(RynOptions.Frameless)] is { } frameless && bool.TryParse(frameless, out var f))
-            options.Frameless = f;
+        if (section[nameof(RynOptions.TitleBarStyle)] is { } titleBarStyle && Enum.TryParse<TitleBarStyle>(titleBarStyle, true, out var tbs))
+            options.TitleBarStyle = tbs;
 
         if (section[nameof(RynOptions.Transparent)] is { } transparent && bool.TryParse(transparent, out var t))
             options.Transparent = t;
@@ -140,7 +140,7 @@ public sealed class RynApplicationBuilder
         target.Width = source.Width;
         target.Height = source.Height;
         target.Resizable = source.Resizable;
-        target.Frameless = source.Frameless;
+        target.TitleBarStyle = source.TitleBarStyle;
         target.Transparent = source.Transparent;
         target.Url = source.Url;
         target.Html = source.Html;

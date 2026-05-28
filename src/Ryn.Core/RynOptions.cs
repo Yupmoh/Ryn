@@ -7,8 +7,7 @@ public sealed class RynOptions
     public int Width { get; set; } = 800;
     public int Height { get; set; } = 600;
     public bool Resizable { get; set; } = true;
-    public bool Frameless { get; set; }
-    public bool HideTitleBar { get; set; }
+    public TitleBarStyle TitleBarStyle { get; set; } = TitleBarStyle.Native;
     public bool Transparent { get; set; }
     public Uri? Url { get; set; }
     public string? Html { get; set; }
@@ -18,4 +17,12 @@ public sealed class RynOptions
     public string? IconPath { get; set; }
     public bool DevTools { get; set; }
     public IList<string> AllowedOrigins { get; } = new List<string>();
+}
+
+public enum TitleBarStyle
+{
+    Native,
+    Hidden,
+    Overlay,
+    Frameless,
 }

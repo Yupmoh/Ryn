@@ -15,7 +15,7 @@ public sealed class RynOptionsTests
         options.Width.Should().Be(800);
         options.Height.Should().Be(600);
         options.Resizable.Should().BeTrue();
-        options.Frameless.Should().BeFalse();
+        options.TitleBarStyle.Should().Be(TitleBarStyle.Native);
         options.Transparent.Should().BeFalse();
         options.Url.Should().BeNull();
         options.DevTools.Should().BeFalse();

@@ -10,6 +10,9 @@ internal sealed class WindowCommands
 
     public WindowCommands(IRynWindow window) => _window = window;
 
+    [RynCommand("window.close")]
+    public void Close() => _window.Close();
+
     [RynCommand("window.minimize")]
     public void Minimize() => _window.Minimize();
 
