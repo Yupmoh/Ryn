@@ -10,14 +10,14 @@ public static class FileSystemCommands
     [RynCommand("fs.readTextFile")]
     public static string ReadTextFile(string path)
     {
-        var resolved = PathValidator.Resolve(path);
+        var resolved = PathValidator.ResolveForRead(path);
         return File.ReadAllText(resolved);
     }
 
     [RynCommand("fs.readFile")]
     public static string ReadFile(string path)
     {
-        var resolved = PathValidator.Resolve(path);
+        var resolved = PathValidator.ResolveForRead(path);
         return Convert.ToBase64String(File.ReadAllBytes(resolved));
     }
 

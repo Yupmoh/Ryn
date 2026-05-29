@@ -113,6 +113,86 @@ public sealed class FileSystemCommandsTests : IDisposable
         act.Should().Throw<UnauthorizedAccessException>();
     }
 
+    [Fact]
+    public void SymlinkEscape_ReadThroughLink_Rejected()
+    {
+        // A secret outside the allowed scope.
+        var outsideDir = Path.Combine(Path.GetTempPath(), $"ryn-outside-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outsideDir);
+        var secret = Path.Combine(outsideDir, "secret.txt");
+        File.WriteAllText(secret, "top secret");
+
+        // A symlink that lives *inside* the allowed scope but targets the secret outside it.
+        var link = Path.Combine(_testDir, "link.txt");
+        try
+        {
+            File.CreateSymbolicLink(link, secret);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return; // platform doesn't permit symlink creation in this environment
+        }
+
+        try
+        {
+            // Lexically the link is in-scope; its real target is not. Must be rejected.
+            var act = () => FileSystemCommands.ReadTextFile(link);
+            act.Should().Throw<UnauthorizedAccessException>();
+        }
+        finally
+        {
+            try { Directory.Delete(outsideDir, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void SymlinkEscape_WriteThroughLinkedDirectory_Rejected()
+    {
+        var outsideDir = Path.Combine(Path.GetTempPath(), $"ryn-outside-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outsideDir);
+
+        // A symlinked directory inside scope that points outside scope.
+        var linkedDir = Path.Combine(_testDir, "escape");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedDir, outsideDir);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        try
+        {
+            // Writing to a not-yet-existing file under a symlinked-out parent must be rejected.
+            var act = () => FileSystemCommands.WriteTextFile(Path.Combine(linkedDir, "planted.txt"), "x");
+            act.Should().Throw<UnauthorizedAccessException>();
+            File.Exists(Path.Combine(outsideDir, "planted.txt")).Should().BeFalse();
+        }
+        finally
+        {
+            try { Directory.Delete(outsideDir, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void ReadFile_ExceedingSizeLimit_Rejected()
+    {
+        PathValidator.Configure(new FileSystemOptions { AllowedPaths = [_testDir], MaxReadBytes = 16 });
+        try
+        {
+            var path = Path.Combine(_testDir, "big.bin");
+            File.WriteAllBytes(path, new byte[64]);
+
+            var act = () => FileSystemCommands.ReadFile(path);
+            act.Should().Throw<UnauthorizedAccessException>().WithMessage("*read limit*");
+        }
+        finally
+        {
+            PathValidator.Configure(new FileSystemOptions { AllowedPaths = [_testDir] });
+        }
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_testDir, true); } catch (IOException) { /* cleanup */ }

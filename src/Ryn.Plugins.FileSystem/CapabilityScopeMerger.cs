@@ -30,13 +30,19 @@ internal static class CapabilityScopeMerger
             return;
         }
 
+        var ignoreCase = !OperatingSystem.IsLinux();
+        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
         var clamped = new List<string>();
         foreach (var programmatic in options.AllowedPaths)
         {
-            var resolved = Path.GetFullPath(programmatic);
+            var resolved = PathValidator.Canonicalize(programmatic);
             foreach (var allowed in scope.AllowedPaths)
             {
-                if (IsWithin(resolved, allowed))
+                var within = GlobMatcher.IsGlob(allowed)
+                    ? GlobMatcher.IsMatch(allowed, resolved.Replace('\\', '/'), ignoreCase)
+                    : IsWithin(resolved, PathValidator.Canonicalize(allowed), comparison);
+                if (within)
                 {
                     clamped.Add(programmatic);
                     break;
@@ -51,14 +57,14 @@ internal static class CapabilityScopeMerger
             options.AllowedPaths.AddRange(clamped);
     }
 
-    private static bool IsWithin(string fullPath, string directory)
+    private static bool IsWithin(string fullPath, string directory, StringComparison comparison)
     {
-        var normalizedDir = Path.GetFullPath(directory)
+        var normalizedDir = directory
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var normalizedPath = fullPath
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        return normalizedPath.Equals(normalizedDir, StringComparison.OrdinalIgnoreCase)
-            || normalizedPath.StartsWith(normalizedDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return normalizedPath.Equals(normalizedDir, comparison)
+            || normalizedPath.StartsWith(normalizedDir + Path.DirectorySeparatorChar, comparison);
     }
 }
