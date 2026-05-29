@@ -272,7 +272,12 @@ const result = await window.__ryn.invoke('myCustomName', {});
 Ryn also supports events from C# to JavaScript:
 
 ```csharp
-// C# side: emit an event
+// C# side: emit an event.
+// Preferred — strongly typed, serialized via source-generated JsonTypeInfo (AOT- and injection-safe):
+webView.EmitEvent("dataUpdated", new Update(42), AppJsonContext.Default.Update);
+
+// String overload — the payload MUST be valid JSON; it is validated/canonicalized to prevent
+// script injection. An invalid JSON string throws ArgumentException.
 webView.EmitEvent("dataUpdated", "{\"count\": 42}");
 ```
 
