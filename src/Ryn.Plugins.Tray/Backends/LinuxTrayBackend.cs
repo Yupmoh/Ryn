@@ -5,7 +5,11 @@ using System.Runtime.Versioning;
 namespace Ryn.Plugins.Tray.Backends;
 
 [SupportedOSPlatform("linux")]
-#pragma warning disable CS0067 // IconClicked is unused — AppIndicator shows a menu on click, no direct click event
+// IconClicked is intentionally never raised on Linux: the StatusNotifier/AppIndicator protocol used by
+// GNOME/KDE is menu-only by design — left-click opens the context menu and there is no portable
+// "icon clicked" signal. This is a documented platform limitation, not a missing feature; apps should
+// rely on menu items (MenuItemClicked) on Linux. Use tray.clicked only on Windows/macOS.
+#pragma warning disable CS0067
 internal sealed partial class LinuxTrayBackend : ITrayBackend
 {
     private nint _indicator;
@@ -22,6 +26,8 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
     // Store delegate references to prevent GC collection of callbacks
     private readonly List<GCallback> _callbackRefs = [];
+    private GSourceFunc? _quitCallback;
+    private GSourceFunc? _rebuildCallback;
 
     public event Action? IconClicked;
     public event Action<string>? MenuItemClicked;
@@ -75,7 +81,10 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
             _menuItems.AddRange(items);
         }
 
-        RebuildMenu();
+        // RebuildMenu touches GTK widget APIs, which must only run on the GTK thread. SetMenu can be
+        // called from any thread, so marshal the rebuild onto the GTK loop via g_idle_add.
+        _rebuildCallback = _ => { RebuildMenu(); return 0; };
+        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_rebuildCallback), nint.Zero);
     }
 
     public void ShowNotification(string title, string message)
@@ -125,16 +134,11 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
         _glibRunning = true;
         _readyEvent.Set();
 
-        // Pump the GLib main context without blocking
-        while (_glibRunning)
-        {
-            while (g_main_context_iteration(nint.Zero, false))
-            {
-                // Process pending events
-            }
-
-            Thread.Sleep(50);
-        }
+        // Event-driven GTK main loop — blocks efficiently until events arrive (no CPU busy-poll, no
+        // Thread.Sleep spin). Shutdown is requested from Dispose() via g_idle_add, which marshals
+        // gtk_main_quit onto THIS (the GTK) thread — calling GTK from another thread is unsafe.
+        gtk_main();
+        _glibRunning = false;
     }
 
     private void RebuildMenu()
@@ -219,6 +223,12 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
         _disposed = true;
         GC.SuppressFinalize(this);
 
+        if (_available && _glibThread is not null && _glibRunning)
+        {
+            // Marshal gtk_main_quit onto the GTK thread (returns G_SOURCE_REMOVE so it runs once).
+            _quitCallback = _ => { gtk_main_quit(); return 0; };
+            _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_quitCallback), nint.Zero);
+        }
         _glibRunning = false;
 
         if (_glibThread is not null)
@@ -256,6 +266,9 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void GCallback(nint widget, nint userData);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int GSourceFunc(nint userData);
 
     // --- libayatana-appindicator3 / libappindicator3 P/Invoke ---
     //
@@ -348,6 +361,14 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial void gtk_init(ref int argc, nint argv);
 
+    [LibraryImport("gtk-3", EntryPoint = "gtk_main")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial void gtk_main();
+
+    [LibraryImport("gtk-3", EntryPoint = "gtk_main_quit")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial void gtk_main_quit();
+
     [LibraryImport("gtk-3", EntryPoint = "gtk_menu_new")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nint gtk_menu_new();
@@ -376,11 +397,9 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
     // --- GLib ---
 
-    [LibraryImport("glib-2.0", EntryPoint = "g_main_context_iteration")]
+    [LibraryImport("glib-2.0", EntryPoint = "g_idle_add")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool g_main_context_iteration(nint context,
-        [MarshalAs(UnmanagedType.Bool)] bool mayBlock);
+    private static partial uint g_idle_add(nint function, nint data);
 
     // --- GObject ---
 

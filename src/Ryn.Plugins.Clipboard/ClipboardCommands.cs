@@ -12,7 +12,9 @@ public static class ClipboardCommands
             return RunProcess("pbpaste", "");
 
         if (OperatingSystem.IsLinux())
-            return RunProcess("xclip", "-selection clipboard -o");
+            return IsWayland()
+                ? RunProcess("wl-paste", "--no-newline")
+                : RunProcess("xclip", "-selection clipboard -o");
 
         if (OperatingSystem.IsWindows())
             return RunProcess("powershell", "-command Get-Clipboard");
@@ -26,7 +28,12 @@ public static class ClipboardCommands
         if (OperatingSystem.IsMacOS())
             RunProcessWithInput("pbcopy", "", text);
         else if (OperatingSystem.IsLinux())
-            RunProcessWithInput("xclip", "-selection clipboard", text);
+        {
+            if (IsWayland())
+                RunProcessWithInput("wl-copy", "", text);
+            else
+                RunProcessWithInput("xclip", "-selection clipboard", text);
+        }
         else if (OperatingSystem.IsWindows())
             RunProcess("powershell", $"-command Set-Clipboard -Value '{text.Replace("'", "''", StringComparison.Ordinal)}'");
         else
@@ -46,7 +53,12 @@ public static class ClipboardCommands
         if (OperatingSystem.IsMacOS())
             RunProcessWithInput("pbcopy", "", "");
         else if (OperatingSystem.IsLinux())
-            RunProcessWithInput("xclip", "-selection clipboard", "");
+        {
+            if (IsWayland())
+                RunProcess("wl-copy", "--clear");
+            else
+                RunProcessWithInput("xclip", "-selection clipboard", "");
+        }
         else if (OperatingSystem.IsWindows())
             RunProcess("powershell", "-command Set-Clipboard -Value $null");
         else
@@ -213,27 +225,49 @@ public static class ClipboardCommands
 
     // ── Linux image helpers ──────────────────────────────────────────────
 
+    // True when running under a Wayland session (prefer wl-clipboard; xclip is X11-only and fails there).
+    private static bool IsWayland() =>
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+
     private static string ReadImageLinux()
     {
-        EnsureToolExists("xclip");
+        if (IsWayland())
+        {
+            EnsureToolExists("wl-paste");
+            var wlBytes = RunProcessWithBinaryOutput("wl-paste", ["--type", "image/png"]);
+            return wlBytes.Length == 0 ? "" : Convert.ToBase64String(wlBytes);
+        }
 
+        EnsureToolExists("xclip");
         byte[] pngBytes = RunProcessWithBinaryOutput("xclip", ["-selection", "clipboard", "-t", "image/png", "-o"]);
         return pngBytes.Length == 0 ? "" : Convert.ToBase64String(pngBytes);
     }
 
     private static void WriteImageLinux(byte[] pngBytes)
     {
-        EnsureToolExists("xclip");
+        if (IsWayland())
+        {
+            EnsureToolExists("wl-copy");
+            RunProcessWithBinaryInput("wl-copy", ["--type", "image/png"], pngBytes);
+            return;
+        }
 
+        EnsureToolExists("xclip");
         RunProcessWithBinaryInput("xclip", ["-selection", "clipboard", "-t", "image/png"], pngBytes);
     }
 
     private static bool HasImageLinux()
     {
-        EnsureToolExists("xclip");
-
         try
         {
+            if (IsWayland())
+            {
+                EnsureToolExists("wl-paste");
+                var types = RunProcess("wl-paste", "--list-types");
+                return types.Contains("image/png", StringComparison.Ordinal);
+            }
+
+            EnsureToolExists("xclip");
             var output = RunProcess("xclip", "-selection clipboard -t TARGETS -o");
             return output.Contains("image/png", StringComparison.Ordinal);
         }
