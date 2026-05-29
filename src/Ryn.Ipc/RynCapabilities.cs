@@ -15,7 +15,18 @@ public sealed class RynCapabilities
 
     public bool IsEnforced => _enforced;
 
+    /// <summary>
+    /// Permissive mode: every command is allowed and no scope is enforced. Intended for local
+    /// development only. Production builds must not fall back to this when <c>ryn.json</c> is
+    /// missing — see <see cref="DenyAll"/> and <see cref="RynCapabilitiesLoader"/>.
+    /// </summary>
     public static RynCapabilities AllowAll() => new(enforced: false);
+
+    /// <summary>
+    /// Fail-closed mode: enforcement is on but no plugin is configured, so every plugin command is
+    /// denied. This is the safe default when <c>ryn.json</c> is absent or malformed in a release build.
+    /// </summary>
+    public static RynCapabilities DenyAll() => new(enforced: true);
 
     public static RynCapabilities FromRules(Dictionary<string, CapabilityRule> rules) =>
         new(enforced: true, rules);
@@ -31,13 +42,19 @@ public sealed class RynCapabilities
         return _scopes.TryGetValue(pluginPrefix, out var scope) ? scope : null;
     }
 
+    // Explicit allowlist of framework-internal commands that bypass capability checks. Using a fixed set
+    // (rather than any "__ryn.*" prefix) means a future or spoofed "__ryn.whatever" command does not get
+    // a free pass — only these known, side-effect-light internals do.
+    private static readonly HashSet<string> InternalCommands =
+        new(StringComparer.Ordinal) { "__ryn.console", "__ryn.fileDrop" };
+
     public void ThrowIfDenied(string command)
     {
         if (!_enforced) return;
         ArgumentNullException.ThrowIfNull(command);
 
-        // Internal framework commands bypass capability checks
-        if (command.StartsWith("__ryn.", StringComparison.Ordinal))
+        // Known framework-internal commands bypass capability checks; unknown __ryn.* names do not.
+        if (InternalCommands.Contains(command))
             return;
 
         var dotIndex = command.IndexOf('.', StringComparison.Ordinal);

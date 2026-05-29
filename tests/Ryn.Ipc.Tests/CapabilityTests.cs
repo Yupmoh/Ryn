@@ -1,3 +1,4 @@
+using System;
 using FluentAssertions;
 using Xunit;
 
@@ -135,14 +136,50 @@ public sealed class CapabilityTests
     }
 
     [Fact]
-    public void MissingFile_ReturnsAllowAll()
+    public void MissingCapabilitiesSection_FailsClosed_InRelease()
     {
-        // RynCapabilitiesLoader.Load() with no ryn.json returns AllowAll
-        // We test the Parse path with no capabilities section
+        // A present-but-empty config (no "capabilities" key) is treated as a misconfiguration and
+        // fails closed: every command is denied. This prevents a mis-deployed app from silently
+        // shipping with all commands open. (Parse defaults to the release/fail-closed behavior.)
         var caps = RynCapabilitiesLoader.Parse("{}");
 
+        caps.IsEnforced.Should().BeTrue();
+        var act = () => caps.ThrowIfDenied("anything.goes");
+        act.Should().Throw<RynCommandDeniedException>();
+    }
+
+    [Fact]
+    public void MissingCapabilitiesSection_AllowsAll_WhenPermissiveOptIn()
+    {
+        // Dev opt-in keeps the old convenience behavior.
+        var caps = RynCapabilitiesLoader.Parse("{}", permissiveWhenUnconfigured: true);
+
+        caps.IsEnforced.Should().BeFalse();
         var act = () => caps.ThrowIfDenied("anything.goes");
         act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void DenyAll_DeniesEverything()
+    {
+        var caps = RynCapabilities.DenyAll();
+
+        caps.IsEnforced.Should().BeTrue();
+        var act = () => caps.ThrowIfDenied("fs.readTextFile");
+        act.Should().Throw<RynCommandDeniedException>();
+    }
+
+    [Fact]
+    public void InternalCommands_OnlyKnownNamesBypass()
+    {
+        var caps = RynCapabilities.DenyAll();
+
+        // Known framework internals bypass enforcement…
+        ((Action)(() => caps.ThrowIfDenied("__ryn.console"))).Should().NotThrow();
+        ((Action)(() => caps.ThrowIfDenied("__ryn.fileDrop"))).Should().NotThrow();
+
+        // …but an arbitrary/spoofed "__ryn.*" name does NOT get a free pass.
+        ((Action)(() => caps.ThrowIfDenied("__ryn.evil"))).Should().Throw<RynCommandDeniedException>();
     }
 
     [Fact]
