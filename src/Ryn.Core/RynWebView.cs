@@ -11,67 +11,57 @@ public sealed class RynWebView : IRynWebView, IDisposable
 {
     private const string AppScheme = "ryn";
 
-    internal static string GetBridgeScriptText() => Encoding.UTF8.GetString(BridgeScript);
+    internal static string GetBridgeScriptText() => BuildBridgeScript("TEST_TOKEN");
     internal static string GetConsoleForwardScriptText() => Encoding.UTF8.GetString(ConsoleForwardScript);
 
-    private static ReadOnlySpan<byte> ConsoleForwardScript =>
-        """
-        (function(){
-          var c = window.console;
-          var orig = { log: c.log, warn: c.warn, error: c.error, info: c.info };
-          function fmt(args) {
-            var parts = [];
-            for (var i = 0; i < args.length; i++) {
-              var a = args[i];
-              if (a === null) { parts.push('null'); }
-              else if (a === undefined) { parts.push('undefined'); }
-              else if (typeof a === 'object') {
-                try { parts.push(JSON.stringify(a)); } catch(e) { parts.push(String(a)); }
-              } else { parts.push(String(a)); }
-            }
-            return parts.join(' ');
-          }
-          ['log','warn','error','info'].forEach(function(level) {
-            c[level] = function() {
-              orig[level].apply(c, arguments);
-              try { window.__ryn.invoke('__ryn.console', { level: level, message: fmt(arguments) }); } catch(e) {}
-            };
-          });
-        })();
-        """u8;
+    /// <summary>
+    /// Per-launch high-entropy token embedded in the JS bridge and required on every IPC request handled
+    /// by the local web server, so another local process or a cross-origin page cannot drive IPC.
+    /// </summary>
+    private readonly string _ipcToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
 
-    private static ReadOnlySpan<byte> BridgeScript =>
-        """
+    internal string IpcToken => _ipcToken;
+
+    /// <summary>
+    /// Builds the JS bridge. Command results are returned inline on the IPC response body (the XHR
+    /// resolves from <c>onload</c>) rather than via a second <c>window.__ryn._resolve</c> eval hop —
+    /// this removes a per-call UI-thread round trip and an extra escape pass.
+    /// </summary>
+    private static string BuildBridgeScript(string token) =>
+        $$"""
         (function(){
           var ryn = window.__ryn = window.__ryn || {};
+          var token = "{{token}}";
           var nextId = 1;
-          var pending = {};
           var listeners = {};
+          // IPC base URL. Empty = relative (same-origin scheme/local-server). Overridden to an absolute
+          // loopback URL in dev-server (Vite) mode so window.__ryn.invoke reaches the Ryn backend.
+          if (typeof ryn._ipcBase !== 'string') ryn._ipcBase = "";
 
           ryn.invoke = function(command, args) {
             return new Promise(function(resolve, reject) {
               var id = nextId++;
-              var timer = setTimeout(function() {
-                if (pending[id]) { delete pending[id]; reject(new Error('IPC timeout: ' + command)); }
-              }, 30000);
-              pending[id] = { resolve: resolve, reject: reject, timer: timer };
               var body = args ? JSON.stringify(args) : '{}';
               var x = new XMLHttpRequest();
-              x.open('POST', '/ipc/cmd/' + id + '/' + encodeURIComponent(command), true);
+              x.open('POST', ryn._ipcBase + '/ipc/cmd/' + id + '/' + encodeURIComponent(command), true);
+              x.setRequestHeader('Content-Type', 'application/json');
+              if (token) x.setRequestHeader('X-Ryn-Token', token);
+              var timer = setTimeout(function() {
+                try { x.abort(); } catch (e) {}
+                reject(new Error('IPC timeout: ' + command));
+              }, 30000);
+              x.onload = function() {
+                clearTimeout(timer);
+                if (x.status >= 200 && x.status < 300) {
+                  if (x.responseText === '') { resolve(undefined); return; }
+                  try { resolve(JSON.parse(x.responseText)); } catch (e) { resolve(x.responseText); }
+                } else {
+                  reject(new Error(x.responseText || ('IPC error ' + x.status + ': ' + command)));
+                }
+              };
+              x.onerror = function() { clearTimeout(timer); reject(new Error('IPC network error: ' + command)); };
               x.send(body);
             });
-          };
-
-          ryn._resolve = function(id, ok, data) {
-            var p = pending[id];
-            if (!p) return;
-            clearTimeout(p.timer);
-            delete pending[id];
-            if (ok) {
-              try { p.resolve(JSON.parse(data)); } catch(e) { p.resolve(data); }
-            } else {
-              p.reject(new Error(data));
-            }
           };
 
           ryn.on = function(event, callback) {
@@ -102,14 +92,41 @@ public sealed class RynWebView : IRynWebView, IDisposable
                 function(v) { __ryn_send(id, 1, String(v)); },
                 function(e) { __ryn_send(id, 0, String(e)); }
               );
-            } catch(e) { __ryn_send(id, 0, String(e)); }
+            } catch (e) { __ryn_send(id, 0, String(e)); }
           };
 
           function __ryn_send(id, ok, data) {
             var x = new XMLHttpRequest();
-            x.open('POST', '/ipc/eval/' + id + '/' + ok, true);
+            x.open('POST', ryn._ipcBase + '/ipc/eval/' + id + '/' + ok, true);
+            if (token) x.setRequestHeader('X-Ryn-Token', token);
             x.send(data);
           }
+        })();
+        """;
+
+    private static ReadOnlySpan<byte> ConsoleForwardScript =>
+        """
+        (function(){
+          var c = window.console;
+          var orig = { log: c.log, warn: c.warn, error: c.error, info: c.info };
+          function fmt(args) {
+            var parts = [];
+            for (var i = 0; i < args.length; i++) {
+              var a = args[i];
+              if (a === null) { parts.push('null'); }
+              else if (a === undefined) { parts.push('undefined'); }
+              else if (typeof a === 'object') {
+                try { parts.push(JSON.stringify(a)); } catch(e) { parts.push(String(a)); }
+              } else { parts.push(String(a)); }
+            }
+            return parts.join(' ');
+          }
+          ['log','warn','error','info'].forEach(function(level) {
+            c[level] = function() {
+              orig[level].apply(c, arguments);
+              try { window.__ryn.invoke('__ryn.console', { level: level, message: fmt(arguments) }); } catch(e) {}
+            };
+          });
         })();
         """u8;
 
@@ -164,11 +181,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
 
-    internal void DispatchCommandFromServer(long cmdId, string command, string body)
-    {
-        var args = Encoding.UTF8.GetBytes(body);
-        _ = DispatchCommandAsync(cmdId, command, args);
-    }
+    internal Task<(bool Ok, string Data)> DispatchCommandFromServerAsync(string command, string body)
+        => ExecuteCommandAsync(command, Encoding.UTF8.GetBytes(body));
 
     internal void HandleEvalFromServer(long evalId, int ok, string body)
     {
@@ -279,8 +293,41 @@ public sealed class RynWebView : IRynWebView, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(eventName);
+        ArgumentNullException.ThrowIfNull(jsonData);
+
+        // Validate + canonicalize the payload so a caller-supplied string cannot inject script into the
+        // emit call. Anything that isn't well-formed JSON is rejected rather than spliced in raw.
+        string canonical;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(jsonData);
+            canonical = doc.RootElement.GetRawText();
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new ArgumentException(
+                "jsonData must be a valid JSON value. Use EmitEvent<T>(name, payload, typeInfo) to emit typed data safely.",
+                nameof(jsonData), ex);
+        }
+
         var escapedEvent = EscapeForJs(eventName);
-        ExecuteOnUiThread($"window.__ryn._emit('{escapedEvent}',{jsonData})");
+        ExecuteOnUiThread($"window.__ryn._emit('{escapedEvent}',{canonical})");
+    }
+
+    /// <summary>
+    /// Emits a strongly-typed event payload, serialized through a source-generated
+    /// <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}"/> (AOT-safe, injection-safe).
+    /// Prefer this over the string overload.
+    /// </summary>
+    public void EmitEvent<T>(string eventName, T payload, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(eventName);
+        ArgumentNullException.ThrowIfNull(typeInfo);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(payload, typeInfo);
+        var escapedEvent = EscapeForJs(eventName);
+        ExecuteOnUiThread($"window.__ryn._emit('{escapedEvent}',{json})");
     }
 
     private unsafe void RegisterAppScheme()
@@ -299,15 +346,47 @@ public sealed class RynWebView : IRynWebView, IDisposable
 
     private unsafe void InjectBridgeScript()
     {
-        fixed (byte* ptr = BridgeScript)
-        {
-            Saucer.saucer_webview_inject(
-                (saucer_webview*)_webview,
-                (sbyte*)ptr,
-                saucer_script_time.SAUCER_SCRIPT_TIME_CREATION,
-                0,
-                0);
-        }
+        var script = BuildBridgeScript(_ipcToken);
+        Span<byte> buf = stackalloc byte[256];
+        var str = Utf8String.Create(script, buf); // falls back to a pooled buffer for the full script
+        Saucer.saucer_webview_inject(
+            (saucer_webview*)_webview,
+            str.Pointer,
+            saucer_script_time.SAUCER_SCRIPT_TIME_CREATION,
+            0,
+            0);
+        str.Dispose();
+    }
+
+    /// <summary>
+    /// Points the JS bridge's IPC calls at an absolute loopback URL (the Ryn IPC server) instead of the
+    /// current page origin. Used in dev-server (e.g. Vite) mode so <c>window.__ryn.invoke</c> works when the
+    /// UI is served by a separate dev server. Injected at document-creation time, after the bridge.
+    /// </summary>
+    internal unsafe void SetIpcBaseOverride(string absoluteBaseUrl)
+    {
+        var js = $"(function(){{window.__ryn=window.__ryn||{{}};window.__ryn._ipcBase=\"{System.Text.Json.JsonEncodedText.Encode(absoluteBaseUrl)}\";}})();";
+        InjectAtCreation(js);
+    }
+
+    /// <summary>Surfaces a developer-facing warning in the page console (visible in DevTools).</summary>
+    internal unsafe void WarnInPageConsole(string message)
+    {
+        var js = $"console.warn(\"{System.Text.Json.JsonEncodedText.Encode(message)}\");";
+        InjectAtCreation(js);
+    }
+
+    private unsafe void InjectAtCreation(string js)
+    {
+        Span<byte> buf = stackalloc byte[256];
+        var str = Utf8String.Create(js, buf);
+        Saucer.saucer_webview_inject(
+            (saucer_webview*)_webview,
+            str.Pointer,
+            saucer_script_time.SAUCER_SCRIPT_TIME_CREATION,
+            0,
+            0);
+        str.Dispose();
     }
 
     internal unsafe void InjectConsoleForwardScript()
@@ -403,8 +482,10 @@ public sealed class RynWebView : IRynWebView, IDisposable
             var body = ReadRequestBody(request);
             var args = Encoding.UTF8.GetBytes(body);
 
-            AcceptEmptyResponse(executor, matchedOrigin);
-            _ = DispatchCommandAsync(cmdId, command, args);
+            // Keep the executor alive across the async dispatch and deliver the result on the response
+            // body itself (no second window.__ryn._resolve eval hop).
+            var execCopy = (nint)Saucer.saucer_scheme_executor_copy(executor);
+            _ = RespondToCommandAsync(command, args, execCopy, matchedOrigin);
             return;
         }
 
@@ -434,6 +515,9 @@ public sealed class RynWebView : IRynWebView, IDisposable
                 var mime = Utf8String.Create("text/html", mimeBuf);
                 var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
                 Saucer.saucer_scheme_executor_accept(executor, response);
+                // accept() copies the response; we still own (and must free) both native objects.
+                Saucer.saucer_scheme_response_free(response);
+                Saucer.saucer_stash_free(stash);
                 mime.Dispose();
             }
             return;
@@ -455,6 +539,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
             var mime = Utf8String.Create(mimeType, mimeBuf);
             var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
             Saucer.saucer_scheme_executor_accept(executor, response);
+            Saucer.saucer_scheme_response_free(response);
+            Saucer.saucer_stash_free(stash);
             mime.Dispose();
         }
     }
@@ -485,32 +571,45 @@ public sealed class RynWebView : IRynWebView, IDisposable
         return "application/octet-stream";
     }
 
-    private async Task DispatchCommandAsync(long id, string command, byte[] args)
+    /// <summary>
+    /// Executes an IPC command and returns its outcome. <c>data</c> is the raw JSON result on success, or
+    /// the error message on failure. Both transports deliver this on the response body. The <c>Task.Run</c>
+    /// hop intentionally moves command execution off saucer's native UI thread.
+    /// </summary>
+    internal async Task<(bool Ok, string Data)> ExecuteCommandAsync(string command, byte[] args)
     {
         if (command == "__ryn.fileDrop")
-        {
-            HandleFileDropCommand(id, args);
-            return;
-        }
+            return HandleFileDropInline(args);
 
-        if (_commandHandler is null) return;
+        if (_commandHandler is null)
+            return (true, "null");
 
         try
         {
             var result = await Task.Run(async () => await _commandHandler(command, args, CancellationToken.None)
                 .ConfigureAwait(false)).ConfigureAwait(false);
-            var escaped = EscapeForJs(result);
-            ExecuteOnUiThread($"window.__ryn._resolve({id},true,'{escaped}')");
+            return (true, result);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var message = ex.InnerException?.Message ?? ex.Message;
-            var escaped = EscapeForJs(message);
-            ExecuteOnUiThread($"window.__ryn._resolve({id},false,'{escaped}')");
+            return (false, ex.InnerException?.Message ?? ex.Message);
         }
     }
 
-    private void HandleFileDropCommand(long id, byte[] args)
+    private async Task RespondToCommandAsync(string command, byte[] args, nint executorHandle, string? origin)
+    {
+        var (ok, data) = await ExecuteCommandAsync(command, args).ConfigureAwait(false);
+        try
+        {
+            unsafe { WriteCommandResponse((saucer_scheme_executor*)executorHandle, ok, data, origin); }
+        }
+        finally
+        {
+            unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+        }
+    }
+
+    private (bool Ok, string Data) HandleFileDropInline(byte[] args)
     {
         try
         {
@@ -525,12 +624,39 @@ public sealed class RynWebView : IRynWebView, IDisposable
             var x = root.TryGetProperty("x", out var xEl) ? xEl.GetInt32() : 0;
             var y = root.TryGetProperty("y", out var yEl) ? yEl.GetInt32() : 0;
             RaiseFileDrop(new FileDropEventArgs { FileNames = files, X = x, Y = y });
-            ExecuteOnUiThread($"window.__ryn._resolve({id},true,'null')");
+            return (true, "null");
         }
         catch (System.Text.Json.JsonException)
         {
-            ExecuteOnUiThread($"window.__ryn._resolve({id},false,'\"Invalid file drop data\"')");
+            return (false, "Invalid file drop data");
         }
+    }
+
+    private static unsafe void WriteCommandResponse(saucer_scheme_executor* executor, bool ok, string data, string? origin)
+    {
+        var bodyBytes = Encoding.UTF8.GetBytes(data);
+        saucer_stash* stash;
+        if (bodyBytes.Length > 0)
+        {
+            fixed (byte* bodyPtr = bodyBytes)
+                stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)bodyBytes.Length);
+        }
+        else
+        {
+            stash = Saucer.saucer_stash_new_empty();
+        }
+
+        Span<byte> mimeBuf = stackalloc byte[32];
+        var mime = Utf8String.Create(ok ? "application/json" : "text/plain", mimeBuf);
+        var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
+        Saucer.saucer_scheme_response_set_status(response, ok ? 200 : 500);
+        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? "ryn://app");
+        AppendHeader(response, "Vary", "Origin");
+        AppendHeader(response, "X-Content-Type-Options", "nosniff");
+        Saucer.saucer_scheme_executor_accept(executor, response);
+        Saucer.saucer_scheme_response_free(response);
+        Saucer.saucer_stash_free(stash);
+        mime.Dispose();
     }
 
     private unsafe void ExecuteOnUiThread(string js)
@@ -635,6 +761,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
         Saucer.saucer_scheme_response_set_status(response, rynResponse.StatusCode);
         AppendHeader(response, "Access-Control-Allow-Origin", "*");
         Saucer.saucer_scheme_executor_accept(executor, response);
+        Saucer.saucer_scheme_response_free(response);
+        Saucer.saucer_stash_free(stash);
         mime.Dispose();
     }
 
@@ -646,6 +774,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
         var response = Saucer.saucer_scheme_response_new(emptyStash, mime.Pointer);
         AppendCorsHeaders(response, origin);
         Saucer.saucer_scheme_executor_accept(executor, response);
+        Saucer.saucer_scheme_response_free(response);
+        Saucer.saucer_stash_free(emptyStash);
         mime.Dispose();
     }
 
@@ -659,6 +789,8 @@ public sealed class RynWebView : IRynWebView, IDisposable
         AppendHeader(response, "Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         AppendHeader(response, "Access-Control-Allow-Headers", "Content-Type");
         Saucer.saucer_scheme_executor_accept(executor, response);
+        Saucer.saucer_scheme_response_free(response);
+        Saucer.saucer_stash_free(emptyStash);
         mime.Dispose();
     }
 
@@ -707,11 +839,19 @@ public sealed class RynWebView : IRynWebView, IDisposable
         var stash = Saucer.saucer_scheme_request_content(request);
         if (stash == null) return string.Empty;
 
-        var size = Saucer.saucer_stash_size(stash);
-        if (size == 0) return string.Empty;
+        // saucer_scheme_request_content allocates a new stash that we own and must free.
+        try
+        {
+            var size = Saucer.saucer_stash_size(stash);
+            if (size == 0) return string.Empty;
 
-        var data = Saucer.saucer_stash_data(stash);
-        return Encoding.UTF8.GetString(data, (int)size);
+            var data = Saucer.saucer_stash_data(stash);
+            return Encoding.UTF8.GetString(data, (int)size);
+        }
+        finally
+        {
+            Saucer.saucer_stash_free(stash);
+        }
     }
 
     internal static string EscapeForJs(string value) =>

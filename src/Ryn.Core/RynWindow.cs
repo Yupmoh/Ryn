@@ -78,13 +78,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         set
         {
             _cachedTitle = value;
-            if (_window != null)
+            RunOnUi(() =>
             {
+                if (_window == null) return;
                 Span<byte> buf = stackalloc byte[256];
                 var str = Utf8String.Create(value, buf);
                 Saucer.saucer_window_set_title(_window, str.Pointer);
                 str.Dispose();
-            }
+            });
         }
     }
 
@@ -94,8 +95,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         set
         {
             _cachedWidth = value;
-            if (_window != null)
-                Saucer.saucer_window_set_size(_window, value, _cachedHeight);
+            RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_size(_window, value, _cachedHeight); });
         }
     }
 
@@ -105,8 +105,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         set
         {
             _cachedHeight = value;
-            if (_window != null)
-                Saucer.saucer_window_set_size(_window, _cachedWidth, value);
+            RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_size(_window, _cachedWidth, value); });
         }
     }
 
@@ -116,26 +115,25 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         set
         {
             _cachedResizable = value;
-            if (_window != null)
-                Saucer.saucer_window_set_resizable(_window, (byte)(value ? 1 : 0));
+            RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_resizable(_window, (byte)(value ? 1 : 0)); });
         }
     }
 
     public ValueTask ShowAsync(CancellationToken cancellationToken = default)
     {
-        if (_window != null) Saucer.saucer_window_show(_window);
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_show(_window); });
         return ValueTask.CompletedTask;
     }
 
     public ValueTask HideAsync(CancellationToken cancellationToken = default)
     {
-        if (_window != null) Saucer.saucer_window_hide(_window);
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_hide(_window); });
         return ValueTask.CompletedTask;
     }
 
     public ValueTask CloseAsync(CancellationToken cancellationToken = default)
     {
-        if (_window != null) Saucer.saucer_window_close(_window);
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_close(_window); });
         return ValueTask.CompletedTask;
     }
 
@@ -152,22 +150,47 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default) =>
         _rynWebView?.EvaluateJavaScriptAsync(script, cancellationToken) ?? new ValueTask<string>(string.Empty);
 
-    public unsafe void Close() { if (_window != null) Saucer.saucer_window_close(_window); }
+    public void Close() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_close(_window); });
 
-    public unsafe void Minimize() { if (_window != null) Saucer.saucer_window_set_minimized(_window, 1); }
+    public void Minimize() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_minimized(_window, 1); });
 
-    public unsafe void ToggleMaximize()
+    public void ToggleMaximize() => RunOnUi(() =>
     {
         if (_window != null)
         {
             var isMax = Saucer.saucer_window_maximized(_window) != 0;
             Saucer.saucer_window_set_maximized(_window, (byte)(isMax ? 0 : 1));
         }
+    });
+
+    public void StartDrag() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_drag(_window); });
+
+    public void StartResize(WindowEdge edge) => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); });
+
+    /// <summary>
+    /// Marshals a native window operation onto saucer's UI thread. Native window/AppKit calls are not
+    /// thread-safe, so all mutating operations are posted to the application loop (a no-op deferral when
+    /// already on the UI thread). Safe to call from any thread.
+    /// </summary>
+    private unsafe void RunOnUi(Action action)
+    {
+        if (_disposed || _app == null)
+            return;
+
+        var data = NativeCallbackHelper.Alloc(action);
+        Saucer.saucer_application_post(
+            _app,
+            (delegate* unmanaged[Cdecl]<void*, void>)&RunPostedWindowAction,
+            data);
     }
 
-    public unsafe void StartDrag() { if (_window != null) Saucer.saucer_window_start_drag(_window); }
-
-    public unsafe void StartResize(WindowEdge edge) { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void RunPostedWindowAction(void* userdata)
+    {
+        var action = NativeCallbackHelper.Resolve<Action>(userdata);
+        NativeCallbackHelper.Free(userdata);
+        action();
+    }
 
     internal void Run(CancellationToken cancellationToken)
     {
@@ -251,8 +274,33 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         SubscribeWindowEvents();
         if (_options.Url != null)
         {
+            var url = _options.Url;
+            var isLoopbackDev = url.Scheme == Uri.UriSchemeHttp
+                && (url.IsLoopback || url.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase));
+
+            if (isLoopbackDev)
+            {
+                // Dev-server (e.g. Vite) workflow: the UI is served by an external loopback dev server, so a
+                // relative /ipc POST would hit the dev server (404) and IPC would silently break. Start an
+                // IPC-only Ryn server and point the bridge at it (absolute URL) with CORS for the dev origin.
+                var devOrigin = url.GetLeftPart(UriPartial.Authority);
+                _localServer = new LocalWebServer(contentDirectory: null, useHttps: false, allowedCorsOrigin: devOrigin);
+                _localServer.StartAsync().GetAwaiter().GetResult();
+                _localServer.SetWebView(_rynWebView);
+                var ipcBase = _localServer.Url.TrimEnd('/');
+                _rynWebView.SetAllowedOrigins([devOrigin, ipcBase]);
+                _rynWebView.SetIpcBaseOverride(ipcBase);
+            }
+            else
+            {
+                // Remote content (e.g. your HTTPS website). IPC via window.__ryn.invoke is only wired for
+                // loopback dev URLs / local content; warn the developer rather than failing silently.
+                _rynWebView.WarnInPageConsole(
+                    "Ryn: loaded a remote URL. window.__ryn.invoke (IPC) is only available for loopback dev URLs or local content.");
+            }
+
             Span<byte> urlBuf = stackalloc byte[256];
-            var urlStr = Utf8String.Create(_options.Url.AbsoluteUri, urlBuf);
+            var urlStr = Utf8String.Create(url.AbsoluteUri, urlBuf);
             Saucer.saucer_webview_set_url_str(_webview, urlStr.Pointer);
             urlStr.Dispose();
         }

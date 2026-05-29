@@ -35,7 +35,10 @@ public sealed class TrayService : IDisposable
 
     private void OnIconClicked() => EmitEvent?.Invoke("tray.clicked", "null");
 
-    private void OnMenuItemClicked(string itemId) => EmitEvent?.Invoke("tray.menuItemClicked", $"\"{itemId}\"");
+    // Encode the item id as a proper JSON string (it can contain quotes/backslashes/control chars) rather
+    // than naive concatenation, which would break the payload or allow script injection downstream.
+    private void OnMenuItemClicked(string itemId) =>
+        EmitEvent?.Invoke("tray.menuItemClicked", $"\"{System.Text.Json.JsonEncodedText.Encode(itemId)}\"");
 
     public void Dispose()
     {

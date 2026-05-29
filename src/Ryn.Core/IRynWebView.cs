@@ -18,8 +18,15 @@ public interface IRynWebView
     /// <summary>Registers a handler for a custom URL scheme (e.g. ryn://).</summary>
     public void RegisterCustomScheme(string scheme, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>> handler);
 
-    /// <summary>Emits a named event to the JavaScript side via <c>window.__ryn</c>.</summary>
+    /// <summary>
+    /// Emits a named event to the JavaScript side via <c>window.__ryn</c>. <paramref name="jsonData"/> must
+    /// be a valid JSON value; it is validated and canonicalized to prevent script injection. Prefer the
+    /// strongly-typed <see cref="EmitEvent{T}"/> overload.
+    /// </summary>
     public void EmitEvent(string eventName, string jsonData);
+
+    /// <summary>Emits a strongly-typed event payload serialized via a source-generated JsonTypeInfo (AOT- and injection-safe).</summary>
+    public void EmitEvent<T>(string eventName, T payload, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo);
 
     /// <summary>Fires when files are dropped onto the webview (names only, not full paths).</summary>
     public event EventHandler<FileDropEventArgs>? FileDrop;

@@ -102,8 +102,9 @@ public sealed class EventSystemTests
     [Fact]
     public void EmitEvent_Interface_HasCorrectSignature()
     {
-        // Verify the interface declares EmitEvent with the expected parameters
-        var method = typeof(IRynWebView).GetMethod("EmitEvent");
+        // Verify the interface declares the string EmitEvent overload with the expected parameters.
+        // (There is also a generic EmitEvent<T> overload, so select by parameter types.)
+        var method = typeof(IRynWebView).GetMethod("EmitEvent", [typeof(string), typeof(string)]);
 
         method.Should().NotBeNull();
         var parameters = method!.GetParameters();
