@@ -745,10 +745,10 @@ These are issues discovered during implementation that need to be addressed befo
 
 12. ~~**No CLI tests**~~ **FIXED** — 21 CLI tests now exist
 
-13. **Cross-platform: PARTIAL** (honest status — see README support matrix)
+13. **Cross-platform: macOS + Windows verified; Linux pending** (see README support matrix)
     - macOS (arm64): verified, primary development platform
-    - Windows: reported working by one user; **not** covered by automated GUI tests
-    - Linux: builds + unit-tests in CI, but GUI paths (window/tray/dialogs/pickers) are **not yet verified end-to-end**
+    - Windows: verified in production by the Primal launcher (a real Ryn app); not yet covered by automated GUI tests
+    - Linux: builds + unit-tests in CI, but GUI paths (window/tray/dialogs/pickers) are **not yet verified end-to-end** — the one remaining gap
     - Integration tests now hard-fail in CI if native libs are missing (no more silent skip)
 
 14. ~~**Capability checks don't integrate with plugin options**~~ **FIXED**

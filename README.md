@@ -15,27 +15,27 @@ Ryn gives .NET developers the Tauri experience without leaving C#. Native OS web
 
 ## Status
 
-**Early alpha.** Ryn is developed and tested primarily on **macOS (arm64)**. Windows has been reported working by a user but is not yet covered by automated GUI tests; Linux builds and unit-tests in CI but its GUI paths (window, tray, dialogs, pickers) are not yet verified end-to-end. Treat non-macOS support as experimental until the matrix below fills in.
+**Alpha.** Ryn runs in production on **macOS** and **Windows** — Windows is verified by the Primal launcher, a real desktop app shipping on Ryn. **Linux is the one platform whose GUI paths are not yet verified end-to-end** (it builds and unit-tests in CI; the window/tray/dialog code is written but unproven on a real desktop). Treat Linux as experimental.
 
 ### Platform support matrix
 
-Legend: ✅ verified · 🟡 implemented, not yet GUI-verified · ⚪ not implemented
+Legend: ✅ verified on a real app · 🟡 implemented, not yet GUI-verified · ⚪ not implemented
 
 | Capability | macOS | Windows | Linux |
 |---|:---:|:---:|:---:|
-| Window + WebView (saucer) | ✅ | 🟡 | 🟡 |
-| IPC (`ryn://` scheme + local server) | ✅ | 🟡 | 🟡 |
-| FileSystem plugin | ✅ | 🟡 | 🟡 |
-| Dialogs / file pickers | ✅ (osascript) | 🟡 (PowerShell+WinForms) | 🟡 (zenity/kdialog) |
-| Clipboard (text) | ✅ | 🟡 | 🟡 (X11 via xclip, Wayland via wl-clipboard) |
-| Clipboard (image) | ✅ | 🟡 | 🟡 |
-| Notifications | ✅ | 🟡 | 🟡 (notify-send) |
-| Shell / PTY | ✅ | 🟡 | 🟡 |
-| Tray icon | ✅ | 🟡 | 🟡 (menu-only; no icon-click event) |
-| Auto-updater (signed) | ✅ | 🟡 | 🟡 |
-| NativeAOT publish | ✅ | 🟡 | 🟡 |
+| Window + WebView (saucer) | ✅ | ✅ | 🟡 |
+| IPC (`ryn://` scheme + local server) | ✅ | ✅ | 🟡 |
+| FileSystem plugin | ✅ | ✅ | 🟡 |
+| Dialogs / file pickers | ✅ (osascript) | ✅ (PowerShell+WinForms) | 🟡 (zenity/kdialog) |
+| Clipboard (text) | ✅ | ✅ | 🟡 (X11 via xclip, Wayland via wl-clipboard) |
+| Clipboard (image) | ✅ | ✅ | 🟡 |
+| Notifications | ✅ | ✅ | 🟡 (notify-send) |
+| Shell / PTY | ✅ | ✅ | 🟡 |
+| Tray icon | ✅ | ✅ | 🟡 (menu-only; no icon-click event) |
+| Auto-updater (signed) | ✅ | ✅ | 🟡 |
+| NativeAOT publish | ✅ | ✅ | 🟡 |
 
-Native libraries are currently committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Contributions verifying Windows/Linux GUI paths are very welcome.
+Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Help verifying the Linux GUI paths is very welcome.
 
 ## Installation
 
