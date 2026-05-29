@@ -70,7 +70,9 @@ public sealed partial class RynApplication : IAsyncDisposable
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                System.Diagnostics.Debug.WriteLine($"Plugin '{plugin.Name}' failed to initialize: {ex.Message}");
+                // Log at Error (not Debug.WriteLine, which is a no-op in Release) so a half-initialized
+                // plugin — e.g. a shell allowlist that failed to resolve — is never silent.
+                Log.PluginInitFailed(_logger, plugin.Name, ex);
             }
         }
 
@@ -161,5 +163,8 @@ public sealed partial class RynApplication : IAsyncDisposable
 
         [LoggerMessage(Level = LogLevel.Information, Message = "Ryn application shutting down")]
         public static partial void ShuttingDown(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Plugin '{pluginName}' failed to initialize")]
+        public static partial void PluginInitFailed(ILogger logger, string pluginName, Exception exception);
     }
 }

@@ -150,6 +150,8 @@ public sealed class RynApplicationBuilder
 
     private static void ApplyProgrammaticOverrides(RynOptions target, RynOptions source)
     {
+        // Copy ALL options. Previously several (notably ContentDirectory) were silently dropped, so
+        // `CreateBuilder(new RynOptions { ContentDirectory = "wwwroot" })` was ignored.
         target.ApplicationId = source.ApplicationId;
         target.Title = source.Title;
         target.Width = source.Width;
@@ -159,6 +161,19 @@ public sealed class RynApplicationBuilder
         target.Transparent = source.Transparent;
         target.Url = source.Url;
         target.Html = source.Html;
+        target.ContentDirectory = source.ContentDirectory;
+        target.UseLocalServer = source.UseLocalServer;
+        target.UseHttps = source.UseHttps;
+        target.IconPath = source.IconPath;
         target.DevTools = source.DevTools;
+        target.UseEmbeddedContent = source.UseEmbeddedContent;
+        target.PersistWindowState = source.PersistWindowState;
+
+        // Get-only collections: clear + copy contents rather than reassign.
+        target.DeepLinkSchemes.Clear();
+        foreach (var scheme in source.DeepLinkSchemes) target.DeepLinkSchemes.Add(scheme);
+
+        target.AllowedOrigins.Clear();
+        foreach (var origin in source.AllowedOrigins) target.AllowedOrigins.Add(origin);
     }
 }

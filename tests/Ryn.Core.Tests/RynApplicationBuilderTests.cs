@@ -31,6 +31,45 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_PreservesAllProgrammaticOptions()
+    {
+        // Regression: ApplyProgrammaticOverrides previously copied only 10 of 18 options, silently
+        // dropping ContentDirectory/UseLocalServer/IconPath/collections etc.
+        var options = new RynOptions
+        {
+            ApplicationId = "com.test.app",
+            Title = "Full",
+            Width = 1234,
+            Height = 567,
+            Resizable = false,
+            TitleBarStyle = TitleBarStyle.Hidden,
+            Transparent = true,
+            ContentDirectory = "wwwroot",
+            UseLocalServer = true,
+            UseHttps = true,
+            IconPath = "/tmp/icon.png",
+            DevTools = true,
+            PersistWindowState = true,
+        };
+        options.DeepLinkSchemes.Add("myapp");
+        options.AllowedOrigins.Add("https://example.com");
+
+        var builder = RynApplication.CreateBuilder(options);
+        await using var app = builder.Build();
+        var resolved = app.Services.GetRequiredService<RynOptions>();
+
+        resolved.ContentDirectory.Should().Be("wwwroot");
+        resolved.UseLocalServer.Should().BeTrue();
+        resolved.UseHttps.Should().BeTrue();
+        resolved.IconPath.Should().Be("/tmp/icon.png");
+        resolved.PersistWindowState.Should().BeTrue();
+        resolved.Transparent.Should().BeTrue();
+        resolved.TitleBarStyle.Should().Be(TitleBarStyle.Hidden);
+        resolved.DeepLinkSchemes.Should().ContainSingle().Which.Should().Be("myapp");
+        resolved.AllowedOrigins.Should().ContainSingle().Which.Should().Be("https://example.com");
+    }
+
+    [Fact]
     public async Task Build_RegistersOptionsInDI()
     {
         var options = new RynOptions { Title = "DI Test" };
