@@ -92,12 +92,10 @@ public sealed class RynApplicationBuilder
 
         // 4. Window accessor + interface factories
         _services.AddSingleton<RynWindowAccessor>();
-        _services.AddSingleton<IRynWindow>(sp =>
-            sp.GetRequiredService<RynWindowAccessor>().Window
-            ?? throw new InvalidOperationException("Window is not available. It is only accessible after RunAsync begins."));
-        _services.AddSingleton<IRynWebView>(sp =>
-            (sp.GetRequiredService<RynWindowAccessor>().Window
-            ?? throw new InvalidOperationException("WebView is not available. It is only accessible after RunAsync begins.")).WebView);
+        // Deferred proxies so IRynWindow/IRynWebView can be injected into any service — even ones built
+        // before the native window exists. Members forward to the real window once RunAsync has started.
+        _services.AddSingleton<IRynWindow>(sp => new DeferredRynWindow(sp.GetRequiredService<RynWindowAccessor>()));
+        _services.AddSingleton<IRynWebView>(sp => new DeferredRynWebView(sp.GetRequiredService<RynWindowAccessor>()));
 
         _services.AddSingleton<NativeApplicationAccessor>();
 
@@ -169,6 +167,7 @@ public sealed class RynApplicationBuilder
         target.DevTools = source.DevTools;
         target.UseEmbeddedContent = source.UseEmbeddedContent;
         target.PersistWindowState = source.PersistWindowState;
+        target.CaptureUnhandledExceptions = source.CaptureUnhandledExceptions;
 
         // Get-only collections: clear + copy contents rather than reassign.
         target.DeepLinkSchemes.Clear();

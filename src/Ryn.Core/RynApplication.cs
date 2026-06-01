@@ -53,63 +53,113 @@ public sealed partial class RynApplication : IAsyncDisposable
         Log.Starting(_logger);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Console.CancelKeyPress += (_, e) =>
+
+        // Capture the handler so it can be unsubscribed in finally: otherwise it leaks, stacks on a second
+        // RunAsync, and — because `using` disposes cts on return — a late Ctrl+C would call Cancel() on a
+        // disposed CTS (ObjectDisposedException).
+        ConsoleCancelEventHandler cancelHandler = (_, e) =>
         {
             e.Cancel = true;
-            cts.Cancel();
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
         };
+        Console.CancelKeyPress += cancelHandler;
 
-        foreach (var plugin in _plugins)
+        UnhandledExceptionEventHandler? domainHandler = null;
+        EventHandler<UnobservedTaskExceptionEventArgs>? taskHandler = null;
+
+        try
         {
+            foreach (var plugin in _plugins)
+            {
+                try
+                {
+#pragma warning disable CA1849 // Intentional sync-over-async: no event loop exists yet, so no deadlock risk
+                    plugin.InitializeAsync(cts.Token).AsTask().GetAwaiter().GetResult();
+#pragma warning restore CA1849
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // Log at Error (not Debug.WriteLine, which is a no-op in Release) so a half-initialized
+                    // plugin — e.g. a shell allowlist that failed to resolve — is never silent.
+                    Log.PluginInitFailed(_logger, plugin.Name, ex);
+                }
+            }
+
+            var options = _services.GetRequiredService<RynOptions>();
+
+            // Opt-in process-global exception net: log and surface AppDomain / unobserved-task exceptions
+            // via the UnhandledException event so apps can install a crash logger.
+            if (options.CaptureUnhandledExceptions)
+            {
+                domainHandler = (_, e) => { if (e.ExceptionObject is Exception ex) RaiseUnhandled(ex); };
+                taskHandler = (_, e) => { RaiseUnhandled(e.Exception); e.SetObserved(); };
+                AppDomain.CurrentDomain.UnhandledException += domainHandler;
+                TaskScheduler.UnobservedTaskException += taskHandler;
+            }
+
+            if (options.DeepLinkSchemes.Count > 0)
+            {
+                foreach (var scheme in options.DeepLinkSchemes)
+                    DeepLinkHandler.RegisterScheme(scheme, options.Title);
+
+                var deepLink = DeepLinkHandler.CheckStartupArgs(options.DeepLinkSchemes);
+                if (deepLink is not null)
+                    DeepLinkReceived?.Invoke(this, new DeepLinkEventArgs { Url = deepLink });
+            }
+
+            _window = new RynWindow(options);
+
+            // Wire IPC command dispatcher if registered (before Run, applied during OnReady)
+            var commandHandler = _services.GetService<CommandDispatchHandler>();
+            if (commandHandler is not null)
+            {
+                _window.SetCommandHandler(commandHandler);
+            }
+
+            var accessor = _services.GetRequiredService<RynWindowAccessor>();
+            accessor.Window = _window;
+
+            var nativeAccessor = _services.GetRequiredService<NativeApplicationAccessor>();
+            _window.OnNativeReady = handle => nativeAccessor.ApplicationHandle = handle;
+
+            Log.Running(_logger);
+
             try
             {
-#pragma warning disable CA1849 // Intentional sync-over-async: no event loop exists yet, so no deadlock risk
-                plugin.InitializeAsync(cts.Token).AsTask().GetAwaiter().GetResult();
-#pragma warning restore CA1849
+                _window.Run(cts.Token);
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
+            catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
             {
-                // Log at Error (not Debug.WriteLine, which is a no-op in Release) so a half-initialized
-                // plugin — e.g. a shell allowlist that failed to resolve — is never silent.
-                Log.PluginInitFailed(_logger, plugin.Name, ex);
+                Log.EventLoopFailed(_logger, ex);
+                RaiseUnhandled(ex);
+                throw;
             }
+
+            Log.ShuttingDown(_logger);
         }
-
-        var options = _services.GetRequiredService<RynOptions>();
-
-        if (options.DeepLinkSchemes.Count > 0)
+        finally
         {
-            foreach (var scheme in options.DeepLinkSchemes)
-                DeepLinkHandler.RegisterScheme(scheme, options.Title);
-
-            var deepLink = DeepLinkHandler.CheckStartupArgs(options.DeepLinkSchemes);
-            if (deepLink is not null)
-                DeepLinkReceived?.Invoke(this, new DeepLinkEventArgs { Url = deepLink });
+            Console.CancelKeyPress -= cancelHandler;
+            if (domainHandler is not null) AppDomain.CurrentDomain.UnhandledException -= domainHandler;
+            if (taskHandler is not null) TaskScheduler.UnobservedTaskException -= taskHandler;
         }
-
-        _window = new RynWindow(options);
-
-        // Wire IPC command dispatcher if registered (before Run, applied during OnReady)
-        var commandHandler = _services.GetService<CommandDispatchHandler>();
-        if (commandHandler is not null)
-        {
-            _window.SetCommandHandler(commandHandler);
-        }
-
-        var accessor = _services.GetRequiredService<RynWindowAccessor>();
-        accessor.Window = _window;
-
-        var nativeAccessor = _services.GetRequiredService<NativeApplicationAccessor>();
-        _window.OnNativeReady = handle => nativeAccessor.ApplicationHandle = handle;
-
-        Log.Running(_logger);
-
-        _window.Run(cts.Token);
-
-        Log.ShuttingDown(_logger);
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Raised when an exception escapes the event loop, or (when <see cref="RynOptions.CaptureUnhandledExceptions"/>
+    /// is enabled) for AppDomain-unhandled and unobserved-task exceptions. Use it to install a crash logger.
+    /// </summary>
+    public event EventHandler<RynUnhandledExceptionEventArgs>? UnhandledException;
+
+    private void RaiseUnhandled(Exception exception)
+    {
+        Log.UnhandledException(_logger, exception);
+        try { UnhandledException?.Invoke(this, new RynUnhandledExceptionEventArgs(exception)); }
+        catch (Exception handlerEx) when (handlerEx is not OutOfMemoryException) { }
     }
 
     /// <summary>Synchronous convenience wrapper for <see cref="RunAsync"/>. Blocks the calling thread.</summary>
@@ -166,5 +216,11 @@ public sealed partial class RynApplication : IAsyncDisposable
 
         [LoggerMessage(Level = LogLevel.Error, Message = "Plugin '{pluginName}' failed to initialize")]
         public static partial void PluginInitFailed(ILogger logger, string pluginName, Exception exception);
+
+        [LoggerMessage(Level = LogLevel.Critical, Message = "Ryn event loop terminated with an unhandled exception")]
+        public static partial void EventLoopFailed(ILogger logger, Exception exception);
+
+        [LoggerMessage(Level = LogLevel.Critical, Message = "Unhandled exception")]
+        public static partial void UnhandledException(ILogger logger, Exception exception);
     }
 }

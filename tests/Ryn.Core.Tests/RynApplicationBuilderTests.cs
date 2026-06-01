@@ -50,6 +50,8 @@ public sealed class RynApplicationBuilderTests
             IconPath = "/tmp/icon.png",
             DevTools = true,
             PersistWindowState = true,
+            LocalServerPort = 9123,
+            CaptureUnhandledExceptions = true,
         };
         options.DeepLinkSchemes.Add("myapp");
         options.AllowedOrigins.Add("https://example.com");
@@ -63,6 +65,8 @@ public sealed class RynApplicationBuilderTests
         resolved.UseHttps.Should().BeTrue();
         resolved.IconPath.Should().Be("/tmp/icon.png");
         resolved.PersistWindowState.Should().BeTrue();
+        resolved.LocalServerPort.Should().Be(9123);
+        resolved.CaptureUnhandledExceptions.Should().BeTrue();
         resolved.Transparent.Should().BeTrue();
         resolved.TitleBarStyle.Should().Be(TitleBarStyle.Hidden);
         resolved.DeepLinkSchemes.Should().ContainSingle().Which.Should().Be("myapp");
@@ -185,15 +189,33 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
-    public async Task IRynWindow_ThrowsBeforeRunAsync()
+    public async Task IRynWindow_IsInjectableBeforeRunAsync_ButUsingMembersThrowsClearly()
     {
         var builder = RynApplication.CreateBuilder();
-
         await using var app = builder.Build();
 
-        var act = () => app.Services.GetRequiredService<IRynWindow>();
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*not available*");
+        // Resolving/injecting must NOT throw — that was the footgun (a service built before the window
+        // existed couldn't depend on IRynWindow).
+        var window = app.Services.GetService<IRynWindow>();
+        window.Should().NotBeNull();
+
+        // Subscribing to an event early is buffered (no throw).
+        var act = () => { window!.Closing += (_, _) => { }; };
+        act.Should().NotThrow();
+
+        // But actually using a member before the window exists throws a clear error.
+        var use = () => window!.Title;
+        use.Should().Throw<InvalidOperationException>().WithMessage("*not available*");
+    }
+
+    [Fact]
+    public async Task IRynWebView_IsInjectableBeforeRunAsync()
+    {
+        var builder = RynApplication.CreateBuilder();
+        await using var app = builder.Build();
+
+        var act = () => app.Services.GetRequiredService<IRynWebView>();
+        act.Should().NotThrow();
     }
 
     [Fact]

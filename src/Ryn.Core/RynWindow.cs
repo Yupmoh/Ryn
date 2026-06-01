@@ -120,22 +120,13 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     public ValueTask ShowAsync(CancellationToken cancellationToken = default)
-    {
-        RunOnUi(() => { if (_window != null) Saucer.saucer_window_show(_window); });
-        return ValueTask.CompletedTask;
-    }
+        => new(RunOnUiAsync(() => { if (_window != null) Saucer.saucer_window_show(_window); }));
 
     public ValueTask HideAsync(CancellationToken cancellationToken = default)
-    {
-        RunOnUi(() => { if (_window != null) Saucer.saucer_window_hide(_window); });
-        return ValueTask.CompletedTask;
-    }
+        => new(RunOnUiAsync(() => { if (_window != null) Saucer.saucer_window_hide(_window); }));
 
     public ValueTask CloseAsync(CancellationToken cancellationToken = default)
-    {
-        RunOnUi(() => { if (_window != null) Saucer.saucer_window_close(_window); });
-        return ValueTask.CompletedTask;
-    }
+        => new(RunOnUiAsync(() => { if (_window != null) Saucer.saucer_window_close(_window); }));
 
     public ValueTask WaitForCloseAsync(CancellationToken cancellationToken = default)
     {
@@ -190,6 +181,25 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var action = NativeCallbackHelper.Resolve<Action>(userdata);
         NativeCallbackHelper.Free(userdata);
         action();
+    }
+
+    /// <summary>
+    /// Like <see cref="RunOnUi"/> but returns a Task that completes when the posted action has actually run
+    /// on the UI thread (or faults if it throws) — so Show/Hide/CloseAsync genuinely await execution rather
+    /// than returning a completed task immediately. Completes immediately if the loop isn't running.
+    /// </summary>
+    private Task RunOnUiAsync(Action action)
+    {
+        if (_disposed || _app == null)
+            return Task.CompletedTask;
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RunOnUi(() =>
+        {
+            try { action(); tcs.TrySetResult(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { tcs.TrySetException(ex); }
+        });
+        return tcs.Task;
     }
 
     internal void Run(CancellationToken cancellationToken)

@@ -61,6 +61,13 @@ public sealed class RynOptions
     /// <summary>Whether to automatically save and restore window position and size.</summary>
     public bool PersistWindowState { get; set; }
 
+    /// <summary>
+    /// When true, install process-global handlers for AppDomain-unhandled and unobserved-task exceptions
+    /// (in addition to the event-loop catch), surfaced via <see cref="RynApplication.UnhandledException"/>.
+    /// Lets an app install a crash logger. Default false.
+    /// </summary>
+    public bool CaptureUnhandledExceptions { get; set; }
+
     /// <summary>Custom URL schemes to register for deep linking (e.g., "myapp").</summary>
     public IList<string> DeepLinkSchemes { get; } = new List<string>();
 
