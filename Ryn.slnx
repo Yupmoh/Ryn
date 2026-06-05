@@ -13,6 +13,7 @@
     <Project Path="benchmarks/Ryn.Benchmarks/Ryn.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Ryn/Ryn.csproj" />
     <Project Path="src/Ryn.Cli/Ryn.Cli.csproj" />
     <Project Path="src/Ryn.Core/Ryn.Core.csproj" />
     <Project Path="src/Ryn.Interop/Ryn.Interop.csproj" />
