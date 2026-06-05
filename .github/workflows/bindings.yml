@@ -2,6 +2,7 @@ name: Regenerate Bindings
 
 on:
   push:
+    branches: [main]   # not on version tags — regenerating bindings on a release tag is meaningless
     paths:
       - "vendor/saucer-bindings/**"
       - "build/clangsharp/**"

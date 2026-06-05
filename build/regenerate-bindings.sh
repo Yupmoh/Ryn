@@ -23,9 +23,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
     CLANGSHARP_LIB="$(find ~/.dotnet/tools/.store/clangsharppinvokegenerator -name 'libClangSharp.dylib' 2>/dev/null | head -1)"
 elif [[ "$(uname)" == "Linux" ]]; then
-    LLVM_LIB="$(find /usr/lib -name 'libclang-*.so*' 2>/dev/null | head -1)"
+    # Pick the HIGHEST libclang version — CI runners often ship an older llvm (e.g. 18)
+    # alongside the one we install (21), and ClangSharp must match its own libclang version.
+    LLVM_LIB="$(find /usr/lib -name 'libclang-*.so*' 2>/dev/null | sort -V | tail -1)"
     if [[ -z "$LLVM_LIB" ]]; then
-        LLVM_LIB="$(find /usr/lib64 -name 'libclang*.so*' 2>/dev/null | head -1)"
+        LLVM_LIB="$(find /usr/lib64 -name 'libclang*.so*' 2>/dev/null | sort -V | tail -1)"
     fi
     CLANGSHARP_LIB="$(find ~/.dotnet/tools/.store/clangsharppinvokegenerator -name 'libClangSharp.so' 2>/dev/null | head -1)"
 fi
