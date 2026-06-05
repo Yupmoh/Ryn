@@ -131,7 +131,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public ValueTask WaitForCloseAsync(CancellationToken cancellationToken = default)
     {
         if (cancellationToken.CanBeCanceled)
-            cancellationToken.Register(() => _closeTcs.TrySetCanceled(cancellationToken));
+        {
+            var registration = cancellationToken.Register(() => _closeTcs.TrySetCanceled(cancellationToken));
+            // Release the registration once the window closes (or the wait cancels), so a long-lived token
+            // doesn't accumulate registrations across repeated WaitForCloseAsync calls.
+            _ = _closeTcs.Task.ContinueWith(
+                static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
+                registration, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
         return new ValueTask(_closeTcs.Task);
     }
 

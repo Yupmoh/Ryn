@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -29,6 +30,10 @@ internal sealed class LocalWebServer : IAsyncDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+
+    // Per-connection handler tasks, tracked so DisposeAsync can await them instead of fire-and-forgetting —
+    // otherwise a connection could still be touching the stream/CTS after the server reports itself disposed.
+    private readonly ConcurrentDictionary<Task, byte> _connections = new();
 
     public string Url { get; private set; } = "";
 
@@ -95,7 +100,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
             catch (ObjectDisposedException) { break; }
             catch (SocketException) { continue; }
 
-            _ = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);
+            var connection = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);
+            _connections[connection] = 0;
+            // Self-remove on completion so the set doesn't grow unbounded over a long-lived server.
+            _ = connection.ContinueWith(
+                static (t, state) => ((ConcurrentDictionary<Task, byte>)state!).TryRemove(t, out _),
+                _connections, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 
@@ -481,6 +491,15 @@ internal sealed class LocalWebServer : IAsyncDisposable
         if (_acceptLoop is not null)
         {
             try { await _acceptLoop.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+        }
+
+        // Drain outstanding per-connection handlers so none is still using the stream/CTS after disposal.
+        // Cancellation above unblocks their read loops; their own try/catch swallows IO/socket faults.
+        var pending = _connections.Keys.ToArray();
+        if (pending.Length > 0)
+        {
+            try { await Task.WhenAll(pending).ConfigureAwait(false); }
             catch (OperationCanceledException) { }
         }
 

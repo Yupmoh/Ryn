@@ -158,6 +158,14 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private readonly ConcurrentDictionary<long, TaskCompletionSource<string>> _pendingEvals = new();
     private long _nextEvalId;
 
+    /// <summary>
+    /// Outstanding GCHandles for actions posted to saucer's UI thread via <see cref="ExecuteOnUiThread"/>.
+    /// Normally each is freed by <see cref="ExecutePostedAction"/> when saucer runs it, but that assumes
+    /// saucer always drains posted callbacks. Tracking them lets <see cref="Dispose"/> reclaim any that were
+    /// never executed (e.g. the app quit with callbacks still queued) instead of leaking them.
+    /// </summary>
+    private readonly ConcurrentDictionary<nint, byte> _postedCallbacks = new();
+
     private readonly ConcurrentDictionary<string, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>>> _schemeHandlers = new();
 
     private CommandDispatchHandler? _commandHandler;
@@ -247,16 +255,21 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var id = Interlocked.Increment(ref _nextEvalId);
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        _pendingEvals[id] = tcs;
+
         if (cancellationToken.CanBeCanceled)
         {
-            cancellationToken.Register(() =>
+            var registration = cancellationToken.Register(() =>
             {
                 if (_pendingEvals.TryRemove(id, out var removed))
                     removed.TrySetCanceled(cancellationToken);
             });
+            // Release the registration once the eval settles (resolved, faulted, or cancelled), so a
+            // long-lived token doesn't accumulate one registration per call.
+            _ = tcs.Task.ContinueWith(
+                static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
+                registration, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
-
-        _pendingEvals[id] = tcs;
 
         var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
         ExecuteOnUiThread($"window.__ryn.eval({id},'{base64}')");
@@ -669,27 +682,41 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var webview = _webview;
         var app = _app;
 
-        var callbackData = NativeCallbackHelper.Alloc((Action)(() =>
+        var payload = new PostedAction(this, () =>
         {
             Span<byte> buf = stackalloc byte[256];
             var str = Utf8String.Create(js, buf);
             Saucer.saucer_webview_execute((saucer_webview*)webview, str.Pointer);
             str.Dispose();
-        }));
+        });
+        var callbackData = (nint)NativeCallbackHelper.Alloc(payload);
+        _postedCallbacks[callbackData] = 0;
 
         Saucer.saucer_application_post(
             (saucer_application*)app,
             (delegate* unmanaged[Cdecl]<void*, void>)&ExecutePostedAction,
-            callbackData);
+            (void*)callbackData);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void ExecutePostedAction(void* userdata)
     {
-        var action = NativeCallbackHelper.Resolve<Action>(userdata);
-        NativeCallbackHelper.Free(userdata);
-        action();
+        var handle = (nint)userdata;
+        // Safe to resolve: saucer only invokes posted callbacks while its run loop is alive, and Dispose
+        // (which reclaims leftovers) runs only after that loop has stopped — the two never overlap.
+        var payload = NativeCallbackHelper.Resolve<PostedAction>(userdata);
+
+        // Claim the handle so a Dispose racing at shutdown can't also free it; whoever removes it frees it.
+        if (!payload.Owner._postedCallbacks.TryRemove(handle, out _))
+            return;
+
+        try { payload.Run(); }
+        finally { NativeCallbackHelper.Free(userdata); }
     }
+
+    /// <summary>Pairs an action posted to the UI thread with its owning webview, so the static native
+    /// callback can deregister the GCHandle before freeing it.</summary>
+    private sealed record PostedAction(RynWebView Owner, Action Run);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void OnSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
@@ -878,6 +905,15 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             kvp.Value.TrySetCanceled();
         }
         _pendingEvals.Clear();
+
+        // The saucer run loop has stopped by the time Dispose runs (RynWindow.DisposeNative is invoked after
+        // saucer_application_run returns), so no posted callback can still fire. Reclaim any GCHandles saucer
+        // never executed — ExecutePostedAction is what normally frees them, so without this they would leak.
+        foreach (var handle in _postedCallbacks.Keys)
+        {
+            if (_postedCallbacks.TryRemove(handle, out _))
+                NativeCallbackHelper.Free(handle);
+        }
 
         if (_selfHandle != 0)
         {
