@@ -253,47 +253,71 @@ jobs:
 
   # Unlist the internal "plumbing" packages so only Ryn + plugins + CLI + Templates are visible on
   # nuget.org. The Ryn metapackage still restores them by exact version (unlist is not delete).
-  # Runs as its own job AFTER publishing so it never delays or risks the release. Best-effort:
-  # needs a nuget.org API key with the "Unlist package" scope as the NUGET_API_KEY secret, and is
-  # skipped (and the job stays green) if that secret is absent.
+  # Runs as its own job AFTER publishing so it never delays or risks the release, and is best-effort
+  # (always green). It tries the trusted-publishing OIDC token first — if that token has the Unlist
+  # scope, no stored secret is needed; otherwise it falls back to a nuget.org API key with the
+  # "Unlist" scope supplied as the NUGET_API_KEY secret. The next release's logs show which worked.
   unlist-plumbing:
     needs: release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # mint a trusted-publishing token to try unlisting without a stored key
     steps:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
-      - name: Unlist plumbing packages
+      # Wait BEFORE minting the token (it's short-lived): a freshly pushed package can't be unlisted
+      # until NuGet validates it. They validate roughly in parallel, so only the first wait is long.
+      - name: Wait for packages to validate
         shell: bash
-        env:
-          NUGET_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          set +e
-          if [ -z "$NUGET_KEY" ]; then
-            echo "NUGET_API_KEY secret not set — skipping unlist."
-            echo "To enable: create a nuget.org API key with the 'Unlist package' scope (glob Ryn.*),"
-            echo "then add it as the NUGET_API_KEY repository secret."
-            exit 0
-          fi
           VERSION="${GITHUB_REF_NAME#v}"
-          for pkg in Ryn.Core Ryn.Ipc Ryn.Interop Ryn.Ipc.Generator; do
-            lc=$(echo "$pkg" | tr '[:upper:]' '[:lower:]')
-            # A freshly pushed package can't be unlisted until NuGet validates it — wait for it to
-            # appear in the flat-container index (they validate roughly in parallel, so only the
-            # first wait is long).
-            echo "Waiting for $pkg $VERSION to finish validating on NuGet..."
+          for lc in ryn.core ryn.ipc ryn.interop ryn.ipc.generator; do
+            echo "Waiting for $lc $VERSION to finish validating on NuGet..."
             for i in $(seq 1 20); do
               if curl -sf "https://api.nuget.org/v3-flatcontainer/$lc/index.json" | grep -q "\"$VERSION\""; then
-                echo "  $pkg $VERSION is live"; break
+                echo "  $lc $VERSION is live"; break
               fi
               sleep 30
             done
-            if dotnet nuget delete "$pkg" "$VERSION" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_KEY" --non-interactive; then
-              echo "Unlisted $pkg $VERSION"
-            else
-              echo "Could not unlist $pkg $VERSION automatically — unlist it manually if needed."
+          done
+
+      - name: Authenticate to NuGet (trusted publishing)
+        id: login
+        continue-on-error: true
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Unlist plumbing packages
+        shell: bash
+        env:
+          TP_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          FALLBACK_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set +e
+          SRC=https://api.nuget.org/v3/index.json
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$TP_KEY" ] && [ -z "$FALLBACK_KEY" ]; then
+            echo "No key available (trusted-publishing login failed and NUGET_API_KEY not set) — skipping."
+            exit 0
+          fi
+          for pkg in Ryn.Core Ryn.Ipc Ryn.Interop Ryn.Ipc.Generator; do
+            ok=false
+            # 1) trusted-publishing token (no stored secret needed if it carries the Unlist scope)
+            if [ -n "$TP_KEY" ] && \
+               dotnet nuget delete "$pkg" "$VERSION" --source "$SRC" --api-key "$TP_KEY" --non-interactive; then
+              echo "Unlisted $pkg $VERSION (trusted-publishing token)"; ok=true
+            elif [ -n "$TP_KEY" ]; then
+              echo "  trusted-publishing token could not unlist $pkg (likely no Unlist scope)"
             fi
+            # 2) fall back to the dedicated unlist key
+            if [ "$ok" = false ] && [ -n "$FALLBACK_KEY" ] && \
+               dotnet nuget delete "$pkg" "$VERSION" --source "$SRC" --api-key "$FALLBACK_KEY" --non-interactive; then
+              echo "Unlisted $pkg $VERSION (NUGET_API_KEY)"; ok=true
+            fi
+            [ "$ok" = true ] || echo "Could not unlist $pkg $VERSION — unlist it manually if needed."
           done
           exit 0
