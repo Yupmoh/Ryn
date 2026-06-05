@@ -44,9 +44,10 @@ Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built 
 ```bash
 dotnet new console -n MyApp
 cd MyApp
-dotnet add package Ryn.Core
-dotnet add package Ryn.Ipc
+dotnet add package Ryn
 ```
+
+The `Ryn` package bundles the whole framework — `Ryn.Core`, `Ryn.Ipc` (with the `[RynCommand]` source generator), and `Ryn.Interop` (with the native webview libraries) — in a single reference. The individual packages (`Ryn.Core`, `Ryn.Ipc`, `Ryn.Interop`) are also published if you prefer to reference them à la carte.
 
 Add plugins as needed:
 
@@ -249,6 +250,7 @@ Output:
 
 ```
 src/
+  Ryn                  — Bundle package: Core + Ipc + Interop in one PackageReference
   Ryn.Core             — Window management, app lifecycle, configuration, events
   Ryn.Interop          — Auto-generated saucer C bindings via ClangSharp
   Ryn.Ipc              — JS <> C# IPC bridge, source generator, capabilities, observability
@@ -256,7 +258,7 @@ src/
   Ryn.Cli              — CLI: new, dev, build, bundle, doctor
 samples/               — 8 example applications
 templates/             — dotnet new template pack
-tests/                 — 158 xUnit tests across 6 test projects
+tests/                 — 200+ xUnit tests across 7 test projects
 benchmarks/            — BenchmarkDotNet suites (IPC, marshaling, JSON, escaping)
 docs/
   plan/PLAN.md         — Full project plan with milestone tracking
