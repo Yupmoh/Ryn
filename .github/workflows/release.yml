@@ -28,13 +28,13 @@ jobs:
       id-token: write    # OIDC token for NuGet trusted publishing
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0   # MinVer derives the package version from the tag + history
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -107,34 +107,24 @@ jobs:
           CONTENTS=$(unzip -l "$INTEROP_PKG" | grep "runtimes/")
           echo "$CONTENTS"
 
-          for RID in osx-arm64 linux-x64 win-x64; do
-            if echo "$CONTENTS" | grep -q "runtimes/${RID}/native/"; then
-              echo "OK: $RID native assets present"
-            else
-              echo "FATAL: $RID native assets missing from package"
-              exit 1
-            fi
-          done
+          # Per-RID: every required native file must be present under that RID's native/ dir.
+          # The saucer engine (saucer) is included explicitly so a missing-engine regression
+          # (which shipped before) fails the release loudly instead of slipping through.
+          check_rid() {
+            local rid="$1"; shift
+            for f in "$@"; do
+              if echo "$CONTENTS" | grep -qF "runtimes/${rid}/native/${f}"; then
+                echo "OK: ${rid}/${f}"
+              else
+                echo "FATAL: ${rid}/${f} missing from package"
+                exit 1
+              fi
+            done
+          }
 
-          # Verify specific expected libraries
-          for LIB in saucer-bindings saucer-bindings-desktop; do
-            if echo "$CONTENTS" | grep -q "$LIB"; then
-              echo "OK: $LIB found"
-            else
-              echo "FATAL: $LIB missing from package"
-              exit 1
-            fi
-          done
-
-          # ryn-pty required on Unix RIDs
-          for RID in osx-arm64 linux-x64; do
-            if echo "$CONTENTS" | grep -q "runtimes/${RID}/native/.*ryn-pty"; then
-              echo "OK: ryn-pty found for $RID"
-            else
-              echo "FATAL: ryn-pty missing for $RID"
-              exit 1
-            fi
-          done
+          check_rid osx-arm64 libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib
+          check_rid linux-x64 libsaucer.so    libsaucer-bindings.so    libsaucer-bindings-desktop.so    libryn-pty.so
+          check_rid win-x64   saucer.dll      saucer-bindings.dll      saucer-bindings-desktop.dll      WebView2Loader.dll
 
       # Trusted publishing: exchange the GitHub OIDC token for a short-lived NuGet API key.
       # No long-lived secret — configure a trusted publisher policy on NuGet.org instead
@@ -149,7 +139,7 @@ jobs:
         run: dotnet nuget push "./nupkg/*.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: "./nupkg/*.nupkg"
