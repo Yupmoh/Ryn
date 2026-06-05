@@ -53,7 +53,10 @@ public sealed class RynCommandGenerator : IIncrementalGenerator
             var source = Emitter.Emit(group, ctx);
             if (source is not null)
             {
-                ctx.AddSource($"{group.TypeName}Router.g.cs", source);
+                // Qualify the hint name with the full (namespace-prefixed) type name. Using only the simple
+                // type name collides when two command classes share a name across namespaces — Roslyn
+                // requires hint names to be unique per generator, so the second AddSource would throw.
+                ctx.AddSource($"{HintName(group.TypeFullName)}Router.g.cs", source);
             }
         });
 
@@ -234,6 +237,23 @@ public sealed class RynCommandGenerator : IIncrementalGenerator
             ReturnNullableUnderlyingSpecialType: returnNullableUnderlyingSpecialType,
             JsonContextTypeFullName: jsonContextTypeFullName,
             Location: new LocationInfo(location));
+    }
+
+    /// <summary>
+    /// Turns a fully-qualified type name (e.g. <c>global::App.Foo.Commands</c>) into a unique, file-name-safe
+    /// hint-name stem (<c>App.Foo.Commands</c>). Strips the <c>global::</c> prefix and replaces any character
+    /// that is not a letter, digit, dot, or underscore.
+    /// </summary>
+    private static string HintName(string typeFullName)
+    {
+        var name = typeFullName.StartsWith("global::", StringComparison.Ordinal)
+            ? typeFullName.Substring("global::".Length)
+            : typeFullName;
+
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+            sb.Append(char.IsLetterOrDigit(c) || c == '.' || c == '_' ? c : '_');
+        return sb.ToString();
     }
 
     private static bool IsCancellationToken(ITypeSymbol type) =>

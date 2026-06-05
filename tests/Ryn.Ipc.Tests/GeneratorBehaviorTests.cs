@@ -106,6 +106,31 @@ public sealed class GeneratorBehaviorTests
         diagnostics.Where(d => d.Id is "RYN006").Should().BeEmpty();
     }
 
+    [Fact]
+    public void SameTypeName_InDifferentNamespaces_ProducesDistinctRouters()
+    {
+        // Two command classes both named `Commands` in different namespaces. The hint name used to be the
+        // simple type name, so both emitted `CommandsRouter.g.cs` — a duplicate-hint-name collision that
+        // made the generator throw. Qualifying the hint name with the namespace keeps them distinct.
+        var (sources, diagnostics) = Run("""
+            using Ryn.Ipc;
+            namespace App.Alpha { public class Commands { [RynCommand("alpha.ping")] public static int Ping() => 1; } }
+            namespace App.Beta  { public class Commands { [RynCommand("beta.ping")]  public static int Ping() => 2; } }
+            """);
+
+        diagnostics.Where(d => d.Severity is DiagnosticSeverity.Error).Should().BeEmpty();
+
+        var routers = sources
+            .Where(s => s.HintName.Contains("Router", System.StringComparison.Ordinal))
+            .ToArray();
+        routers.Should().HaveCount(2);
+        routers.Select(r => r.HintName).Distinct(System.StringComparer.Ordinal).Should().HaveCount(2);
+
+        var allRouterSource = string.Join("\n", routers.Select(r => r.Source));
+        allRouterSource.Should().Contain("case \"alpha.ping\":");
+        allRouterSource.Should().Contain("case \"beta.ping\":");
+    }
+
     private static (System.Collections.Generic.IReadOnlyList<(string HintName, string Source)> Sources,
         System.Collections.Generic.IReadOnlyList<Diagnostic> Diagnostics) Run(string source)
     {
