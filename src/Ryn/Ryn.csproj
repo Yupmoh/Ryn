@@ -2,55 +2,26 @@
   <PropertyGroup>
     <RootNamespace>Ryn</RootNamespace>
     <PackageId>Ryn</PackageId>
-    <Description>Rich Yet Native — build cross-platform .NET desktop apps with web UIs. One package that bundles Ryn.Core, Ryn.Ipc, Ryn.Interop (with native webview libraries), and the [RynCommand] IPC source generator.</Description>
+    <Description>Rich Yet Native — build cross-platform .NET desktop apps with web UIs. One package for the whole framework: it pulls in Ryn.Core, Ryn.Ipc (with the [RynCommand] source generator), and Ryn.Interop (with the native webview libraries).</Description>
     <PackageTags>ryn;desktop;webview;native;cross-platform;tauri</PackageTags>
 
-    <!-- This project has no code of its own; it re-packages the framework assemblies into one
-         NuGet package, so don't pack the (empty) Ryn.dll build output. -->
+    <!-- Metapackage: no code of its own — referencing Ryn pulls in the framework packages.
+         The IPC source generator ships from exactly one place (Ryn.Ipc) and the native webview
+         libraries from Ryn.Interop, both flowing in transitively. (A merged package that bundled
+         the assemblies would have to embed its own copy of the generator, which then collides with
+         Ryn.Ipc's copy when a plugin is also referenced — two generators, duplicate code.) -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <!-- Bundled DLLs and the analyzer are added to the package by the target below. -->
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackRynAssemblies</TargetsForTfmSpecificContentInPackage>
-    <!-- An empty assembly trips the trim/AOT analyzers for nothing. -->
     <IsAotCompatible>false</IsAotCompatible>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <!-- NU5128: a metapackage legitimately has dependencies but no lib/ assemblies. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
 
-  <!-- Build the framework projects so their DLLs land in this project's output, but keep them OUT
-       of the package's dependency list (PrivateAssets=all) — their assemblies are bundled instead. -->
+  <!-- Plain project references become package dependencies, so a consumer that references Ryn gets
+       Ryn.Core, Ryn.Ipc and Ryn.Interop automatically. -->
   <ItemGroup>
-    <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" />
   </ItemGroup>
-
-  <!-- Third-party runtime dependencies the bundled assemblies need. These must be real package
-       dependencies (the project refs above contribute none, being PrivateAssets=all). The
-       *.Abstractions packages come in transitively via these. -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-  </ItemGroup>
-
-  <!-- Native webview libraries + the targets that copy them into a consumer's output.
-       Same layout and mechanism as Ryn.Interop; the targets file is renamed to Ryn.targets so
-       NuGet auto-imports it for the Ryn package id. -->
-  <ItemGroup>
-    <None Include="..\Ryn.Interop\runtimes\**\*" Pack="true" PackagePath="runtimes\%(RecursiveDir)%(Filename)%(Extension)" />
-    <None Include="..\Ryn.Interop\Ryn.Interop.targets" Pack="true" PackagePath="buildTransitive\Ryn.targets" />
-    <None Include="..\Ryn.Interop\Ryn.Interop.targets" Pack="true" PackagePath="build\Ryn.targets" />
-  </ItemGroup>
-
-  <Target Name="_PackRynAssemblies" DependsOnTargets="BuildOnlySettings;ResolveReferences">
-    <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)Ryn.Core.dll" PackagePath="lib/$(TargetFramework)" />
-      <TfmSpecificPackageFile Include="$(OutputPath)Ryn.Ipc.dll" PackagePath="lib/$(TargetFramework)" />
-      <TfmSpecificPackageFile Include="$(OutputPath)Ryn.Interop.dll" PackagePath="lib/$(TargetFramework)" />
-      <TfmSpecificPackageFile Include="$(MSBuildThisFileDirectory)../Ryn.Ipc.Generator/bin/$(Configuration)/netstandard2.0/Ryn.Ipc.Generator.dll"
-                              PackagePath="analyzers/dotnet/cs" />
-    </ItemGroup>
-  </Target>
 </Project>

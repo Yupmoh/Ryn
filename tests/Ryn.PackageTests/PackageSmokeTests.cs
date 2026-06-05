@@ -16,9 +16,14 @@ public sealed class PackageSmokeTests : IDisposable
         var packOutputDir = CreateTempDir("ryn-pack");
         var appDir = CreateTempDir("ryn-smoke-app");
 
-        // Step 1: Pack the required projects into local nupkgs.
-        // We pack individual projects rather than the full solution to avoid unrelated
-        // build errors in samples/CLI and to keep the test focused.
+        // Unique version per run so a stale copy in the global NuGet cache can never satisfy the
+        // restore (reusing a fixed version masks packaging changes — exactly how the duplicate
+        // generator hid for a while).
+        var version = "99.0.0-test" + Guid.NewGuid().ToString("N")[..8];
+
+        // Pack the metapackage (Ryn) and a plugin, plus everything they depend on. Referencing
+        // Ryn + a plugin is the supported app shape AND the case that regressed: the IPC source
+        // generator must come through exactly once (it ships only in Ryn.Ipc).
 #pragma warning disable CA2007 // xUnit manages SynchronizationContext
         string[] projectsToPack =
         [
@@ -26,6 +31,8 @@ public sealed class PackageSmokeTests : IDisposable
             Path.Combine(solutionRoot, "src", "Ryn.Ipc.Generator", "Ryn.Ipc.Generator.csproj"),
             Path.Combine(solutionRoot, "src", "Ryn.Core", "Ryn.Core.csproj"),
             Path.Combine(solutionRoot, "src", "Ryn.Ipc", "Ryn.Ipc.csproj"),
+            Path.Combine(solutionRoot, "src", "Ryn", "Ryn.csproj"),
+            Path.Combine(solutionRoot, "src", "Ryn.Plugins.Clipboard", "Ryn.Plugins.Clipboard.csproj"),
         ];
 
         foreach (var project in projectsToPack)
@@ -34,70 +41,65 @@ public sealed class PackageSmokeTests : IDisposable
                 solutionRoot,
                 "pack", project,
                 "-c", "Release",
-                "-p:VersionPrefix=99.0.0-test",
-                "-p:VersionSuffix=",
-                "-p:PackageReadmeFile=",
+                $"-p:MinVerVersionOverride={version}",
                 "-o", packOutputDir);
 
             packResult.ExitCode.Should().Be(0,
                 $"dotnet pack {Path.GetFileName(project)} failed:\n{packResult.Output}");
         }
 
-        // Verify expected packages were produced
-        var nupkgs = Directory.GetFiles(packOutputDir, "*.nupkg");
-        nupkgs.Should().Contain(f => Path.GetFileName(f).StartsWith("Ryn.Core.", StringComparison.Ordinal));
-        nupkgs.Should().Contain(f => Path.GetFileName(f).StartsWith("Ryn.Ipc.", StringComparison.Ordinal));
+        // Verify the metapackage and plugin were produced
+        var nupkgs = Directory.GetFiles(packOutputDir, "*.nupkg").Select(Path.GetFileName).ToList();
+        nupkgs.Should().Contain($"Ryn.{version}.nupkg");
+        nupkgs.Should().Contain($"Ryn.Plugins.Clipboard.{version}.nupkg");
 
-        // Step 2: Create a minimal consumer app
-        WriteTempApp(appDir, packOutputDir);
+        // Create a minimal consumer that references ONLY Ryn + the plugin
+        WriteTempApp(appDir, packOutputDir, version);
 
-        // Step 3: Build the consumer app
+        // Build it. If the generator were shipped twice, this fails with CS0101/CS0111
+        // (duplicate AddCommands); if it didn't flow at all, AddCommands wouldn't resolve.
         var buildResult = await RunDotnetAsync(appDir, "build", "-c", "Release");
-
         buildResult.ExitCode.Should().Be(0, $"dotnet build failed:\n{buildResult.Output}");
 
-        // Step 4: Verify the source generator produced a router file
+        // The source generator produced exactly one router
         var generatedFiles = Directory.GetFiles(
-            Path.Combine(appDir, "obj"),
-            "*Router.g.cs",
-            SearchOption.AllDirectories);
+            Path.Combine(appDir, "obj"), "*Router.g.cs", SearchOption.AllDirectories);
+        generatedFiles.Should().ContainSingle(
+            "the generator should emit exactly one Router.g.cs (two = the duplicate-generator bug)");
 
-        generatedFiles.Should().NotBeEmpty(
-            "the source generator should emit a Router.g.cs file for the Commands class");
-
-        // Verify the generated file has meaningful content
         var routerContent = await File.ReadAllTextAsync(generatedFiles[0]);
         routerContent.Should().Contain("ICommandRouter", "the router should implement ICommandRouter");
         routerContent.Should().Contain("greet", "the router should handle the 'greet' command");
 
-        // Step 5: Verify runtime native assets layout is correct (when present)
-        // Native libs are gitignored and may not be present in CI builds.
-        // The buildTransitive targets file must exist in the package; actual
-        // native files are only available after downloading from releases.
         var outputDir = Path.Combine(appDir, "bin", "Release", "net10.0");
         Directory.Exists(outputDir).Should().BeTrue("the build should produce output in bin/Release/net10.0");
 #pragma warning restore CA2007
     }
 
-    private static void WriteTempApp(string appDir, string feedDir)
+    private static void WriteTempApp(string appDir, string feedDir, string version)
     {
-        // nuget.config — local feed only, no nuget.org
+        // nuget.config — local feed + nuget.org (for the Microsoft.Extensions transitive deps);
+        // an isolated packages folder so the run never touches/poisons the global cache.
         var nugetConfig = """
             <?xml version="1.0" encoding="utf-8"?>
             <configuration>
+              <config>
+                <add key="globalPackagesFolder" value="packages" />
+              </config>
               <packageSources>
                 <clear />
                 <add key="local" value="FEED_DIR" />
+                <add key="nuget" value="https://api.nuget.org/v3/index.json" />
               </packageSources>
             </configuration>
             """.Replace("FEED_DIR", feedDir, StringComparison.Ordinal);
 
         File.WriteAllText(Path.Combine(appDir, "nuget.config"), nugetConfig);
 
-        // .csproj — references Ryn packages from the local feed
+        // .csproj — references ONLY Ryn + a plugin (the supported app shape)
         File.WriteAllText(
             Path.Combine(appDir, "SmokeApp.csproj"),
-            """
+            $"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
                 <OutputType>Exe</OutputType>
@@ -107,17 +109,16 @@ public sealed class PackageSmokeTests : IDisposable
                 <ImplicitUsings>enable</ImplicitUsings>
                 <!-- Write source-generator output to disk so the test can inspect it -->
                 <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-                <!-- Suppress warnings that don't matter for a smoke test -->
                 <NoWarn>CA1812;CA1852</NoWarn>
               </PropertyGroup>
               <ItemGroup>
-                <PackageReference Include="Ryn.Core" Version="99.0.0-test" />
-                <PackageReference Include="Ryn.Ipc" Version="99.0.0-test" />
+                <PackageReference Include="Ryn" Version="{version}" />
+                <PackageReference Include="Ryn.Plugins.Clipboard" Version="{version}" />
               </ItemGroup>
             </Project>
             """);
 
-        // Program.cs — minimal app that exercises RynApplication + generated DI
+        // Program.cs — exercises RynApplication + the generated DI extension
         File.WriteAllText(
             Path.Combine(appDir, "Program.cs"),
             """
@@ -134,7 +135,7 @@ public sealed class PackageSmokeTests : IDisposable
                 .Build();
             """);
 
-        // Commands.cs — has a [RynCommand] method so the generator has work to do
+        // Commands.cs — a [RynCommand] method so the generator has work to do
         File.WriteAllText(
             Path.Combine(appDir, "Commands.cs"),
             """
