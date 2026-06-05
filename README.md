@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
-    <img alt="ryn — Rich Yet Native" src="assets/logo-light.png" width="460">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Yupmoh/ryn-assets/main/logo.png">
+    <img alt="ryn — Rich Yet Native" src="https://raw.githubusercontent.com/Yupmoh/ryn-assets/main/logo-light.png" width="460">
   </picture>
 </p>
 
