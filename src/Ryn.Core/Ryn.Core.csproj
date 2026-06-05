@@ -30,4 +30,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" />
   </ItemGroup>
+
+  <!-- Default Ryn app icon, embedded so RynWindow can apply it when an app sets no IconPath. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/ryn-icon.png">
+      <LogicalName>Ryn.Core.ryn-icon.png</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

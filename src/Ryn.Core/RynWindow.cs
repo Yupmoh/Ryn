@@ -371,7 +371,64 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             iconStr.Dispose();
             if (icon != null && iconError == 0) { Saucer.saucer_window_set_icon(_window, icon); Saucer.saucer_icon_free(icon); }
         }
+        else
+        {
+            ApplyDefaultIcon();
+        }
         if (_options.DevTools) { Saucer.saucer_webview_set_dev_tools(_webview, 1); Saucer.saucer_webview_set_context_menu(_webview, 1); }
+    }
+
+    private static byte[]? _defaultIconBytes;
+    private static bool _defaultIconLoaded;
+
+    /// <summary>
+    /// Sets the bundled Ryn icon as the window/taskbar icon when the app hasn't supplied its own via
+    /// <see cref="RynOptions.IconPath"/>. The PNG is embedded in this assembly and loaded from memory
+    /// (no temp file) through a saucer stash, so every Ryn app gets a branded default.
+    /// </summary>
+    private void ApplyDefaultIcon()
+    {
+        var data = DefaultIconBytes;
+        if (data is null || data.Length == 0 || _window == null)
+            return;
+
+        fixed (byte* ptr = data)
+        {
+            var stash = Saucer.saucer_stash_new_from(ptr, (nuint)data.Length);
+            int iconError;
+            System.Runtime.CompilerServices.Unsafe.SkipInit(out iconError);
+            var icon = Saucer.saucer_icon_new_from_stash(stash, &iconError);
+            if (icon != null && iconError == 0)
+            {
+                Saucer.saucer_window_set_icon(_window, icon);
+                Saucer.saucer_icon_free(icon);
+            }
+            // saucer copies the stash data into the icon; we still own and must free the stash.
+            Saucer.saucer_stash_free(stash);
+        }
+    }
+
+    private static byte[]? DefaultIconBytes
+    {
+        get
+        {
+            if (!_defaultIconLoaded)
+            {
+                _defaultIconLoaded = true;
+                try
+                {
+                    using var stream = typeof(RynWindow).Assembly.GetManifestResourceStream("Ryn.Core.ryn-icon.png");
+                    if (stream is not null)
+                    {
+                        using var ms = new MemoryStream();
+                        stream.CopyTo(ms);
+                        _defaultIconBytes = ms.ToArray();
+                    }
+                }
+                catch (IOException) { /* fall back to no default icon */ }
+            }
+            return _defaultIconBytes;
+        }
     }
 
     private void InjectTitleBarInsets()
