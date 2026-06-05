@@ -1,6 +1,13 @@
-# Ryn
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
+    <img alt="ryn — Rich Yet Native" src="assets/logo-light.png" width="460">
+  </picture>
+</p>
 
-**Rich Yet Native** — A cross-platform, lightweight .NET framework for building desktop applications with web UIs.
+<p align="center">
+  <strong>Rich Yet Native</strong> — a cross-platform, lightweight .NET framework for building desktop applications with web UIs.
+</p>
 
 Ryn gives .NET developers the Tauri experience without leaving C#. Native OS webviews, HTML/JS or Blazor frontends, NativeAOT-ready, source-generated IPC.
 
