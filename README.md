@@ -6,6 +6,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Yupmoh/Ryn/actions/workflows/build.yml"><img alt="Build &amp; Test" src="https://github.com/Yupmoh/Ryn/actions/workflows/build.yml/badge.svg"></a>
+  <a href="https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml"><img alt="NativeAOT" src="https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml/badge.svg"></a>
+  <a href="https://www.nuget.org/packages/Ryn"><img alt="NuGet" src="https://img.shields.io/nuget/vpre/Ryn.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+</p>
+
+<p align="center">
   <strong>Rich Yet Native</strong> — a cross-platform, lightweight .NET framework for building desktop applications with web UIs.
 </p>
 
