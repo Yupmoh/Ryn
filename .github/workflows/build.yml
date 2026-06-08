@@ -53,15 +53,27 @@ jobs:
           ARCHIVE="saucer-bindings-${{ matrix.rid }}${{ matrix.archive-ext }}"
           DEST="src/Ryn.Interop/runtimes/${{ matrix.rid }}/native"
           mkdir -p "$DEST"
-          if gh release download --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber 2>/dev/null; then
+
+          # Resolve the native-libs release by tag. Don't rely on "latest" — the version
+          # releases (v*) are prereleases too, so GitHub reports no latest and a bare
+          # `gh release download` silently finds nothing. Match the native-v* tag explicitly
+          # (same approach as release.yml).
+          TAG=$(gh release list --repo ${{ github.repository }} --limit 50 --json tagName \
+                  --jq 'map(select(.tagName | startswith("native-v"))) | sort_by(.tagName) | last.tagName')
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::No native-v* release found. Run native-libs.yml first to publish the saucer-bindings artifacts."
+            exit 1
+          fi
+
+          if gh release download "$TAG" --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber; then
             if [[ "${{ matrix.archive-ext }}" == ".zip" ]]; then
               unzip -o "/tmp/$ARCHIVE" -d "$DEST"
             else
               tar -xzf "/tmp/$ARCHIVE" -C "$DEST"
             fi
-            echo "Native libraries downloaded successfully"
+            echo "Native libraries downloaded successfully from $TAG"
           else
-            echo "::error::No prebuilt native libraries available for ${{ matrix.rid }}. Integration tests cannot run; failing the job rather than silently skipping. Publish the saucer-bindings artifact or run native-libs.yml first."
+            echo "::error::No prebuilt native libraries for ${{ matrix.rid }} in release $TAG. Integration tests cannot run; failing the job rather than silently skipping. Publish the saucer-bindings artifact or run native-libs.yml first."
             exit 1
           fi
         shell: bash
