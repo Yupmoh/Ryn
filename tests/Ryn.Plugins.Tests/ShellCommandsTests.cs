@@ -116,15 +116,19 @@ public sealed class ShellCommandsTests
     [Fact]
     public void Execute_HonorsTimeout_KillsAndThrows()
     {
-        // A long sleep with a tiny timeout must be terminated and surfaced as a timeout rather than hanging.
+        // A long-running command with a tiny timeout must be terminated and surfaced as a timeout
+        // rather than hanging. On Windows `timeout` exits immediately when stdin is redirected (as it
+        // is under Process), so it never blocks long enough — use `ping` as the long-runner instead.
         var shell = Shell(new ShellOptions
         {
-            AllowedCommands = OperatingSystem.IsWindows() ? ["timeout"] : ["sleep"],
+            AllowedCommands = OperatingSystem.IsWindows() ? ["ping"] : ["sleep"],
             ExecuteTimeout = TimeSpan.FromMilliseconds(250),
         });
 
-        var command = OperatingSystem.IsWindows() ? "timeout" : "sleep";
-        var act = () => shell.Execute(command, "[\"30\"]");
+        var (command, args) = OperatingSystem.IsWindows()
+            ? ("ping", "[\"-n\", \"30\", \"127.0.0.1\"]")
+            : ("sleep", "[\"30\"]");
+        var act = () => shell.Execute(command, args);
         act.Should().Throw<TimeoutException>();
     }
 
