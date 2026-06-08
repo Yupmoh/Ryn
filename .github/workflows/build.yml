@@ -13,9 +13,6 @@ env:
 
 jobs:
   build:
-    if: >-
-      github.event_name == 'pull_request' ||
-      contains(github.event.head_commit.message, '[deploy]')
     strategy:
       fail-fast: false
       matrix:
