@@ -1,24 +1,13 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Yupmoh/Ryn/main/assets/logo.png">
-    <img alt="Ryn: Rich Yet Native" src="https://raw.githubusercontent.com/Yupmoh/Ryn/main/assets/logo-light.png" width="460">
-  </picture>
-</p>
+![Ryn: Rich Yet Native](https://raw.githubusercontent.com/Yupmoh/Ryn/main/assets/logo.png)
 
-<p align="center">
-  <a href="https://github.com/Yupmoh/Ryn/actions/workflows/build.yml"><img alt="Build &amp; Test" src="https://github.com/Yupmoh/Ryn/actions/workflows/build.yml/badge.svg"></a>
-  <a href="https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml"><img alt="NativeAOT" src="https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml/badge.svg"></a>
-  <a href="https://www.nuget.org/packages/Ryn"><img alt="NuGet" src="https://img.shields.io/nuget/vpre/Ryn.svg"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
-</p>
+[![Build & Test](https://github.com/Yupmoh/Ryn/actions/workflows/build.yml/badge.svg)](https://github.com/Yupmoh/Ryn/actions/workflows/build.yml)
+[![NativeAOT](https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml/badge.svg)](https://github.com/Yupmoh/Ryn/actions/workflows/aot.yml)
+[![NuGet](https://img.shields.io/nuget/vpre/Ryn.svg)](https://www.nuget.org/packages/Ryn)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Yupmoh/Ryn/blob/main/LICENSE)
 
-<p align="center">
-  <strong>Rich Yet Native.</strong> A lightweight, cross-platform .NET framework for building desktop apps with web UIs.
-</p>
+**Rich Yet Native.** A lightweight, cross-platform .NET framework for building desktop apps with web UIs.
 
-<p align="center">
-  Created &amp; maintained by <a href="https://github.com/Yupmoh">Moh</a>
-</p>
+Created & maintained by [Moh](https://github.com/Yupmoh)
 
 Ryn gives .NET developers the Tauri experience without leaving C#. You write the UI in HTML, CSS, and JavaScript, the backend in C#, and ship a small NativeAOT binary that runs on the operating system's own webview.
 
