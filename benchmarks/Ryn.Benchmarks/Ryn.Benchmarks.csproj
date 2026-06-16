@@ -5,8 +5,11 @@
     <IsAotCompatible>false</IsAotCompatible>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsTrimmable>false</IsTrimmable>
-    <!-- BenchmarkDotNet requires public benchmark classes; suppress CA1515 -->
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <!-- BenchmarkDotNet requires public benchmark classes (CA1515). The public [RynCommand] fixtures
+         in IpcDispatchBenchmarks are benchmark stubs, not a shipping API surface, so the public-API
+         hardening analyzers do not apply: CA1062 (null-validate public args) and CA1819 (array-valued
+         property on the DTO record). Matches the samples' suppression set. -->
+    <NoWarn>$(NoWarn);CA1515;CA1062;CA1819</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,5 +20,10 @@
     <ProjectReference Include="..\..\src\Ryn.Core\Ryn.Core.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Interop\Ryn.Interop.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <!-- Reference the IPC source generator as an analyzer so [RynCommand] handlers in this
+         project compile into the SAME generated {Class}Router + Add{Class}() DI extension that
+         production apps use. IpcDispatchBenchmarks dispatches through that real generated code. -->
+    <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>
