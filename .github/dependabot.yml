@@ -41,3 +41,22 @@ updates:
         update-types:
           - minor
           - patch
+
+  # Frontend npm dependencies for the Vue sample (build-time dev tooling such as vite/esbuild).
+  # These are not shipped in any published package, but keeping them current closes advisory
+  # alerts on the sample's lockfile. Majors (e.g. a vite bump) come through individually for review.
+  - package-ecosystem: npm
+    directory: "/samples/VueApp/frontend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+      - npm
+    groups:
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
