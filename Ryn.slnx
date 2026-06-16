@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/HelloWindow/HelloWindow.csproj" />
+    <Project Path="samples/MultiWindow/MultiWindow.csproj" />
     <Project Path="samples/Showcase/Showcase.csproj" />
     <Project Path="samples/ViteApp/ViteApp.csproj" />
     <Project Path="samples/TerminalApp/TerminalApp.csproj" />

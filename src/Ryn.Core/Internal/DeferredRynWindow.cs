@@ -58,6 +58,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public void Close() => Live.Close();
     public void Minimize() => Live.Minimize();
     public void ToggleMaximize() => Live.ToggleMaximize();
+    public void Move(int x, int y) => Live.Move(x, y);
     public void StartDrag() => Live.StartDrag();
     public void StartResize(WindowEdge edge) => Live.StartResize(edge);
 

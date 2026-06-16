@@ -152,6 +152,12 @@ public sealed class RynApplicationBuilder
         _services.AddSingleton<IMainThreadDispatcher>(sp => new MainThreadDispatcher(sp.GetRequiredService<NativeApplicationAccessor>()));
         _services.AddSingleton<IRynApplicationLifetime>(sp => new RynApplicationLifetime(sp.GetRequiredService<NativeApplicationAccessor>()));
 
+        // Multi-window: resolve the originating window of an IPC command (window.* commands act on it) and open
+        // new windows at runtime. Both forward to the live host via the accessor, so they are resolvable from
+        // DI before the loop is up and never hold a stale reference.
+        _services.AddSingleton<CurrentWindowAccessor>(sp => new CurrentWindowAccessor(sp.GetRequiredService<NativeApplicationAccessor>()));
+        _services.AddSingleton<IRynWindowManager>(sp => new RynWindowManager(sp.GetRequiredService<NativeApplicationAccessor>()));
+
         // 5. User service configuration
         foreach (var configure in _configureActions)
         {

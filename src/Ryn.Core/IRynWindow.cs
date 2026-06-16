@@ -49,6 +49,8 @@ public interface IRynWindow
     public void Minimize();
     /// <summary>Toggles between maximized and restored window states.</summary>
     public void ToggleMaximize();
+    /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
+    public void Move(int x, int y);
     /// <summary>Initiates a window drag operation (for frameless windows).</summary>
     public void StartDrag();
     /// <summary>Initiates a window resize operation from the specified edge.</summary>

@@ -48,6 +48,20 @@ public sealed partial class RynApplication : IAsyncDisposable
     /// <summary>The main application webview. Only available after <see cref="RunAsync"/> has been called.</summary>
     public IRynWebView WebView => _host?.MainWindow?.WebView ?? throw new InvalidOperationException("Application is not running");
 
+    /// <summary>
+    /// Opens a new window and returns it. Safe to call from any thread; native window creation is marshalled
+    /// onto the UI thread and the call blocks until the window exists. Throws if the application is not running.
+    /// </summary>
+    public IRynWindow OpenWindow(RynWindowOptions options) =>
+        (_host ?? throw new InvalidOperationException("Application is not running")).OpenWindow(options);
+
+    /// <summary>
+    /// Opens a new window without blocking, completing once it has been created on the UI thread. Throws if the
+    /// application is not running.
+    /// </summary>
+    public Task<IRynWindow> OpenWindowAsync(RynWindowOptions options) =>
+        (_host ?? throw new InvalidOperationException("Application is not running")).OpenWindowAsync(options);
+
     /// <summary>Creates a new application builder with default options.</summary>
     public static RynApplicationBuilder CreateBuilder() => new(programmaticOptions: null);
 

@@ -1,0 +1,10 @@
+{
+  "capabilities": {
+    "window": {
+      "allow": ["open", "list", "current", "close", "minimize", "toggleMaximize", "setTitle", "setSize"]
+    },
+    "demo": {
+      "allow": ["openFromCSharp", "tile"]
+    }
+  }
+}
