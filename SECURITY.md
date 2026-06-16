@@ -34,7 +34,9 @@ controls that enforce that boundary and how to configure them safely.
 
 - **Deny-by-default & fail-closed.** A plugin is denied unless it appears here. **If `ryn.json` is
   missing or has no `capabilities` section, a Release build denies everything** (a Debug build of the
-  app falls back to allow-all for convenience). Never ship without a `ryn.json`.
+  app falls back to allow-all for convenience). When a Release build fails closed because `ryn.json` is
+  absent, Ryn emits a one-time startup warning through the host logger so the misconfiguration is
+  obvious rather than silently inert. Never ship without a `ryn.json`.
 - `true` = allow all commands for that plugin; `false` = deny all; `{ "allow": [...], "deny": [...] }`
   for fine-grained control. `deny` always wins.
 - Internal framework commands (`__ryn.*`) bypass capabilities by design.

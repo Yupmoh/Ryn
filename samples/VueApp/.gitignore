@@ -1,0 +1,12 @@
+# Vite build output (regenerate with `npm run build` from frontend/ — see README.md).
+#
+# The wwwroot/ files currently committed are a prebuilt snapshot so the sample runs
+# out-of-box without a Node toolchain. A fresh `npm run build` emits new content-hashed
+# asset filenames; those are intentionally NOT committed (they would silently drift from
+# frontend/src and be unreviewable in diffs). Rebuild locally to pick up frontend changes.
+wwwroot/assets/
+wwwroot/index.html
+
+# Node / build artifacts
+node_modules/
+*.tsbuildinfo

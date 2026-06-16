@@ -135,22 +135,25 @@ public static class Program
 **Commands.cs** -- Your backend logic, exposed to JavaScript via `[RynCommand]`:
 
 ```csharp
+using System.Globalization;
 using Ryn.Ipc;
 
 namespace MyApp;
 
 public static class AppCommands
 {
-    [RynCommand]
+    [RynCommand("app.greet")]
     public static string Greet(string name) => $"Hello, {name}!";
 
-    [RynCommand]
+    [RynCommand("app.add")]
     public static int Add(int a, int b) => a + b;
 
-    [RynCommand]
+    [RynCommand("app.getTime")]
     public static string GetTime() => DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 }
 ```
+
+Command names are plugin-prefixed: your own commands live under `app.*`, and each plugin owns its own prefix (`fs.*`, `clipboard.*`, ...). The prefix is what `ryn.json` capabilities grant or deny.
 
 **appsettings.json** -- Window and logging configuration:
 
@@ -170,11 +173,22 @@ public static class AppCommands
 }
 ```
 
-**ryn.json** -- Security: controls which plugins and commands the frontend can invoke:
+**ryn.json** -- Security: controls which plugins and commands the frontend can invoke. The scaffolded file grants only your own `app.*` commands:
 
 ```json
 {
   "capabilities": {
+    "app": true
+  }
+}
+```
+
+Each plugin is granted by its prefix. A fuller example that also enables a couple of plugins:
+
+```json
+{
+  "capabilities": {
+    "app": true,
     "fs": {
       "allow": ["readTextFile", "readDir", "exists", "stat"]
     },
@@ -184,7 +198,7 @@ public static class AppCommands
 }
 ```
 
-When `ryn.json` is present, all commands are denied by default unless explicitly allowed. When absent (dev mode), everything is permitted.
+When `ryn.json` is present, all commands are denied by default unless explicitly allowed. When it is **absent**, the fallback depends on the build: a **Debug** build allows everything (dev convenience), while a **Release** build **fails closed and denies every command** (logging a one-time startup warning). Always ship a `ryn.json` with your app — see [SECURITY.md](../SECURITY.md) for the full capability model.
 
 ## 4. Run in Dev Mode
 
@@ -201,6 +215,8 @@ Dev mode does three things:
    - C# file changes (`.cs`) trigger a full rebuild and relaunch
    - Frontend file changes (`wwwroot/`) sync to the output directory and relaunch without rebuilding
 
+For a Vite project, `ryn dev` also auto-starts the Vite dev server (`npm run dev`) and points the webview at it — running `npm run dev` yourself in a second terminal is optional now (if a server is already listening on the Vite port, `ryn dev` reuses it). See the [Vite Integration Guide](vite-integration.md).
+
 Press `Ctrl+C` to stop.
 
 During development, you can also use standard `dotnet run`:
@@ -215,13 +231,13 @@ IPC (inter-process communication) lets your JavaScript frontend call C# methods 
 
 ### C# side
 
-Add a method to `Commands.cs` with the `[RynCommand]` attribute:
+Add a method to `Commands.cs` with the `[RynCommand]` attribute. Give it an `app.*` name so it falls under the `"app"` capability:
 
 ```csharp
-[RynCommand]
+[RynCommand("app.getFruits")]
 public static string[] GetFruits() => ["Apple", "Banana", "Cherry"];
 
-[RynCommand]
+[RynCommand("app.fetchData")]
 public static async ValueTask<string> FetchData(string url, CancellationToken cancellationToken)
 {
     using var client = new HttpClient();
@@ -245,26 +261,26 @@ Call the command from your frontend using `window.__ryn.invoke()`:
 
 ```javascript
 // Simple call
-const greeting = await window.__ryn.invoke('greet', { name: 'World' });
+const greeting = await window.__ryn.invoke('app.greet', { name: 'World' });
 
 // Array return
-const fruits = await window.__ryn.invoke('getFruits', {});
+const fruits = await window.__ryn.invoke('app.getFruits', {});
 
 // Async call
-const data = await window.__ryn.invoke('fetchData', { url: 'https://api.example.com/data' });
+const data = await window.__ryn.invoke('app.fetchData', { url: 'https://api.example.com/data' });
 ```
 
-Command names are derived from the method name, converted to camelCase: `GetFruits` becomes `getFruits`. Parameters are passed as a JSON object with camelCase keys.
+The name you pass to `[RynCommand(...)]` is exactly the name JavaScript invokes. The prefix (`app` here) is what `ryn.json` capabilities grant or deny, so keep your own commands under `app.*`. Parameters are passed as a JSON object whose keys match the C# parameter names (camelCase).
 
-You can also specify a custom command name:
+You can use any prefixed name you like:
 
 ```csharp
-[RynCommand("myCustomName")]
+[RynCommand("app.doSomething")]
 public static string DoSomething() => "done";
 ```
 
 ```javascript
-const result = await window.__ryn.invoke('myCustomName', {});
+const result = await window.__ryn.invoke('app.doSomething', {});
 ```
 
 ### Events
@@ -354,8 +370,13 @@ const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 | FileSystem | `Ryn.Plugins.FileSystem` | `AddRynFileSystem(opts => ...)` | `fs.readTextFile`, `fs.writeTextFile`, `fs.readDir`, `fs.stat`, `fs.exists`, `fs.mkdir`, `fs.remove` |
 | Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFolder`, `dialog.save` |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
-| Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill` |
+| Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptyMetrics`, `shell.ptyKill` |
 | Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.isSupported`, `notification.requestPermission` |
+| Audio | `Ryn.Plugins.Audio` | `AddRynAudio()` | `audio.play`, `audio.playSystem`, `audio.stop`, `audio.setVolume`, `audio.isPlaying` |
+| Tray | `Ryn.Plugins.Tray` | `AddRynTray(opts => ...)` | `tray.show`, `tray.hide`, `tray.setTooltip`, `tray.setMenu`, `tray.notify` |
+| Updater | `Ryn.Plugins.Updater` | `AddRynUpdater(opts => ...)` | `updater.check`, `updater.download`, `updater.apply` |
+
+> **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
 
 Plugins that access the filesystem or shell require configuration for safety:
 
@@ -383,7 +404,7 @@ This runs `dotnet publish -c Release` and outputs the result to `bin/Release/net
 ryn build --aot
 ```
 
-NativeAOT produces a single native binary with no .NET runtime dependency. Typical output size is around 4-5 MB. Ryn is designed NativeAOT-first -- no reflection is used anywhere. JSON serialization uses source-generated `JsonSerializerContext`, and IPC routing uses a source-generated switch-based dispatch table.
+NativeAOT produces a single native binary with no .NET runtime dependency. A hello-world app is around 5.0 MB on macOS arm64; a full app pulling in every plugin is around 5.6 MB. Ryn is designed NativeAOT-first -- no reflection is used anywhere. JSON serialization uses source-generated `JsonSerializerContext`, and IPC routing uses a source-generated switch-based dispatch table.
 
 ### Embedded content
 
