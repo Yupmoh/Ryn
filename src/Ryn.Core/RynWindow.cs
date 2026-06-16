@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Ryn.Core.Internal;
@@ -8,10 +7,13 @@ namespace Ryn.Core;
 
 public sealed unsafe class RynWindow : IRynWindow, IDisposable
 {
+    // The application host that owns the native saucer_application, the run loop, and the UI-thread
+    // marshalling. Per-window operations delegate their post/quit/scheme-registration through it. Null only
+    // for a standalone test instance constructed without a host (no native work is ever issued in that case).
+    private readonly NativeAppHost? _host;
     private readonly RynOptions _options;
     private readonly TaskCompletionSource _closeTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private saucer_application* _app;
     private saucer_window* _window;
     private saucer_webview* _webview;
     private void* _selfHandle;
@@ -37,24 +39,6 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private int _normalWidth;
     private int _normalHeight;
     private volatile bool _disposed;
-
-    // GCHandles posted to saucer's UI thread via RunOnUi. RunPostedWindowAction normally claims-and-frees
-    // each one; tracking them here lets DisposeNative reclaim any the run loop dropped at shutdown (INT-10),
-    // mirroring RynWebView._postedCallbacks.
-    private readonly ConcurrentDictionary<nint, byte> _postedHandles = new();
-
-    // Main-thread work submitted (via IMainThreadDispatcher) before the native application exists. saucer's
-    // post requires a live _app, so RunOnUi drops actions while _app == null. Buffer them here and drain them
-    // — in submission order, on the UI thread — once InitializeNative brings the app up, so a plugin backend
-    // (tray/audio) that fences AppKit calls during its InitializeAsync still has them run on the main thread
-    // rather than silently dropped (Cluster C / INT-02). Guarded by _preReadyGate; nulled after the drain so
-    // later posts go straight to RunOnUi. Drained on the UI thread inside InitializeNative.
-    private readonly object _preReadyGate = new();
-    private List<Action>? _preReadyQueue = [];
-    private volatile bool _appReady;
-
-    // Disposed after the saucer run loop exits so a late token cancellation can't quit a freed _app (PAP-14).
-    private CancellationTokenRegistration _quitRegistration;
 
     /// <inheritdoc />
     public event EventHandler<WindowClosingEventArgs>? Closing;
@@ -83,8 +67,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// <inheritdoc />
     public AppTheme Theme => _themeDetector?.Current ?? SystemThemeDetector.Detect();
 
-    internal RynWindow(RynOptions options)
+    /// <summary>Constructs a standalone window with no application host. Native operations are inert; used by
+    /// tests that exercise the managed surface (events, accessor wiring) without a running event loop.</summary>
+    internal RynWindow(RynOptions options) : this(host: null, id: 0, options) { }
+
+    internal RynWindow(NativeAppHost? host, int id, RynOptions options)
     {
+        _host = host;
+        Id = id;
         _options = options;
         _cachedTitle = options.Title;
         _cachedWidth = options.Width;
@@ -92,9 +82,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _cachedResizable = options.Resizable;
     }
 
-    internal Action<nint>? OnNativeReady { get; set; }
+    /// <summary>Stable per-application window identifier, assigned by the host when the window is created.</summary>
+    internal int Id { get; }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
+
+    /// <summary>Completes the window's close signal so <see cref="WaitForCloseAsync"/> awaiters unblock. Used
+    /// by the host's OnFinish/startup-failure paths to defensively release a still-open waiter.</summary>
+    internal void CompleteCloseSignal() => _closeTcs.TrySetResult();
 
     public IRynWebView WebView => _rynWebView ?? throw new InvalidOperationException("Window not initialized");
 
@@ -184,8 +179,15 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     internal void RequestClose() => PostToUi(() =>
     {
         if (_window != null) Saucer.saucer_window_close(_window);
-        else if (_app != null) Saucer.saucer_application_quit(_app);
+        else _host?.Quit();
     });
+
+    /// <summary>Closes the native window. Must be called on the UI thread (used by host-driven shutdown). A
+    /// no-op before the native window exists.</summary>
+    internal void CloseNativeWindow()
+    {
+        if (_window != null) Saucer.saucer_window_close(_window);
+    }
 
     public void Minimize() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_minimized(_window, 1); });
 
@@ -203,40 +205,16 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public void StartResize(WindowEdge edge) => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); });
 
     /// <summary>
-    /// Marshals a native window operation onto saucer's UI thread. Native window/AppKit calls are not
-    /// thread-safe, so all mutating operations are posted to the application loop (a no-op deferral when
-    /// already on the UI thread). Safe to call from any thread.
+    /// Marshals a native window operation onto saucer's UI thread via the application host. Native
+    /// window/AppKit calls are not thread-safe, so mutating operations are posted to the application loop
+    /// (a no-op deferral when already on the UI thread). Safe to call from any thread; inert without a host.
     /// </summary>
-    private unsafe void RunOnUi(Action action)
+    private void RunOnUi(Action action)
     {
-        if (_disposed || _app == null)
+        if (_disposed)
             return;
-
-        var data = (nint)NativeCallbackHelper.Alloc(new PostedWindowAction(this, action));
-        // Track the handle so DisposeNative can reclaim it if saucer drops the posted callback at shutdown
-        // (INT-10). RunPostedWindowAction claims-and-removes it before freeing, so the two never double-free.
-        _postedHandles[data] = 0;
-        Saucer.saucer_application_post(
-            _app,
-            (delegate* unmanaged[Cdecl]<void*, void>)&RunPostedWindowAction,
-            (void*)data);
+        _host?.RunOnUi(action);
     }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void RunPostedWindowAction(void* userdata)
-    {
-        var handle = (nint)userdata;
-        var payload = NativeCallbackHelper.Resolve<PostedWindowAction>(userdata);
-        // Claim the handle so a DisposeNative racing at shutdown can't also free it; whoever removes it frees.
-        if (!payload.Owner._postedHandles.TryRemove(handle, out _))
-            return;
-        NativeGuard.Invoke("RynWindow.RunOnUi", payload.Action);
-        NativeCallbackHelper.Free(userdata);
-    }
-
-    /// <summary>Pairs a UI-thread action with its owning window, so the static native callback can deregister
-    /// the tracked GCHandle (INT-10) before running and freeing it.</summary>
-    private sealed record PostedWindowAction(RynWindow Owner, Action Action);
 
     /// <summary>
     /// Like <see cref="RunOnUi"/> but returns a Task that completes when the posted action has actually run
@@ -245,7 +223,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// </summary>
     private Task RunOnUiAsync(Action action)
     {
-        if (_disposed || _app == null)
+        if (_disposed || _host is not { IsRunning: true })
             return Task.CompletedTask;
 
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -258,182 +236,54 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     /// <summary>
-    /// True when the caller is already on saucer's UI thread, so UI-thread work can run inline rather than be
-    /// posted. Backed by <c>saucer_application_thread_safe</c>, which returns non-zero on the thread that owns
-    /// the application/event loop. False before the app exists or after it is torn down (treat as "off thread"
-    /// — the safe default is to post/queue, never to run native UI work inline on an unknown thread).
-    /// </summary>
-    private bool IsOnUiThread => _app != null && !_disposed && Saucer.saucer_application_thread_safe(_app) != 0;
-
-    /// <summary>
     /// Runs <paramref name="action"/> on the UI thread, used by <see cref="IMainThreadDispatcher"/> to fence
-    /// native UI calls (tray/audio AppKit work) made from worker threads (Cluster C / INT-02). Runs inline when
-    /// already on the UI thread; queues it when the native app is not up yet (drained in submission order once
-    /// the loop starts); otherwise posts via saucer. Safe to call from any thread. A no-op after disposal.
+    /// native UI calls (tray/audio AppKit work) made from worker threads (Cluster C / INT-02). Delegates to the
+    /// host, which runs inline when already on the UI thread, queues it when the native app is not up yet, or
+    /// posts via saucer otherwise. Safe to call from any thread. A no-op after disposal or without a host.
     /// </summary>
     internal void PostToUi(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
         if (_disposed)
             return;
-
-        // Already on the UI thread → run inline so ordering relative to surrounding UI work is preserved and
-        // there is no needless deferral. Wrapped in NativeGuard so a throw is routed to the app's
-        // unhandled-exception surface, matching the posted path (RunPostedWindowAction).
-        if (IsOnUiThread)
-        {
-            NativeGuard.Invoke("RynWindow.PostToUi", action);
-            return;
-        }
-
-        // Native app not up yet → buffer until InitializeNative drains the queue on the UI thread. Double-check
-        // _appReady under the lock to close the race with FlushPreReadyQueue (which flips it while holding the
-        // gate): if the app became ready between our volatile read and taking the lock, fall through to post.
-        if (!_appReady)
-        {
-            lock (_preReadyGate)
-            {
-                if (!_appReady && _preReadyQueue is { } queue)
-                {
-                    queue.Add(action);
-                    return;
-                }
-            }
-        }
-
-        RunOnUi(action);
+        _host?.PostToUi(action);
     }
 
     /// <summary>
     /// Like <see cref="PostToUi"/> but returns a Task that completes when the action has run on the UI thread
-    /// (or faults if it throws). Completes inline when already on the UI thread; completes without running if
-    /// the app has been disposed. Used by <see cref="IMainThreadDispatcher.InvokeAsync"/>.
+    /// (or faults if it throws). Used by <see cref="IMainThreadDispatcher.InvokeAsync"/>. Completes without
+    /// running if the window has been disposed or has no host.
     /// </summary>
     internal Task InvokeOnUiAsync(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
         if (_disposed)
             return Task.CompletedTask;
-
-        if (IsOnUiThread)
-        {
-            try { action(); return Task.CompletedTask; }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { return Task.FromException(ex); }
-        }
-
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        PostToUi(() =>
-        {
-            try { action(); tcs.TrySetResult(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { tcs.TrySetException(ex); }
-        });
-        return tcs.Task;
+        return _host?.InvokeOnUiAsync(action) ?? Task.CompletedTask;
     }
 
     /// <summary>
-    /// Drains any work buffered by <see cref="PostToUi"/> before the native app existed, in submission order,
-    /// on the UI thread. Called once from <see cref="InitializeNative"/> after the app/window are created.
-    /// Flips <c>_appReady</c> under the gate so a concurrent <see cref="PostToUi"/> either lands in the queue we
-    /// snapshot here or takes the post path — never lost, never run twice.
+    /// Creates the native window and webview, applies options, wires events and content, and shows the window.
+    /// Called by the host on the UI thread (inside OnReady) after the application exists. Throws on a native
+    /// creation failure; the host's OnReady catch quits the loop and surfaces the exception.
     /// </summary>
-    private void FlushPreReadyQueue()
+    internal void InitializeNative()
     {
-        List<Action>? pending;
-        lock (_preReadyGate)
-        {
-            pending = _preReadyQueue;
-            _preReadyQueue = null;
-            _appReady = true;
-        }
-
-        if (pending is null)
-            return;
-
-        // We're on the UI thread here (InitializeNative runs inside saucer's OnReady callback), so run inline
-        // through the same NativeGuard barrier the posted path uses.
-        foreach (var action in pending)
-            NativeGuard.Invoke("RynWindow.PostToUi", action);
-    }
-
-    internal void Run(CancellationToken cancellationToken)
-    {
-        NativeLibraryResolver.Register();
-        Span<byte> idBuf = stackalloc byte[256];
-        var appIdStr = Utf8String.Create(_options.ApplicationId, idBuf);
-        var appOpts = Saucer.saucer_application_options_new(appIdStr.Pointer);
-        appIdStr.Dispose();
-        int error = 0;
-        _app = Saucer.saucer_application_new(appOpts, &error);
-        Saucer.saucer_application_options_free(appOpts);
-        if (_app == null) throw new InvalidOperationException($"Failed to create saucer application (error code: {error})");
-        if (cancellationToken.CanBeCanceled)
-            _quitRegistration = cancellationToken.Register(() => { if (_app != null) Saucer.saucer_application_quit(_app); });
+        var app = _host!.App;
+        // Allocate the per-window GCHandle that backs this window's native event callbacks (CLOSE/CLOSED/…),
+        // freed in DisposeNative. The host owns a separate handle for the app-level OnReady/OnFinish callbacks.
         _selfHandle = NativeCallbackHelper.Alloc(this);
-        var exitCode = Saucer.saucer_application_run(_app,
-            (delegate* unmanaged[Cdecl]<saucer_application*, void*, void>)&OnReady,
-            (delegate* unmanaged[Cdecl]<saucer_application*, void*, void>)&OnFinish,
-            _selfHandle);
-        _ = exitCode;
-        // Dispose the cancellation registration before freeing _app: the registration is only meaningful while
-        // the loop runs, and disposing it here closes the post-shutdown closure pin and the TOCTOU window where
-        // a late cancellation could call saucer_application_quit on the freed _app (PAP-14).
-        _quitRegistration.Dispose();
-        _quitRegistration = default;
-        DisposeNative();
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void OnReady(saucer_application* app, void* userdata)
-    {
-        var self = NativeCallbackHelper.Resolve<RynWindow>(userdata);
-        NativeGuard.Invoke("RynWindow.OnReady", () =>
-        {
-            try
-            {
-                self.InitializeNative();
-            }
-            catch
-            {
-                // Startup failed (webview/window creation, local-server bind, state-dir creation, …). Quit the
-                // saucer loop so Run() can return and dispose cleanly, then rethrow into NativeGuard, which
-                // routes the exception to RynApplication's UnhandledException surface instead of letting it
-                // fail-fast across the native boundary (ARC-01/INT-01/PAP-09).
-                if (self._app != null) Saucer.saucer_application_quit(self._app);
-                self._closeTcs.TrySetResult();
-                throw;
-            }
-        });
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void OnFinish(saucer_application* app, void* userdata)
-    {
-        var self = NativeCallbackHelper.Resolve<RynWindow>(userdata);
-        NativeGuard.Invoke("RynWindow.OnFinish", () => self._closeTcs.TrySetResult());
-    }
-
-    private void InitializeNative()
-    {
         int error = 0;
-        _window = Saucer.saucer_window_new(_app, &error);
+        _window = Saucer.saucer_window_new(app, &error);
         if (_window == null) throw new InvalidOperationException($"Failed to create saucer window (error code: {error})");
-        Span<byte> schemeBuf = stackalloc byte[32];
-        var schemeStr = Utf8String.Create("ryn", schemeBuf);
-        Saucer.saucer_webview_register_scheme(schemeStr.Pointer);
-        schemeStr.Dispose();
-        // App-declared custom schemes must be registered with the engine before the webview is created
-        // (saucer silently no-ops handle_scheme for a scheme it wasn't told about pre-creation). The
-        // reserved "ryn" scheme is registered above; skip it here so a stray duplicate can't double-register.
-        // The buffer is hoisted out of the loop (CA2014); Utf8String.Create falls back to a pooled buffer
-        // for any scheme name longer than it, so reusing one stack span across iterations is safe.
-        Span<byte> customSchemeBuf = stackalloc byte[64];
+        // Schemes are registered with the engine process-globally and must exist before the webview is created
+        // (saucer silently no-ops handle_scheme for a scheme it wasn't told about pre-creation). The host
+        // dedupes, so the reserved "ryn" scheme and any scheme shared across windows are registered once.
+        _host.RegisterScheme("ryn");
         foreach (var customScheme in _options.CustomSchemes)
         {
-            if (string.IsNullOrEmpty(customScheme) || string.Equals(customScheme, "ryn", StringComparison.OrdinalIgnoreCase))
-                continue;
-            var customSchemeStr = Utf8String.Create(customScheme, customSchemeBuf);
-            Saucer.saucer_webview_register_scheme(customSchemeStr.Pointer);
-            customSchemeStr.Dispose();
+            if (!string.Equals(customScheme, "ryn", StringComparison.OrdinalIgnoreCase))
+                _host.RegisterScheme(customScheme);
         }
         var webviewOpts = Saucer.saucer_webview_options_new(_window);
         _webview = Saucer.saucer_webview_new(webviewOpts, &error);
@@ -448,7 +298,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _normalY = iy;
         _normalWidth = _cachedWidth;
         _normalHeight = _cachedHeight;
-        _rynWebView = new RynWebView(_webview, _app);
+        _rynWebView = new RynWebView(_webview, app);
         // Tell the webview which schemes were registered with the engine above, so RegisterCustomScheme can
         // attach handlers for them (and reject "ryn"/undeclared schemes). Mirrors the pre-creation loop.
         _rynWebView.SetDeclaredSchemes(_options.CustomSchemes);
@@ -552,12 +402,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
         else if (_options.ContentDirectory != null) { _rynWebView.SetContentDirectory(_options.ContentDirectory); _rynWebView.NavigateToAppScheme(); }
         else if (_options.Html != null) { _rynWebView.SetHtmlContent(_options.Html); _rynWebView.NavigateToAppScheme(); }
-        OnNativeReady?.Invoke((nint)_app);
         Saucer.saucer_window_show(_window);
-
-        // The native app/window now exist and we're on the UI thread. Drain any main-thread work a plugin
-        // backend buffered via IMainThreadDispatcher before the loop was up (Cluster C / INT-02), in order.
-        FlushPreReadyQueue();
     }
 
     private void ApplyWindowOptions()
@@ -736,7 +581,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             self.SaveWindowState(window);
             self.Closed?.Invoke(self, EventArgs.Empty);
             self._closeTcs.TrySetResult();
-            Saucer.saucer_application_quit(self._app);
+            // Quit the loop only when the last window has closed (the host owns that decision); a multi-window
+            // app keeps running while any other window is open. Replaces the old unconditional quit-on-any-close.
+            self._host?.OnWindowClosedInternal(self);
         });
     }
 
@@ -859,37 +706,29 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         return (Math.Clamp(x, sx, maxX), Math.Clamp(y, sy, maxY));
     }
 
-    private void DisposeNative()
+    /// <summary>
+    /// Frees this window's native handles after the saucer run loop returns: webview, then native window, then
+    /// the per-window GCHandle. The host calls it for each window during its own teardown, then frees the
+    /// application handle. The app-level posted-callback GCHandles are reclaimed by the host (INT-10).
+    /// </summary>
+    internal void DisposeNative()
     {
         if (_localServer is not null) { _localServer.DisposeAsync().AsTask().GetAwaiter().GetResult(); _localServer = null; }
         // Stop the theme poller deterministically once the saucer loop returns, rather than relying on the
-        // public Dispose() (which Run() calls anyway) or the finalizer backstop. This ends the per-tick
-        // child-process probe spawns promptly at teardown (PAP-11/ARC-18). Dispose is idempotent, so the
-        // later Dispose() call is a harmless no-op; nulling the field makes that explicit.
+        // public Dispose() or the finalizer backstop. This ends the per-tick child-process probe spawns
+        // promptly at teardown (PAP-11/ARC-18). Dispose is idempotent, so a later Dispose() call is a harmless
+        // no-op; nulling the field makes that explicit.
         _themeDetector?.Dispose(); _themeDetector = null;
         _rynWebView?.Dispose(); _rynWebView = null;
-        // The saucer run loop has stopped by the time DisposeNative runs (it's called after
-        // saucer_application_run returns), so no RunPostedWindowAction can still fire. Reclaim any GCHandles
-        // saucer never drained — RunPostedWindowAction is what normally frees them, so without this they leak
-        // (INT-10). The TryRemove claim means a callback that did run can't be double-freed here.
-        foreach (var handle in _postedHandles.Keys)
-        {
-            if (_postedHandles.TryRemove(handle, out _))
-                NativeCallbackHelper.Free(handle);
-        }
         if (_webview != null) { Saucer.saucer_webview_free(_webview); _webview = null; }
         if (_window != null) { Saucer.saucer_window_free(_window); _window = null; }
         if (_selfHandle != null) { NativeCallbackHelper.Free(_selfHandle); _selfHandle = null; }
-        if (_app != null) { Saucer.saucer_application_free(_app); _app = null; }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        // Defensive: Run() disposes this after the loop exits, but disposing here too (a no-op on a default
-        // registration) ensures a token cancellation after Dispose can never call quit on a freed app (PAP-14).
-        _quitRegistration.Dispose();
         _themeDetector?.Dispose();
         _localServer?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _rynWebView?.Dispose();

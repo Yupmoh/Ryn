@@ -12,7 +12,7 @@ public sealed partial class RynApplication : IAsyncDisposable
     private readonly IServiceProvider _services;
     private readonly ILogger<RynApplication> _logger;
     private readonly List<IRynPlugin> _plugins = [];
-    private RynWindow? _window;
+    private NativeAppHost? _host;
     private volatile bool _running;
     private bool _disposed;
 
@@ -34,11 +34,11 @@ public sealed partial class RynApplication : IAsyncDisposable
     /// <summary>The dependency injection service provider for this application.</summary>
     public IServiceProvider Services => _services;
 
-    /// <summary>The application window. Only available after <see cref="RunAsync"/> has been called.</summary>
-    public IRynWindow Window => _window ?? throw new InvalidOperationException("Application is not running");
+    /// <summary>The main application window. Only available after <see cref="RunAsync"/> has been called.</summary>
+    public IRynWindow Window => _host?.MainWindow ?? throw new InvalidOperationException("Application is not running");
 
-    /// <summary>The application webview. Only available after <see cref="RunAsync"/> has been called.</summary>
-    public IRynWebView WebView => _window?.WebView ?? throw new InvalidOperationException("Application is not running");
+    /// <summary>The main application webview. Only available after <see cref="RunAsync"/> has been called.</summary>
+    public IRynWebView WebView => _host?.MainWindow?.WebView ?? throw new InvalidOperationException("Application is not running");
 
     /// <summary>Creates a new application builder with default options.</summary>
     public static RynApplicationBuilder CreateBuilder() => new(programmaticOptions: null);
@@ -152,20 +152,19 @@ public sealed partial class RynApplication : IAsyncDisposable
                     RaiseDeepLink(deepLink);
             }
 
-            _window = new RynWindow(options);
+            var host = new NativeAppHost(options);
+            _host = host;
 
-            // Wire IPC command dispatcher if registered (before Run, applied during OnReady)
-            var commandHandler = _services.GetService<CommandDispatchHandler>();
-            if (commandHandler is not null)
-            {
-                _window.SetCommandHandler(commandHandler);
-            }
+            // Wire IPC command dispatcher if registered. The host applies it to the main window's webview
+            // during OnReady, before the window is initialized.
+            host.CommandHandler = _services.GetService<CommandDispatchHandler>();
 
             var accessor = _services.GetRequiredService<RynWindowAccessor>();
-            accessor.Window = _window;
-
             var nativeAccessor = _services.GetRequiredService<NativeApplicationAccessor>();
-            _window.OnNativeReady = handle => nativeAccessor.ApplicationHandle = handle;
+            host.NativeReady = handle => nativeAccessor.ApplicationHandle = handle;
+            // Publish the live main window once it is fully initialized (inside OnReady, on the UI thread) so
+            // deferred IRynWindow/IRynWebView injections and queued main-thread work resolve against it.
+            host.MainWindowCreated = window => accessor.Window = window;
 
             Log.Running(_logger);
 
@@ -177,7 +176,7 @@ public sealed partial class RynApplication : IAsyncDisposable
 
             try
             {
-                _window.Run(cts.Token);
+                host.Run(cts.Token);
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
             {
@@ -263,10 +262,10 @@ public sealed partial class RynApplication : IAsyncDisposable
         if (_disposed)
             return;
 
-        // Closing the window drives the native CLOSE/CLOSED path → saucer_application_quit → loop returns. If the
-        // window object does not exist yet (RequestShutdown raced ahead of RunAsync creating it) there is nothing
-        // running to stop, so this is a no-op — RunAsync has not begun the loop and will exit on its own.
-        _window?.RequestClose();
+        // Closing every window drives the native CLOSE/CLOSED path → the last close quits the loop → RunAsync
+        // returns. If the host does not exist yet (RequestShutdown raced ahead of RunAsync creating it) there is
+        // nothing running to stop, so this is a no-op — RunAsync has not begun the loop and will exit on its own.
+        _host?.RequestShutdown();
     }
 
     internal void AddPlugin(IRynPlugin plugin) => _plugins.Add(plugin);
@@ -318,17 +317,17 @@ public sealed partial class RynApplication : IAsyncDisposable
             }
         }
 
-        // 2. Window (which internally frees webview → native window → native application, in that order).
-        //    Only when the loop is NOT live: while RunAsync's event loop is still pumping it owns those native
-        //    handles and frees them itself as it unwinds (RynWindow.DisposeNative after the loop exits), so
-        //    freeing them here would race that teardown and risk freeing a live handle mid-flight. In that
-        //    case leave the window alone — closing the window or cancelling RunAsync's token is the supported
-        //    way to stop a running app — and only manage plugin/service disposal.
-        var window = _window;
+        // 2. Application host (which internally disposes each window's webview → native window, then frees the
+        //    native application, in that order). Only when the loop is NOT live: while RunAsync's event loop is
+        //    still pumping it owns those native handles and frees them itself as it unwinds (NativeAppHost's
+        //    DisposeNative after the loop exits), so freeing them here would race that teardown and risk freeing
+        //    a live handle mid-flight. In that case leave the host alone — closing the windows or cancelling
+        //    RunAsync's token is the supported way to stop a running app — and only manage plugin/service disposal.
+        var host = _host;
         if (!_running)
         {
-            _window = null;
-            window?.Dispose();
+            _host = null;
+            host?.Dispose();
         }
 
         // 3. App/services last.
