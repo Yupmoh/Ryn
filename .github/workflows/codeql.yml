@@ -1,0 +1,52 @@
+# TST-11: CodeQL static analysis (code scanning) for C#. Runs on every push/PR to main plus a weekly
+# schedule so advisories that land between commits are still caught. Uses `build-mode: none` (buildless
+# analysis, GA for C#) so the scan needs neither the native saucer libraries nor a successful full-solution
+# build — it analyzes the source directly, which keeps this workflow independent of the native-lib release
+# plumbing that gates build.yml.
+#
+# All actions are SHA-pinned with a `# vX.Y.Z` comment so the build.yml pin-check passes and Dependabot
+# (github-actions ecosystem) can bump them. github/codeql-action's init, autobuild, and analyze steps all
+# live in the same repo at the same release SHA.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Mondays 07:00 UTC. Catches advisories published since the last commit even on a quiet repo.
+    - cron: "0 7 * * 1"
+
+# Least-privilege default. The analyze job widens to security-events: write to upload SARIF results.
+permissions:
+  contents: read
+
+# TST-17: cancel superseded PR scans per-ref; main/scheduled runs keep their own group.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (csharp)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload CodeQL SARIF results to the code-scanning dashboard
+      actions: read            # required by codeql-action on private/internal repos to read run metadata
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          languages: csharp
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          category: "/language:csharp"
