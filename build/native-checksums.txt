@@ -1,13 +1,17 @@
 # Pinned SHA-256 checksums for prebuilt saucer-bindings native archives.
 #
 # Format (one per line):   <sha256-hex>  <archive-file-name>
-# Example:
-#   3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b  saucer-bindings-osx-arm64.tar.gz
 #
-# download-native.sh / download-native.ps1 verify every downloaded archive against the entry here
-# BEFORE extracting it. A mismatch aborts the download (supply-chain protection). If an archive has no
-# entry yet, the scripts print a loud "UNVERIFIED" warning rather than silently trusting it.
+# download-native.sh / download-native.ps1 verify every downloaded archive against the entry
+# here BEFORE extracting it. Verification fails CLOSED: a mismatch OR a missing entry aborts
+# the download (non-zero exit) so an unpinned or tampered artifact is never used. The only
+# override is RYN_ALLOW_UNVERIFIED_NATIVE=1, which downgrades a *missing* pin to a warning.
 #
-# To (re)generate after publishing a release:
-#   shasum -a 256 saucer-bindings-*.tar.gz saucer-bindings-*.zip
-# and paste the lines below.
+# To (re)generate from the authoritative GitHub release archives:
+#   ./build/download-native.sh pin            # all RIDs
+#   ./build/download-native.sh pin osx-arm64  # one RID
+# then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}
+# from the latest native-v* release and run  shasum -a 256 <archive>.)
+c6dfb9ec8fad68d9968fed65c0ca94704d9e1137fd4cc50b9b3ba6be5141b083  saucer-bindings-osx-arm64.tar.gz
+d21a4e7fa46075d4486c0938b12a17d77ae86aa0d3123b165d3b8c9dbaaf639a  saucer-bindings-linux-x64.tar.gz
+0cd77ed16d8b5850af4e99a63b00a0a096ebb9503fa1332a20859363c24f7109  saucer-bindings-win-x64.zip

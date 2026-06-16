@@ -8,6 +8,11 @@ set -euo pipefail
 #   ./build/download-native.sh              # download for current platform
 #   ./build/download-native.sh all          # download for all platforms
 #   ./build/download-native.sh osx-arm64    # download for specific RID
+#   ./build/download-native.sh pin [rid...] # (re)pin native-checksums.txt from the release archives
+#
+# Downloads are verified against build/native-checksums.txt and fail CLOSED: a checksum mismatch or a
+# missing pin aborts (non-zero exit). Set RYN_ALLOW_UNVERIFIED_NATIVE=1 to downgrade a *missing* pin to
+# a warning (bootstrapping a fresh release only — never bypasses a real mismatch).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -72,15 +77,28 @@ compute_sha256() {
 }
 
 # Verify a downloaded archive against the pinned SHA-256 in native-checksums.txt before extraction.
-# Mismatch => hard fail (supply-chain protection). Missing entry => loud UNVERIFIED warning.
+# Supply-chain protection: this fails CLOSED. A checksum mismatch OR a missing pin both abort the
+# download (non-zero exit) so a tampered, corrupt, or unpinned artifact is never extracted or used.
+#
+# Escape hatch (opt-in, loud): set RYN_ALLOW_UNVERIFIED_NATIVE=1 to downgrade a *missing* pin to a
+# warning. This exists only for bootstrapping a new native-v* release before its checksums have been
+# pinned; it never bypasses a real mismatch. Leave it unset for any trusted/CI flow.
 verify_checksum() {
     local file="$1" name="$2"
     local expected actual
     expected=$(grep -E "[[:space:]]$name\$" "$CHECKSUMS_FILE" 2>/dev/null | grep -v '^#' | awk '{print $1}' | head -n1 || true)
 
     if [[ -z "$expected" ]]; then
-        echo "    ⚠️  WARNING: no pinned checksum for $name — artifact is UNVERIFIED. Add it to build/native-checksums.txt."
-        return 0
+        if [[ "${RYN_ALLOW_UNVERIFIED_NATIVE:-}" == "1" ]]; then
+            echo "    ⚠️  WARNING: no pinned checksum for $name — RYN_ALLOW_UNVERIFIED_NATIVE=1 is set, using it UNVERIFIED."
+            echo "        Regenerate pins (see build/native-checksums.txt) before trusting this artifact."
+            return 0
+        fi
+        echo "    ✖ NO PINNED CHECKSUM for $name in build/native-checksums.txt"
+        echo "        Refusing to use an unpinned native artifact (fail-closed supply-chain check)."
+        echo "        Pin its SHA-256 in build/native-checksums.txt, or build from source instead"
+        echo "        (set RYN_ALLOW_UNVERIFIED_NATIVE=1 only to bootstrap a brand-new release)."
+        return 1
     fi
 
     actual="$(compute_sha256 "$file")"
@@ -96,18 +114,10 @@ verify_checksum() {
     return 0
 }
 
-download_rid() {
-    local rid="$1"
-    local ext dest archive_name
-
-    ext="$(archive_ext "$rid")"
-    dest="$INTEROP_DIR/runtimes/$rid/native"
-    archive_name="saucer-bindings-${rid}${ext}"
-
-    mkdir -p "$dest"
-
-    echo "==> Downloading $archive_name..."
-
+# Download the release asset for a RID into $tmp_file (no checksum verification here).
+# Echoes nothing; returns 0 on success with the file at the caller-provided path.
+fetch_archive() {
+    local archive_name="$1" tmp_file="$2"
     local auth_hdr
     auth_hdr="$(auth_header)"
 
@@ -138,9 +148,75 @@ sys.exit(1)
 
     echo "    Found asset, downloading..."
 
-    local tmp_file="/tmp/$archive_name"
     if ! curl -sS -L -H "$auth_hdr" -H "Accept: application/octet-stream" -o "$tmp_file" "$asset_url"; then
         echo "    Download failed."
+        return 1
+    fi
+}
+
+# Regenerate build/native-checksums.txt from the authoritative GitHub release archives.
+# This is the *only* sanctioned way to (re)pin: it downloads each published archive and records
+# its real SHA-256. Run it once per native-v* release, review the diff, and commit the result.
+pin_checksums() {
+    local rids=("$@")
+    [[ ${#rids[@]} -eq 0 ]] && rids=("${ALL_RIDS[@]}")
+
+    local tmp_pins="/tmp/native-checksums.new.txt"
+    {
+        echo "# Pinned SHA-256 checksums for prebuilt saucer-bindings native archives."
+        echo "#"
+        echo "# Format (one per line):   <sha256-hex>  <archive-file-name>"
+        echo "#"
+        echo "# download-native.sh / download-native.ps1 verify every downloaded archive against the entry"
+        echo "# here BEFORE extracting it. Verification fails CLOSED: a mismatch OR a missing entry aborts"
+        echo "# the download (non-zero exit) so an unpinned or tampered artifact is never used. The only"
+        echo "# override is RYN_ALLOW_UNVERIFIED_NATIVE=1, which downgrades a *missing* pin to a warning."
+        echo "#"
+        echo "# To (re)generate from the authoritative GitHub release archives:"
+        echo "#   ./build/download-native.sh pin            # all RIDs"
+        echo "#   ./build/download-native.sh pin osx-arm64  # one RID"
+        echo "# then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}"
+        echo "# from the latest native-v* release and run  shasum -a 256 <archive>.)"
+    } > "$tmp_pins"
+
+    local rid ext archive_name tmp_file sum failed=0
+    for rid in "${rids[@]}"; do
+        ext="$(archive_ext "$rid")"
+        archive_name="saucer-bindings-${rid}${ext}"
+        tmp_file="/tmp/$archive_name"
+        echo "==> Pinning $archive_name..."
+        if ! fetch_archive "$archive_name" "$tmp_file"; then
+            echo "    Could not fetch $archive_name — skipping."
+            failed=1
+            continue
+        fi
+        sum="$(compute_sha256 "$tmp_file")"
+        printf '%s  %s\n' "$sum" "$archive_name" >> "$tmp_pins"
+        rm -f "$tmp_file"
+        echo "    $sum"
+    done
+
+    mv "$tmp_pins" "$CHECKSUMS_FILE"
+    echo ""
+    echo "==> Wrote $CHECKSUMS_FILE. Review the diff and commit."
+    return "$failed"
+}
+
+download_rid() {
+    local rid="$1"
+    local ext dest archive_name
+
+    ext="$(archive_ext "$rid")"
+    dest="$INTEROP_DIR/runtimes/$rid/native"
+    archive_name="saucer-bindings-${rid}${ext}"
+
+    mkdir -p "$dest"
+
+    echo "==> Downloading $archive_name..."
+
+    local tmp_file="/tmp/$archive_name"
+    if ! fetch_archive "$archive_name" "$tmp_file"; then
+        rm -f "$tmp_file"
         return 1
     fi
 
@@ -163,6 +239,12 @@ sys.exit(1)
 ALL_RIDS=(osx-arm64 linux-x64 win-x64)
 
 case "${1:-}" in
+    pin|--update-checksums)
+        # Regenerate build/native-checksums.txt from the authoritative release archives.
+        shift || true
+        pin_checksums "$@"
+        exit $?
+        ;;
     all)
         echo "==> Downloading native libraries for all platforms..."
         for rid in "${ALL_RIDS[@]}"; do

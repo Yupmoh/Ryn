@@ -51,7 +51,13 @@ function Get-ArchiveExt($rid) {
 }
 
 # Verify a downloaded archive against the pinned SHA-256 in native-checksums.txt before extraction.
-# Mismatch => hard fail. Missing entry => loud UNVERIFIED warning.
+# Supply-chain protection: this fails CLOSED (parity with download-native.sh's verify_checksum). A
+# checksum mismatch OR a missing pin both abort the download (return $false -> non-zero exit) so a
+# tampered, corrupt, or unpinned artifact is never extracted or used.
+#
+# Escape hatch (opt-in, loud): set RYN_ALLOW_UNVERIFIED_NATIVE=1 to downgrade a *missing* pin to a
+# warning. This exists only for bootstrapping a new native-v* release before its checksums have been
+# pinned; it never bypasses a real mismatch. Leave it unset for any trusted/CI flow.
 function Test-Checksum($file, $name) {
     $checksumsFile = Join-Path $PSScriptRoot "native-checksums.txt"
     $expected = $null
@@ -66,8 +72,16 @@ function Test-Checksum($file, $name) {
     }
 
     if (-not $expected) {
-        Write-Host "    WARNING: no pinned checksum for $name -- artifact is UNVERIFIED. Add it to build/native-checksums.txt."
-        return $true
+        if ($env:RYN_ALLOW_UNVERIFIED_NATIVE -eq "1") {
+            Write-Host "    WARNING: no pinned checksum for $name -- RYN_ALLOW_UNVERIFIED_NATIVE=1 is set, using it UNVERIFIED."
+            Write-Host "        Regenerate pins (see build/native-checksums.txt) before trusting this artifact."
+            return $true
+        }
+        Write-Host "    NO PINNED CHECKSUM for $name in build/native-checksums.txt"
+        Write-Host "        Refusing to use an unpinned native artifact (fail-closed supply-chain check)."
+        Write-Host "        Pin its SHA-256 in build/native-checksums.txt, or build from source instead"
+        Write-Host "        (set RYN_ALLOW_UNVERIFIED_NATIVE=1 only to bootstrap a brand-new release)."
+        return $false
     }
 
     $actual = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLowerInvariant()
