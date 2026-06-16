@@ -65,6 +65,21 @@ No AI attribution / `Co-Authored-By` lines.
   `JsonSerializerContext`. The codebase is NativeAOT-first.
 - Documented — update the README / docs if you change user-facing behavior.
 
+## Test dependencies
+
+The test suite uses [FluentAssertions](https://www.nuget.org/packages/FluentAssertions),
+**pinned to `7.2.0`** in `Directory.Packages.props`. This is deliberate: the FluentAssertions
+8.x line moved to Xceed's community/commercial license, which is a gray zone for contributors
+who run the suite in a commercial context. The 7.x line is **Apache-2.0** and free for any use.
+7.2.0 keeps the same `FluentAssertions` namespace and assertion API, so no test code changes
+are needed when building against it.
+
+If you prefer a fully MIT-licensed, drop-in alternative, the
+[AwesomeAssertions](https://www.nuget.org/packages/AwesomeAssertions) fork (Apache-2.0, keeps the
+`FluentAssertions` namespace) is API-compatible; swapping it in would mean changing the
+`PackageReference Include="FluentAssertions"` IDs in the seven test `.csproj` files. Either way,
+do not bump FluentAssertions back to 8.x without revisiting this licensing note.
+
 ## Reporting bugs
 
 Open an issue with: what you did, what you expected, what happened, your OS, and
