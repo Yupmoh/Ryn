@@ -3,6 +3,13 @@ using Ryn.Ipc;
 using Ryn.Plugins.Dialog;
 using Ryn.Plugins.FileSystem;
 
+// The open/save dialogs return absolute paths under the user's home folder, and the
+// FileSystem plugin only honours reads/writes that fall inside its AllowedPaths. Scope
+// the plugin to the home directory so the files the dialog hands back are in range —
+// without this the default scope is the app's bin directory and every open/save fails
+// with UnauthorizedAccessException.
+var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
 #pragma warning disable CA1849 // No async context in top-level statements before builder
 var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html"));
 #pragma warning restore CA1849
@@ -18,7 +25,7 @@ var app = RynApplication.CreateBuilder()
     .ConfigureServices(services =>
     {
         services.AddRynCommands();
-        services.AddRynFileSystem();
+        services.AddRynFileSystem(fs => fs.AllowedPaths.Add(homeDir));
         services.AddRynDialog();
     })
     .Build();

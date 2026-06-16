@@ -306,6 +306,17 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     return (bytes/1048576).toFixed(1) + ' MB';
   }
 
+  // Escape any file- or environment-derived string before it lands in innerHTML, so a
+  // filename or machine name like '<img src=x onerror=alert(1)>' renders as text, not markup.
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // IPC Commands
   async function doGreet() {
     try {
@@ -347,17 +358,17 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
       var info = JSON.parse(await invoke('app.sysinfo'));
       var html = '<h3><span class="icon">💻</span> System Information</h3>';
       html += '<table class="kv-table">';
-      html += '<tr><td>OS</td><td>' + info.os + '</td></tr>';
-      html += '<tr><td>Architecture</td><td>' + info.arch + '</td></tr>';
-      html += '<tr><td>Runtime</td><td>' + info.runtime + '</td></tr>';
-      html += '<tr><td>Processors</td><td>' + info.processors + ' cores</td></tr>';
-      html += '<tr><td>Machine</td><td>' + info.machineName + '</td></tr>';
-      html += '<tr><td>User</td><td>' + info.userName + '</td></tr>';
-      html += '<tr><td>Working Dir</td><td>' + info.workingDir + '</td></tr>';
+      html += '<tr><td>OS</td><td>' + escapeHtml(info.os) + '</td></tr>';
+      html += '<tr><td>Architecture</td><td>' + escapeHtml(info.arch) + '</td></tr>';
+      html += '<tr><td>Runtime</td><td>' + escapeHtml(info.runtime) + '</td></tr>';
+      html += '<tr><td>Processors</td><td>' + escapeHtml(info.processors) + ' cores</td></tr>';
+      html += '<tr><td>Machine</td><td>' + escapeHtml(info.machineName) + '</td></tr>';
+      html += '<tr><td>User</td><td>' + escapeHtml(info.userName) + '</td></tr>';
+      html += '<tr><td>Working Dir</td><td>' + escapeHtml(info.workingDir) + '</td></tr>';
       html += '</table>';
       document.getElementById('sysinfoCard').innerHTML = html;
     } catch(e) {
-      document.getElementById('sysinfoCard').innerHTML = '<div class="output error">' + e.message + '</div>';
+      document.getElementById('sysinfoCard').innerHTML = '<div class="output error">' + escapeHtml(e.message) + '</div>';
     }
   }
 
@@ -380,13 +391,13 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
       entries.forEach(function(e) {
         html += '<li>';
         html += '<span class="icon">' + (e.isDirectory ? '📁' : '📄') + '</span>';
-        html += '<span class="name">' + e.name + '</span>';
+        html += '<span class="name">' + escapeHtml(e.name) + '</span>';
         html += '<span class="size">' + (e.isDirectory ? '' : formatSize(e.size)) + '</span>';
         html += '</li>';
       });
       document.getElementById('fileList').innerHTML = html || '<li style="color:var(--muted)">Empty directory</li>';
     } catch(e) {
-      document.getElementById('fileList').innerHTML = '<li class="output error">' + e.message + '</li>';
+      document.getElementById('fileList').innerHTML = '<li class="output error">' + escapeHtml(e.message) + '</li>';
     }
   }
 
