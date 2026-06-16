@@ -19,8 +19,24 @@ public sealed class ShellExecutionPolicy
 
     private static readonly string[] DefaultOpenSchemes = ["http", "https", "mailto"];
 
-    private static readonly string[] DangerousPrefixes =
+    // Best-effort, defense-in-depth ONLY. This denylist is inherently incomplete and is NOT the security
+    // boundary: an argument denylist can always be bypassed (bundled short flags, alternate tools, env-based
+    // config, response redirection, etc.). The real safety for argument abuse is the exact-argv
+    // CommandScope enforcement in EnforceArgumentPolicy — a command that has a CommandScope may only run with
+    // an argv the scope matches. These prefixes exist purely to make the *discouraged* legacy any-args
+    // AllowedCommands path (which CommandScope cannot constrain) a little less trivially abusable; they
+    // target the most common curl/wget exfiltration and SSRF flags (proxy override, upload, raw POST body).
+    // Do not treat additions here as a substitute for a CommandScope. See ShellOptions.AllowedCommands.
+    private static readonly string[] DangerousLongPrefixes =
         ["--proxy", "--socks", "--upload-file", "--data-binary"];
+
+    // Short-flag equivalents of the long flags above (curl): -x == --proxy, -T == --upload-file. Matched by
+    // exact token equality (not StartsWith): a prefix match on a single-dash short flag would sweep up
+    // unrelated, legitimate flags from other tools (tar's -x extract, ssh's -x, gcc's -o, ...) and break
+    // commands an integrator deliberately allowed. The trade-off is that the value-glued forms (-xhttp://…,
+    // bundled -sx) and the separated short flags of tools we don't model still slip through; that is
+    // acceptable because, again, the CommandScope — not this list — is the actual boundary.
+    private static readonly string[] DangerousShortFlags = ["-x", "-T"];
 
     private static readonly StringComparer CommandNameComparer =
         OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
@@ -162,8 +178,11 @@ public sealed class ShellExecutionPolicy
     }
 
     /// <summary>
-    /// Enforces, in order: the built-in argument denylist, any integrator deny-prefixes, and — when the
-    /// command has one or more <see cref="CommandScope"/>s — that the argv matches a scope exactly.
+    /// Enforces, in order: the best-effort built-in argument denylist (defense-in-depth, see
+    /// <see cref="ValidateArguments"/>), any integrator deny-prefixes, and — when the command has one or more
+    /// <see cref="CommandScope"/>s — that the argv matches a scope exactly. The exact-argv scope match is the
+    /// real boundary; a legacy any-args <see cref="ShellOptions.AllowedCommands"/> entry has no scope and so is
+    /// governed only by the (incomplete) denylist.
     /// </summary>
     internal void EnforceArgumentPolicy(string command, string[] args)
     {
@@ -203,13 +222,25 @@ public sealed class ShellExecutionPolicy
         return string.IsNullOrEmpty(leaf) ? command : leaf;
     }
 
+    /// <summary>
+    /// Applies the best-effort, defense-in-depth argument denylist (built-in dangerous prefixes/short flags
+    /// plus any integrator <see cref="ShellOptions.DenyArgPrefixes"/>). This is hardening for the discouraged
+    /// any-args <see cref="ShellOptions.AllowedCommands"/> path only; it is NOT a security boundary. The
+    /// boundary is the exact-argv <see cref="CommandScope"/> matched in <see cref="EnforceArgumentPolicy"/>.
+    /// </summary>
     internal void ValidateArguments(string[] args)
     {
         foreach (var arg in args)
         {
-            foreach (var prefix in DangerousPrefixes)
+            foreach (var prefix in DangerousLongPrefixes)
             {
                 if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Argument '{arg}' is blocked for security.");
+            }
+
+            foreach (var flag in DangerousShortFlags)
+            {
+                if (string.Equals(arg, flag, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Argument '{arg}' is blocked for security.");
             }
 

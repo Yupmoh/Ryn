@@ -10,9 +10,23 @@ namespace Ryn.Plugins.Shell;
 
 public sealed class PtyCommands : IDisposable
 {
+    /// <summary>
+    /// Upper bound on a single <c>shell.ptyWrite</c> payload (decoded bytes). A PTY input write is interactive
+    /// terminal input — even a large paste is far below this. The cap exists so an authorized-but-buggy (or
+    /// hostile) frontend cannot hand us an unbounded base64 blob that we decode into a giant managed array and
+    /// then block writing. Generous on purpose (8 MiB) so legitimate large pastes still go through.
+    /// </summary>
+    private const int MaxPtyWriteBytes = 8 * 1024 * 1024;
+
     private readonly IRynWebView _webView;
     private readonly ShellExecutionPolicy _policy;
-    private readonly ConcurrentDictionary<int, IPtySession> _sessions = new();
+
+    // Sessions are keyed by a process-monotonic id, not the OS pid. A pid is recyclable: once a child is reaped,
+    // the kernel can hand the same number to an unrelated process, and since this id is also the JS handle and the
+    // event-channel suffix, pid keying would let a stale handle alias a fresh session's channels. The monotonic id
+    // is never reused for the lifetime of the process.
+    private readonly ConcurrentDictionary<long, PtySession> _sessions = new();
+    private long _nextSessionId;
 
     public PtyCommands(IRynWebView webView, ShellExecutionPolicy policy)
     {
@@ -22,7 +36,7 @@ public sealed class PtyCommands : IDisposable
     }
 
     [RynCommand("shell.pty")]
-    public int Pty(string command, string argsJson)
+    public long Pty(string command, string argsJson)
     {
         // Route through the same validation choke point as execute/spawn — this also enforces the
         // argument policy, which the PTY path previously skipped entirely.
@@ -41,91 +55,80 @@ public sealed class PtyCommands : IDisposable
             Array.Copy(parsed, 0, args, 1, parsed.Length);
         }
 
-        IPtySession session;
+        var sessionId = Interlocked.Increment(ref _nextSessionId);
+        var sessionIdStr = sessionId.ToString(CultureInfo.InvariantCulture);
 
-        if (OperatingSystem.IsWindows())
-        {
-            session = CreateWindowsSession(resolvedCommand, args);
-        }
-        else
-        {
-            session = CreateUnixSession(resolvedCommand, args);
-        }
+        PtySession session = OperatingSystem.IsWindows()
+            ? CreateWindowsSession(sessionId, sessionIdStr, resolvedCommand, args)
+            : CreateUnixSession(sessionId, sessionIdStr, resolvedCommand, args);
 
-        var childPid = session.ChildPid;
-        _sessions[childPid] = session;
+        _sessions[sessionId] = session;
 
-        var pidStr = childPid.ToString(CultureInfo.InvariantCulture);
         var token = session.Cts.Token;
-        _ = Task.Run(() => ReadLoop(session, pidStr, token), CancellationToken.None);
+        _ = Task.Run(() => ReadLoop(session, sessionIdStr, token), CancellationToken.None);
 
-        return childPid;
+        return sessionId;
     }
 
-    private PtySessionUnix CreateUnixSession(string resolvedCommand, string[] args)
+    private PtySessionUnix CreateUnixSession(long sessionId, string sessionIdStr, string resolvedCommand, string[] args)
     {
         var masterFd = PtyNative.ForkWithPty(resolvedCommand, args, out var childPid);
-        var pidStr = childPid.ToString(CultureInfo.InvariantCulture);
 
 #pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionUnix, disposed in exit/kill/Dispose
-        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{pidStr}");
+        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
         var cts = new CancellationTokenSource();
 #pragma warning restore CA2000
 
-        return new PtySessionUnix(childPid, masterFd, stdoutBatcher, cts);
+        return new PtySessionUnix(sessionId, childPid, masterFd, stdoutBatcher, cts);
     }
 
-    private PtySessionWindows CreateWindowsSession(string resolvedCommand, string[] args)
+    private PtySessionWindows CreateWindowsSession(long sessionId, string sessionIdStr, string resolvedCommand, string[] args)
     {
         var commandLine = QuoteWindowsCommandLine(resolvedCommand, args);
 
         var conPty = PtyNativeWindows.CreateConPty(commandLine, 80, 24);
-        var pidStr = conPty.ProcessId.ToString(CultureInfo.InvariantCulture);
 
 #pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionWindows, disposed in exit/kill/Dispose
-        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{pidStr}");
+        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
         var cts = new CancellationTokenSource();
 #pragma warning restore CA2000
 
-        return new PtySessionWindows(conPty, stdoutBatcher, cts);
+        return new PtySessionWindows(sessionId, conPty, stdoutBatcher, cts);
     }
 
     [RynCommand("shell.ptyWrite")]
-    public bool PtyWrite(int pid, string base64Data)
+    public bool PtyWrite(long sessionId, string base64Data)
     {
-        if (!_sessions.TryGetValue(pid, out var session))
+        if (!_sessions.TryGetValue(sessionId, out var session))
+            return false;
+
+        ArgumentNullException.ThrowIfNull(base64Data);
+
+        // Reject before allocating/decoding: a base64 string of length N decodes to ~3N/4 bytes, so cap the
+        // encoded length too. This bounds both the managed decode buffer and the blocking write that follows.
+        if ((long)base64Data.Length / 4 * 3 > MaxPtyWriteBytes)
             return false;
 
         var bytes = Convert.FromBase64String(base64Data);
-        var offset = 0;
-        while (offset < bytes.Length)
-        {
-            int written;
-            if (session is PtySessionWindows winSession)
-                written = PtyNativeWindows.Write(
-                    winSession.ConPty.InputWriteHandle, bytes, offset, bytes.Length - offset);
-            else
-                written = PtyNative.Write(((PtySessionUnix)session).MasterFd, bytes, offset, bytes.Length - offset);
+        if (bytes.Length > MaxPtyWriteBytes)
+            return false;
 
-            if (written <= 0) return false;
-            offset += written;
-        }
-        return true;
+        // The per-session transport lock serializes this short native write against the transport close that
+        // the ReadLoop performs when the session ends, so we can never write into a closed (and possibly reused)
+        // fd/handle. Write returns false once the transport is closed.
+        return session.Write(bytes);
     }
 
     [RynCommand("shell.ptyResize")]
-    public bool PtyResize(int pid, int cols, int rows)
+    public bool PtyResize(long sessionId, int cols, int rows)
     {
         if (cols <= 0 || rows <= 0 || cols > 500 || rows > 500)
             return false;
 
-        if (!_sessions.TryGetValue(pid, out var session))
+        if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
 
-        if (session is PtySessionWindows winSession)
-            return PtyNativeWindows.Resize(winSession.ConPty.PseudoConsole, (ushort)cols, (ushort)rows);
-
-        return PtyNative.SetWindowSize(((PtySessionUnix)session).MasterFd, (ushort)rows, (ushort)cols);
+        return session.Resize((ushort)cols, (ushort)rows);
     }
 
     [RynCommand("shell.ptyMetrics")]
@@ -134,10 +137,9 @@ public sealed class PtyCommands : IDisposable
         var entries = new List<ProcessMetrics>();
         foreach (var kvp in _sessions)
         {
-            var pid = kvp.Key;
             var s = kvp.Value;
             entries.Add(new ProcessMetrics(
-                pid,
+                s.ChildPid,
                 s.StdoutBatcher.AddedCount,
                 s.StdoutBatcher.FlushedCount,
                 s.StdoutBatcher.DroppedCount));
@@ -146,16 +148,20 @@ public sealed class PtyCommands : IDisposable
     }
 
     [RynCommand("shell.ptyKill")]
-    public bool PtyKill(int pid)
+    public bool PtyKill(long sessionId)
     {
-        if (!_sessions.TryRemove(pid, out var session))
+        if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
 
-        CleanupSession(session, pid);
+        // Kill is fire-and-forget: it SIGKILLs the child and cancels the loop's CTS, which unblocks the
+        // blocking read with EOF. The ReadLoop then drains, emits the exit event exactly once, closes the
+        // transport, and removes the session. We deliberately do NOT close the master fd here — closing it
+        // out from under a thread that may still be inside read() is the fd-reuse hazard this fix removes.
+        session.RequestKill();
         return true;
     }
 
-    private void ReadLoop(IPtySession session, string pidStr, CancellationToken token)
+    private void ReadLoop(PtySession session, string sessionIdStr, CancellationToken token)
     {
         var buf = new byte[4096];
 
@@ -163,14 +169,9 @@ public sealed class PtyCommands : IDisposable
         {
             while (!token.IsCancellationRequested)
             {
-                int bytesRead;
-                if (session is PtySessionWindows winSession)
-                    bytesRead = PtyNativeWindows.Read(winSession.ConPty.OutputReadHandle, buf, buf.Length);
-                else
-                    bytesRead = PtyNative.Read(((PtySessionUnix)session).MasterFd, buf, buf.Length);
-
+                var bytesRead = session.Read(buf);
                 if (bytesRead <= 0)
-                    break; // EOF or error — child exited
+                    break; // EOF or error — child exited (or was killed)
 
                 var chunk = Convert.ToBase64String(buf, 0, bytesRead);
                 var json = JsonSerializer.Serialize(chunk, ShellJsonContext.Default.String);
@@ -182,46 +183,27 @@ public sealed class PtyCommands : IDisposable
             // Expected on cancellation
         }
 
-        // If we still own this session (wasn't killed), handle exit
-        if (_sessions.TryRemove(session.ChildPid, out _))
-        {
-            session.StdoutBatcher.FlushNow();
-
-            int exitCode;
-            if (session is PtySessionWindows winSession)
-                exitCode = PtyNativeWindows.WaitForExit(winSession.ConPty.ProcessHandle);
-            else
-                exitCode = PtyNative.WaitForExit(session.ChildPid);
-
-            var exitCodeStr = exitCode.ToString(CultureInfo.InvariantCulture);
-            _webView.EmitEvent($"shell.pty.exit.{pidStr}", exitCodeStr);
-
-            session.Dispose();
-        }
-    }
-
-    private void CleanupSession(IPtySession session, int pid)
-    {
-        session.Cts.Cancel();
-
-        if (session is PtySessionWindows winSession)
-            PtyNativeWindows.Kill(winSession.ConPty.ProcessHandle);
-        else
-            _ = PtyNative.Kill(session.ChildPid, 9); // SIGKILL
+        // The ReadLoop is the sole owner of the transport's lifetime: it is the last code that can call read(),
+        // so it is the only place that may close the fd/handle. Remove from the dictionary first so no new
+        // command resolves this session, then flush, emit exit once, and close the transport.
+        _sessions.TryRemove(session.Id, out _);
 
         session.StdoutBatcher.FlushNow();
 
-        int exitCode;
-        if (session is PtySessionWindows winSess)
-            exitCode = PtyNativeWindows.WaitForExit(winSess.ConPty.ProcessHandle);
-        else
-            exitCode = PtyNative.WaitForExit(session.ChildPid);
+        var exitCode = session.WaitForExit();
+        EmitExitOnce(session, sessionIdStr, exitCode);
 
-        var pidStr = pid.ToString(CultureInfo.InvariantCulture);
-        _webView.EmitEvent($"shell.pty.exit.{pidStr}",
+        session.CloseTransport();
+        session.DisposeManaged();
+    }
+
+    private void EmitExitOnce(PtySession session, string sessionIdStr, int exitCode)
+    {
+        if (!session.TryClaimExitEmit())
+            return;
+
+        _webView.EmitEvent($"shell.pty.exit.{sessionIdStr}",
             exitCode.ToString(CultureInfo.InvariantCulture));
-
-        session.Dispose();
     }
 
     private static string QuoteWindowsCommandLine(string command, string[] args)
@@ -270,54 +252,175 @@ public sealed class PtyCommands : IDisposable
 
     public void Dispose()
     {
+        // Kill every live session. We do not close transports here: each session has a running ReadLoop that
+        // owns its transport and will close it once the kill unblocks its read(). Closing fds from here would
+        // reintroduce the close-vs-read race this design removes.
         foreach (var kvp in _sessions)
-        {
-            if (_sessions.TryRemove(kvp.Key, out var session))
-                CleanupSession(session, kvp.Key);
-        }
+            kvp.Value.RequestKill();
     }
 }
 
 /// <summary>
-/// Common interface for Unix and Windows PTY sessions.
+/// Base type for a live PTY session. Encapsulates the platform transport (Unix master fd / Windows ConPTY
+/// handles) and the per-session lock that makes the transport's lifetime race-free: writes/resizes take the
+/// lock and short-circuit once the transport is closed, and the owning <c>ReadLoop</c> is the only caller that
+/// closes the transport (after its loop — and therefore the last possible <c>read()</c> — has exited).
 /// </summary>
-internal interface IPtySession : IDisposable
+internal abstract class PtySession
 {
-    public int ChildPid { get; }
-    public EventBatcher StdoutBatcher { get; }
-    public CancellationTokenSource Cts { get; }
-}
+    private readonly Lock _transportLock = new();
+    private bool _transportClosed;
+    private int _exitEmitted;
 
-internal sealed record PtySessionUnix(int ChildPid, int MasterFd, EventBatcher StdoutBatcher, CancellationTokenSource Cts) : IPtySession
-{
-    public void Dispose()
+    protected PtySession(long id, EventBatcher stdoutBatcher, CancellationTokenSource cts)
     {
-        Cts.Dispose();
-        StdoutBatcher.Dispose();
-        _ = PtyNative.Close(MasterFd);
-    }
-}
-
-internal sealed class PtySessionWindows : IPtySession
-{
-    public PtyNativeWindows.ConPtySession ConPty { get; }
-    public int ChildPid => ConPty.ProcessId;
-    public EventBatcher StdoutBatcher { get; }
-    public CancellationTokenSource Cts { get; }
-
-    internal PtySessionWindows(PtyNativeWindows.ConPtySession conPty, EventBatcher stdoutBatcher, CancellationTokenSource cts)
-    {
-        ConPty = conPty;
+        Id = id;
         StdoutBatcher = stdoutBatcher;
         Cts = cts;
     }
 
-    public void Dispose()
+    /// <summary>Process-monotonic id; also the JS handle and the event-channel suffix.</summary>
+    public long Id { get; }
+
+    /// <summary>The OS process id of the child (for metrics only — never used as a dictionary key).</summary>
+    public abstract int ChildPid { get; }
+
+    public EventBatcher StdoutBatcher { get; }
+    public CancellationTokenSource Cts { get; }
+
+    /// <summary>One-shot guard so the exit event is emitted exactly once across kill and natural-exit paths.</summary>
+    public bool TryClaimExitEmit() => Interlocked.Exchange(ref _exitEmitted, 1) == 0;
+
+    /// <summary>SIGKILLs the child (idempotent) and cancels the read loop. Does NOT close the transport.</summary>
+    public void RequestKill()
     {
-        Cts.Dispose();
-        StdoutBatcher.Dispose();
-        ConPty.Dispose();
+        try { Cts.Cancel(); }
+        catch (ObjectDisposedException) { /* loop already finished and disposed the CTS */ }
+
+        KillChild();
     }
+
+    /// <summary>Blocking read into <paramref name="buffer"/>. Called only from the owning ReadLoop.</summary>
+    public abstract int Read(byte[] buffer);
+
+    /// <summary>Waits for the child to exit and returns its exit code (-1 on failure).</summary>
+    public abstract int WaitForExit();
+
+    public bool Write(byte[] bytes)
+    {
+        lock (_transportLock)
+        {
+            if (_transportClosed)
+                return false;
+            return WriteLocked(bytes);
+        }
+    }
+
+    public bool Resize(ushort cols, ushort rows)
+    {
+        lock (_transportLock)
+        {
+            if (_transportClosed)
+                return false;
+            return ResizeLocked(cols, rows);
+        }
+    }
+
+    /// <summary>Closes the platform transport exactly once. Only the owning ReadLoop calls this.</summary>
+    public void CloseTransport()
+    {
+        lock (_transportLock)
+        {
+            if (_transportClosed)
+                return;
+            _transportClosed = true;
+            CloseTransportLocked();
+        }
+    }
+
+    /// <summary>Disposes the managed helpers (CTS, batcher). Transport is closed separately via CloseTransport.</summary>
+    public void DisposeManaged()
+    {
+        StdoutBatcher.Dispose();
+        Cts.Dispose();
+    }
+
+    protected abstract void KillChild();
+    protected abstract bool WriteLocked(byte[] bytes);
+    protected abstract bool ResizeLocked(ushort cols, ushort rows);
+    protected abstract void CloseTransportLocked();
+}
+
+internal sealed class PtySessionUnix : PtySession
+{
+    private readonly int _childPid;
+    private readonly int _masterFd;
+
+    internal PtySessionUnix(long id, int childPid, int masterFd, EventBatcher stdoutBatcher, CancellationTokenSource cts)
+        : base(id, stdoutBatcher, cts)
+    {
+        _childPid = childPid;
+        _masterFd = masterFd;
+    }
+
+    public override int ChildPid => _childPid;
+
+    public override int Read(byte[] buffer) => PtyNative.Read(_masterFd, buffer, buffer.Length);
+
+    public override int WaitForExit() => PtyNative.WaitForExit(_childPid);
+
+    protected override void KillChild() => _ = PtyNative.Kill(_childPid, 9); // SIGKILL
+
+    protected override bool WriteLocked(byte[] bytes)
+    {
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var written = PtyNative.Write(_masterFd, bytes, offset, bytes.Length - offset);
+            if (written <= 0) return false;
+            offset += written;
+        }
+        return true;
+    }
+
+    protected override bool ResizeLocked(ushort cols, ushort rows) => PtyNative.SetWindowSize(_masterFd, rows, cols);
+
+    protected override void CloseTransportLocked() => _ = PtyNative.Close(_masterFd);
+}
+
+internal sealed class PtySessionWindows : PtySession
+{
+    private readonly PtyNativeWindows.ConPtySession _conPty;
+
+    internal PtySessionWindows(long id, PtyNativeWindows.ConPtySession conPty, EventBatcher stdoutBatcher, CancellationTokenSource cts)
+        : base(id, stdoutBatcher, cts)
+    {
+        _conPty = conPty;
+    }
+
+    public override int ChildPid => _conPty.ProcessId;
+
+    public override int Read(byte[] buffer) => PtyNativeWindows.Read(_conPty.OutputReadHandle, buffer, buffer.Length);
+
+    public override int WaitForExit() => PtyNativeWindows.WaitForExit(_conPty.ProcessHandle);
+
+    protected override void KillChild() => PtyNativeWindows.Kill(_conPty.ProcessHandle);
+
+    protected override bool WriteLocked(byte[] bytes)
+    {
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var written = PtyNativeWindows.Write(_conPty.InputWriteHandle, bytes, offset, bytes.Length - offset);
+            if (written <= 0) return false;
+            offset += written;
+        }
+        return true;
+    }
+
+    protected override bool ResizeLocked(ushort cols, ushort rows) => PtyNativeWindows.Resize(_conPty.PseudoConsole, cols, rows);
+
+    protected override void CloseTransportLocked() => _conPty.Dispose();
 }
 
 /// <summary>
@@ -340,17 +443,8 @@ internal static partial class PtyNative
         public ushort ws_ypixel;
     }
 
-    // forkpty lives in libutil on some systems, but on macOS (and glibc) it's in libc.
-    // Using "libutil" as primary with "libc" fallback would complicate things;
-    // on modern macOS/Linux forkpty is resolved from libc.
-    [DllImport("libc", EntryPoint = "forkpty", SetLastError = true)]
-    private static extern int forkpty(out int master, IntPtr name, IntPtr termp, IntPtr winp);
-
     [DllImport("libc", EntryPoint = "read", SetLastError = true)]
     private static extern nint libc_read(int fd, byte[] buf, nint count);
-
-    [DllImport("libc", EntryPoint = "write", SetLastError = true)]
-    private static extern nint libc_write(int fd, byte[] buf, nint count);
 
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
     private static extern int libc_close(int fd);
@@ -364,19 +458,17 @@ internal static partial class PtyNative
     [DllImport("libc", EntryPoint = "waitpid", SetLastError = true)]
     private static extern int libc_waitpid(int pid, out int status, int options);
 
-    [DllImport("libc", EntryPoint = "execvp", SetLastError = true,
-        BestFitMapping = false, ThrowOnUnmappableChar = true)]
-    private static extern int libc_execvp(
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string file,
-        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string?[] argv);
-
-    [DllImport("libc", EntryPoint = "_exit")]
-    private static extern void libc_exit(int status);
-
     /// <summary>
-    /// Forks a child process with a PTY. Returns the master fd in the parent.
-    /// Throws on failure.
+    /// Forks a child process with a PTY via the native <c>ryn-pty</c> shim. Returns the master fd in the parent.
     /// </summary>
+    /// <remarks>
+    /// The spawn deliberately goes only through the native <c>ryn_pty_spawn</c> shim, which performs the
+    /// fork+exec entirely in C with no managed work after <c>fork()</c>. We do NOT fall back to a managed
+    /// <c>forkpty</c> + marshalled <c>execvp</c>: running P/Invoke string/array marshalling (which allocates and
+    /// touches runtime/allocator state) in the forked child of a multithreaded .NET process is not
+    /// async-signal-safe and can deadlock the child. If the shim is missing we fail loudly here instead of
+    /// silently taking a working-by-luck path.
+    /// </remarks>
     internal static int ForkWithPty(string command, string[] args, out int childPid)
     {
         // Build null-terminated argv for the native shim
@@ -384,43 +476,45 @@ internal static partial class PtyNative
         Array.Copy(args, argv, args.Length);
         argv[args.Length] = null;
 
-        // Try the native shim first (no managed work after fork)
+        int result;
         try
         {
-            var result = ryn_pty_spawn(command, argv, out var masterFd, out childPid);
+            result = ryn_pty_spawn(command, argv, out var masterFd, out childPid);
             if (result == 0)
                 return masterFd;
         }
-        catch (EntryPointNotFoundException) { }
-        catch (DllNotFoundException) { }
-
-        // Fallback to managed forkpty if native shim is not linked
-        int fallbackMasterFd;
-        var pid = forkpty(out fallbackMasterFd, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-
-        if (pid < 0)
+        catch (EntryPointNotFoundException ex)
         {
-            var errno = Marshal.GetLastPInvokeError();
-            throw new InvalidOperationException($"forkpty failed with errno {errno}");
+            throw new PlatformNotSupportedException(NativeShimMissingMessage, ex);
+        }
+        catch (DllNotFoundException ex)
+        {
+            throw new PlatformNotSupportedException(NativeShimMissingMessage, ex);
         }
 
-        if (pid == 0)
-        {
-            _ = libc_execvp(command, argv);
-            libc_exit(127);
-        }
-
-        childPid = pid;
-        return fallbackMasterFd;
+        var errno = Marshal.GetLastPInvokeError();
+        throw new InvalidOperationException(
+            $"ryn_pty_spawn failed for command '{command}' (rc={result}, errno={errno}).");
     }
 
+    private const string NativeShimMissingMessage =
+        "shell.pty requires the native 'ryn-pty' shim, which was not found next to the application. " +
+        "PTY support is unavailable on this platform/build. (The unsafe managed forkpty fallback has been removed.)";
+
+    // CA5393: AssemblyDirectory is intentional and is the hardening, not the risk. The 'ryn-pty' shim is a
+    // first-party native library that ships next to the application binary, so restricting the search to the
+    // assembly directory + System32 is strictly narrower than the default probing order (which includes the
+    // current working directory and PATH and is the actual hijack surface). INT-05 residual hardening.
+#pragma warning disable CA5393
     [DllImport("ryn-pty", EntryPoint = "ryn_pty_spawn", SetLastError = true,
         BestFitMapping = false, ThrowOnUnmappableChar = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     private static extern int ryn_pty_spawn(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string command,
         [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string?[] argv,
         out int masterFd,
         out int childPid);
+#pragma warning restore CA5393
 
     internal static int Read(int fd, byte[] buf, int count)
     {
