@@ -7,10 +7,11 @@ internal static class BuildCommand
 {
     internal static int Execute(ReadOnlySpan<string> args)
     {
-        var csproj = FindCsproj();
+        var (csproj, error) = ProjectResolver.Resolve(
+            Directory.GetCurrentDirectory(), ProjectResolver.ReadExplicitProject(args));
         if (csproj is null)
         {
-            Console.Error.WriteLine("No .csproj file found in the current directory.");
+            Console.Error.WriteLine(error);
             return 1;
         }
 
@@ -18,13 +19,13 @@ internal static class BuildCommand
         var projectName = Path.GetFileNameWithoutExtension(csproj);
         var useAot = args.Contains("--aot");
         var embedContent = args.Contains("--embed");
+        var zipPath = Path.Combine(projectDir, "ryn_embedded_content.zip");
 
         if (embedContent)
         {
             var wwwroot = Path.Combine(projectDir, "wwwroot");
             if (Directory.Exists(wwwroot))
             {
-                var zipPath = Path.Combine(projectDir, "ryn_embedded_content.zip");
                 if (File.Exists(zipPath)) File.Delete(zipPath);
                 ZipFile.CreateFromDirectory(wwwroot, zipPath);
                 Console.WriteLine("  Embedded wwwroot content into zip");
@@ -61,6 +62,16 @@ internal static class BuildCommand
 
         process?.WaitForExit();
 
+        // The staged zip is a transient build input: once publish has run it is baked into the
+        // assembly as a manifest resource (via Ryn.Core.targets), so remove it from the project dir
+        // so it does not linger or get committed. Run regardless of build outcome.
+        if (embedContent && File.Exists(zipPath))
+        {
+            try { File.Delete(zipPath); }
+            catch (IOException) { /* best-effort cleanup; a leftover zip is harmless */ }
+            catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+        }
+
         if (process?.ExitCode == 0)
         {
             var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
@@ -77,11 +88,5 @@ internal static class BuildCommand
         }
 
         return process?.ExitCode ?? 1;
-    }
-
-    private static string? FindCsproj()
-    {
-        var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj");
-        return files.Length == 1 ? files[0] : null;
     }
 }
