@@ -1,5 +1,6 @@
 using System.Diagnostics;
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Ryn.Ipc;
 
 namespace Ryn.Plugins.Dialog;
@@ -224,22 +225,17 @@ internal sealed class PickerCommands
         return null;
     }
 
+    // Serialize the picked paths through System.Text.Json's source-generated path
+    // (PickerJsonContext) rather than hand-building the array. The previous StringBuilder
+    // escaped only \ and ", producing invalid JSON for any path containing a control
+    // character (e.g. a tab or newline embedded in a filename). STJ escapes \t, \r, \n and
+    // every other control character correctly, so the bridge's JSON.parse never chokes.
+    // The source-gen context keeps this NativeAOT-safe (no reflection-based serializer).
     private static string PathsToJsonArray(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return "[]";
         var paths = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var sb = new StringBuilder("[");
-        for (var i = 0; i < paths.Length; i++)
-        {
-            if (i > 0) sb.Append(',');
-            sb.Append('"');
-            sb.Append(paths[i]
-                .Replace("\\", "\\\\", StringComparison.Ordinal)
-                .Replace("\"", "\\\"", StringComparison.Ordinal));
-            sb.Append('"');
-        }
-        sb.Append(']');
-        return sb.ToString();
+        return JsonSerializer.Serialize(paths, PickerJsonContext.Default.StringArray);
     }
 
     private static string EscapeAppleScript(string value) =>
@@ -249,3 +245,8 @@ internal sealed class PickerCommands
     private static string EscapePowerShell(string value) =>
         value.Replace("'", "''", StringComparison.Ordinal);
 }
+
+// Source-generated serializer context so PathsToJsonArray can emit a correctly-escaped
+// JSON string array without reflection (NativeAOT-safe), mirroring ShellJsonContext.
+[JsonSerializable(typeof(string[]))]
+internal sealed partial class PickerJsonContext : JsonSerializerContext;

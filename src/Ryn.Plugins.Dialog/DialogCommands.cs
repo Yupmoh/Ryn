@@ -24,7 +24,9 @@ public static partial class DialogCommands
         ArgumentNullException.ThrowIfNull(message);
         if (OperatingSystem.IsMacOS())
         {
-            Process.Start("osascript", $"-e 'display dialog \"{EscapeAppleScript(message)}\" with title \"{EscapeAppleScript(title)}\" buttons {{\"OK\"}} default button \"OK\"'")?.WaitForExit();
+            var script = $"display dialog \"{EscapeAppleScript(message)}\" with title \"{EscapeAppleScript(title)}\" buttons {{\"OK\"}} default button \"OK\"";
+            using var process = RunOsascript(script, redirectStandardOutput: false);
+            process?.WaitForExit();
         }
         else if (OperatingSystem.IsWindows())
         {
@@ -43,14 +45,8 @@ public static partial class DialogCommands
         ArgumentNullException.ThrowIfNull(message);
         if (OperatingSystem.IsMacOS())
         {
-            var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "osascript",
-                Arguments = $"-e 'try\nset result to button returned of (display dialog \"{EscapeAppleScript(message)}\" with title \"{EscapeAppleScript(title)}\" buttons {{\"No\", \"Yes\"}} default button \"Yes\")\nif result is \"Yes\" then\nreturn \"true\"\nelse\nreturn \"false\"\nend if\non error\nreturn \"false\"\nend try'",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            });
-
+            var script = $"try\nset result to button returned of (display dialog \"{EscapeAppleScript(message)}\" with title \"{EscapeAppleScript(title)}\" buttons {{\"No\", \"Yes\"}} default button \"Yes\")\nif result is \"Yes\" then\nreturn \"true\"\nelse\nreturn \"false\"\nend if\non error\nreturn \"false\"\nend try";
+            using var process = RunOsascript(script, redirectStandardOutput: true);
             if (process is null) return false;
             var output = process.StandardOutput.ReadToEnd().Trim();
             process.WaitForExit();
@@ -73,6 +69,21 @@ public static partial class DialogCommands
     private static string EscapeAppleScript(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
              .Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    // Spawn osascript with the script passed as a single "-e" argument via ArgumentList,
+    // so there is no shell to re-parse it. EscapeAppleScript only escapes the AppleScript
+    // string literals (\\ and "), never the process arguments.
+    private static Process? RunOsascript(string script, bool redirectStandardOutput)
+    {
+        var psi = new ProcessStartInfo("osascript")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = redirectStandardOutput,
+        };
+        psi.ArgumentList.Add("-e");
+        psi.ArgumentList.Add(script);
+        return Process.Start(psi);
+    }
 
     private static string? FindLinuxDialogTool()
     {
