@@ -16,14 +16,18 @@ project with a Vite-powered frontend, using the same pattern as the
 ryn new MyApp --vite
 cd MyApp/frontend
 npm install
-npm run dev
-# In another terminal:
-cd MyApp
-ryn dev
+cd ..
+ryn dev --vite
 ```
 
 This scaffolds a C# backend with a `frontend/` directory containing a vanilla
 TypeScript + Vite project.
+
+`ryn dev --vite` starts (and forwards the output of) the Vite dev server for you
+and points the webview at it — you do not need a second terminal running
+`npm run dev`. `ryn dev` also auto-detects a Vite frontend (a `frontend/`
+directory with a `package.json`), so plain `ryn dev` in a scaffolded Vite
+project behaves the same; pass `--vite` explicitly to force it.
 
 ## Project Structure
 
@@ -51,33 +55,40 @@ MyApp/
 
 ## Development Workflow
 
-During development the Vite dev server and the Ryn app run side by side:
+During development the Vite dev server and the Ryn app run together under one
+command:
 
-1. **Start Vite** in `frontend/`:
-   ```bash
-   cd MyApp/frontend
-   npm run dev
-   ```
-   Vite serves the UI at `http://localhost:5173` with hot module replacement.
+```bash
+cd MyApp
+ryn dev --vite
+```
 
-2. **Start Ryn** in the project root:
-   ```bash
-   cd MyApp
-   ryn dev
-   ```
-   The generated `Program.cs` checks for a `--vite` argument. When present, Ryn
-   opens the Vite dev server URL instead of loading static files:
+`ryn dev --vite` does three things:
+
+1. **Starts the Vite dev server** in `frontend/` (and forwards its output to your
+   terminal). Vite serves the UI at `http://localhost:5173` with hot module
+   replacement.
+2. **Launches the C# app with the `--vite` argument.** The generated `Program.cs`
+   checks for that argument and opens the Vite dev server URL instead of loading
+   static files:
    ```csharp
    if (args.Contains("--vite"))
        opts.Url = new Uri("http://localhost:5173");
    else
        opts.ContentDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
    ```
+3. **Rebuilds and relaunches** the C# backend when `.cs` files change.
 
-   To run in Vite dev mode manually (outside `ryn dev`):
-   ```bash
-   dotnet run -- --vite
-   ```
+Plain `ryn dev` auto-detects a Vite frontend (a `frontend/` directory with a
+`package.json`) and behaves the same way; use `--vite` to force Vite dev mode
+regardless of detection.
+
+To drive the backend in Vite dev mode by hand (with Vite started separately via
+`npm run dev` in `frontend/`):
+
+```bash
+dotnet run -- --vite
+```
 
 Changes to `.ts`, `.html`, or `.css` files in `frontend/` are picked up instantly
 by Vite. Changes to `.cs` files are picked up by `ryn dev`, which rebuilds and
@@ -105,8 +116,8 @@ Ryn injects the `window.__ryn` bridge into every page automatically. No extra
 Call C# commands from TypeScript:
 
 ```typescript
-// Call a [RynCommand] named "greet" with a string parameter
-const result = await window.__ryn.invoke('greet', { name: 'World' });
+// Call a [RynCommand] named "app.greet" with a string parameter
+const result = await window.__ryn.invoke('app.greet', { name: 'World' });
 ```
 
 The bridge provides three methods:
@@ -147,7 +158,7 @@ function ryn() {
 }
 
 export async function greet(name: string): Promise<string> {
-  return (await ryn().invoke('greet', { name })) as string;
+  return (await ryn().invoke('app.greet', { name })) as string;
 }
 ```
 

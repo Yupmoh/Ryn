@@ -6,7 +6,7 @@
 
 ## Vision
 
-Give .NET developers the Tauri experience without leaving C#. Native OS webviews, HTML/JS or Blazor frontends, NativeAOT-ready, source-generated IPC. Ryn fills the gap where MAUI lacks Linux support, Avalonia/Uno require XAML, Photino is abandoned, and Tauri requires Rust.
+Give .NET developers the Tauri experience without leaving C#. Native OS webviews, HTML/JS or Blazor frontends, NativeAOT-ready, source-generated IPC. Ryn fills the gap where MAUI lacks Linux support, Avalonia/Uno require XAML, Photino is deliberately minimal (no plugin system, capability model, IPC generator, or CLI), and Tauri requires Rust.
 
 ## Architecture Overview
 
@@ -359,7 +359,7 @@ Ryn.Plugins.{Name}/
 - [x] `ryn new <name> --vite` — Vite + TypeScript scaffolding
 
 **Deliverables:**
-- [ ] `dotnet new` template packages (currently direct file generation instead)
+- [x] `dotnet new` template packages (templates/Ryn.Templates.csproj + templates/ryn-app/.template.config; `ryn new` also generates files directly)
 - [x] Generated project includes: csproj, Program.cs, Commands.cs, wwwroot/index.html, appsettings.json, ryn.json
 - [ ] Template uses latest Ryn packages from NuGet
 - [x] Validates project name
@@ -382,7 +382,7 @@ Ryn.Plugins.{Name}/
 
 **Deliverables:**
 - [x] FileSystemWatcher on `*.cs` files with 300ms debounce
-- [x] On frontend change: refresh webview only (wwwroot changes skip C# rebuild)
+- [x] On frontend change: sync wwwroot to output and relaunch the app without a C# rebuild (in-place webview reload is a roadmap item, see docs/ROADMAP.md)
 - [x] On backend change: rebuild and restart app
 - [ ] Dev mode injects dev tools (right-click inspect)
 - [x] Console log forwarding from webview to C# ILogger in dev mode
@@ -498,9 +498,9 @@ Ryn.Plugins.{Name}/
 
 ### Milestone 6.3 — Documentation and Examples (Weeks 17-18) 🟡 PARTIALLY COMPLETE
 
-- [ ] API reference generated from XML docs
-- [ ] Getting started guide
-- [ ] Architecture deep-dive
+- [ ] API reference generated from XML docs (roadmap: docs site, see docs/ROADMAP.md)
+- [x] Getting started guide (docs/getting-started.md)
+- [x] Architecture deep-dive (docs/architecture.md)
 - [x] Plugin authoring guide (docs/plugin-authoring.md)
 - [x] Vite integration guide (docs/vite-integration.md)
 - [x] XML doc comments on all public APIs
@@ -525,7 +525,7 @@ The following features were implemented outside the original phased plan:
 ### Platform Integration
 - [x] System theme detection (dark/light mode, macOS/Windows/Linux)
 - [x] File drag-and-drop (HTML5 API with FileDrop event)
-- [x] Deep linking (custom URL schemes with OS protocol registration)
+- [~] Deep linking (custom URL schemes with OS protocol registration) — partial: macOS Apple Event delivery and Windows/Linux single-instance forwarding are implemented but not yet verified per-OS; treat as unverified until each platform is exercised end-to-end
 - [x] Console log forwarding (webview console to C# ILogger in dev mode)
 
 ### Build & Distribution
@@ -637,8 +637,10 @@ CI runs benchmarks on `main` and on each PR. Results are compared using Benchmar
 | `aot.yml` | Push/PR | NativeAOT publish + smoke test on 3 OS |
 | `benchmarks.yml` | PR | Run benchmarks, compare to baseline, comment on PR |
 | `bindings.yml` | Submodule update | Regenerate ClangSharp bindings, open PR if changed |
+| `native-libs.yml` | Native tag/dispatch | Build and publish prebuilt saucer native libs |
+| `codeql.yml` | Push/PR/schedule | CodeQL security scanning |
 | `release.yml` | Tag `v*` | Build, test, pack NuGet, publish to nuget.org |
-| `docs.yml` | Push to main | Build and deploy docs site |
+| `docs.yml` | Push to main | Build and deploy docs site — _not yet implemented; see docs/ROADMAP.md_ |
 
 ### Local Automation
 
@@ -781,5 +783,5 @@ These are issues discovered during implementation that need to be addressed befo
 - [x] XML doc comments on all public APIs
 - [x] 7 example applications (HelloWindow, Showcase, VueApp, TerminalApp, FileManager, MarkdownEditor, DevKit)
 - [x] Security model with capability system + argument validation prevents unauthorized native access by default
-- [ ] Getting started guide
-- [ ] Generated API reference site
+- [x] Getting started guide (docs/getting-started.md)
+- [ ] Generated API reference site (roadmap, see docs/ROADMAP.md)

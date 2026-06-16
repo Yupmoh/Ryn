@@ -183,7 +183,8 @@ Test your commands directly without a webview:
 [Fact]
 public void Greet_ReturnsMessage()
 {
-    var result = MyPluginCommands.Greet("Test");
+    var commands = new MyPluginCommands(new MyPluginOptions());
+    var result = commands.Greet("Test");
     result.Should().Be("Hello from MyPlugin, Test!");
 }
 ```

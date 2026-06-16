@@ -27,11 +27,45 @@ Before building Ryn I went through the existing options for desktop .NET with a 
 
 - **[Tauri](https://tauri.app/):** the inspiration, and a great tool. The catch is the backend is Rust. Ryn exists so a .NET team can get the Tauri experience without rewriting their backend in another language.
 - **[Photino](https://www.tryphotino.io/):** the closest .NET option, a thin wrapper over the same native webviews. It's deliberately minimal, with no plugin system, no capability-based security, no IPC source generator, and no CLI or project scaffolding. Ryn adds those on top of the same idea.
-- **[Electron.NET](https://github.com/ElectronNET/Electron.NET) and [CefSharp](https://github.com/cefsharp/CefSharp):** both bundle Chromium, so apps start around 100 MB and can't use NativeAOT. Ryn uses the OS's own webview (WebView2 / WKWebView / WebKitGTK) and ships ~4 MB AOT binaries.
+- **[Electron.NET](https://github.com/ElectronNET/Electron.NET) and [CefSharp](https://github.com/cefsharp/CefSharp):** both bundle Chromium, so apps start around 100 MB and can't use NativeAOT. Ryn uses the OS's own webview (WebView2 / WKWebView / WebKitGTK) and ships ~5 MB AOT binaries.
 - **.NET MAUI Blazor Hybrid:** Microsoft's official answer, but it pulls in the whole MAUI stack and a XAML host shell. It's heavy, mobile-first, and doesn't give you a plain "bring your own HTML/CSS/JS" frontend. Ryn is desktop-only and much lighter.
 - **[Avalonia](https://avaloniaui.net/) and [Uno Platform](https://platform.uno/):** both are solid, but they're XAML frameworks that render their own controls rather than host a web frontend. If you want to use HTML/CSS/JS and the front-end tools you already know, that's a different model.
 
 None of them gave me Tauri-style ergonomics on a native webview, with NativeAOT and a real security model, in C#. So I built Ryn.
+
+### At a glance
+
+How Ryn compares on the axes that matter for a small, native, web-UI desktop app. Cells reflect Ryn's current alpha state, not a future roadmap.
+
+| | Ryn | Tauri v2 | Photino | Electron.NET | MAUI Blazor Hybrid |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Backend language | C# | Rust | C# | C# | C# |
+| Frontend | HTML/CSS/JS | HTML/CSS/JS | HTML/CSS/JS | HTML/CSS/JS | Blazor |
+| Renderer | OS webview | OS webview | OS webview | bundled Chromium | OS webview |
+| Hello-world binary | ~5 MB | ~3–10 MB | ~1 MB wrapper¹ | ~100+ MB | tens of MB |
+| NativeAOT | yes | n/a (Rust) | no | no | no |
+| First-party plugins | 8 | many | none | none | n/a |
+| Capability sandbox | yes (deny-by-default) | yes | no | no | no |
+| IPC source generator | yes | n/a | no | no | n/a |
+| Scaffold/dev/bundle CLI | yes | yes | no | partial | dotnet |
+| Signed auto-updater | yes | yes | no | no | no |
+| Multi-window | no (planned) | yes | yes | yes | limited |
+| Native app menus | no (planned) | yes | partial | yes | yes |
+| Mobile | no (desktop-only) | yes | no | no | yes |
+
+¹ Photino is a thin wrapper; the deployed size depends on your own .NET app and runtime. The point of the row is the relative weight of the webview layer, not a head-to-head app size.
+
+These numbers are for orientation, not a benchmark claim; they vary by platform, runtime mode (self-contained vs framework-dependent), and trimming. Ryn's ~5 MB figure is a NativeAOT hello-world on macOS arm64 (a full app pulling in every plugin is ~5.6 MB).
+
+### Non-goals
+
+To keep the comparison honest, Ryn deliberately does **not** try to be some things its peers are:
+
+- **Not a mobile framework.** Ryn is desktop-only (macOS, Windows, Linux). For iOS/Android, use Tauri v2 or MAUI.
+- **Not a XAML/native-control UI.** Ryn hosts a web frontend in the OS webview. If you want pixel-identical, control-based rendering, use Avalonia or Uno.
+- **Not pixel-perfect cross-platform rendering.** Because each OS uses its own webview engine, rendering can differ subtly between WebKit, WebKitGTK, and Chromium (WebView2).
+- **Not a managed-Chromium bundle.** Ryn never ships Chromium; it relies on the OS webview, which is the source of its small size and also means feature support tracks the host OS.
+- **Not a Blazor host (yet).** Blazor WebAssembly hosting is under consideration but not implemented; today the frontend is HTML/CSS/JS.
 
 ## Status
 
@@ -69,6 +103,8 @@ dotnet add package Ryn
 ```
 
 The `Ryn` package bundles the whole framework in a single reference: `Ryn.Core`, `Ryn.Ipc` (with the `[RynCommand]` source generator), and `Ryn.Interop` (with the native webview libraries). The individual packages are also published if you'd rather reference them one at a time.
+
+> **Windows:** the default `dotnet new console` template emits top-level statements with an implicit MTA entry point, which WebView2 cannot use. Replace `Program.cs` with an explicit `[STAThread] static void Main()` (see [Windows requirements](#windows-requirements)) or scaffold with `ryn new`, which generates a Windows-safe entry point for you. On macOS and Linux either shape works.
 
 Add plugins as needed:
 
@@ -196,10 +232,10 @@ using Ryn.Ipc;
 
 public static class MyCommands
 {
-    [RynCommand]
+    [RynCommand("app.greet")]
     public static string Greet(string name) => $"Hello, {name}!";
 
-    [RynCommand]
+    [RynCommand("app.add")]
     public static int Add(int a, int b) => a + b;
 }
 ```
@@ -207,9 +243,11 @@ public static class MyCommands
 Call them from JavaScript:
 
 ```javascript
-const greeting = await window.__ryn.invoke('greet', { name: 'World' });
-const sum = await window.__ryn.invoke('add', { a: 2, b: 3 });
+const greeting = await window.__ryn.invoke('app.greet', { name: 'World' });
+const sum = await window.__ryn.invoke('app.add', { a: 2, b: 3 });
 ```
+
+Every command name is plugin-prefixed (`app.*` for your own commands, `fs.*`, `clipboard.*`, etc. for plugins) so capabilities can grant or deny by prefix.
 
 Supported parameter/return types: `int`, `long`, `float`, `double`, `bool`, `string`, `JsonElement`, primitive arrays (`int[]`, `string[]`), nullable types (`int?`), and complex DTOs via `[RynJsonContext]`.
 
@@ -220,13 +258,16 @@ Control what the frontend can access:
 ```json
 {
   "capabilities": {
+    "app": true,
     "fs": {
       "allow": ["readTextFile", "readDir"],
       "scope": ["$APP_DATA"]
     },
     "shell": {
       "allow": ["execute"],
-      "commands": ["echo", "git"]
+      "scopedCommands": [
+        { "name": "git", "args": ["status"] }
+      ]
     },
     "clipboard": true,
     "notification": true
@@ -234,7 +275,9 @@ Control what the frontend can access:
 }
 ```
 
-Missing `ryn.json` = allow all (dev mode). Present = deny by default. Empty `scope: []` or `commands: []` = explicit deny-all.
+`"app": true` grants your own `app.*` commands; plugins are granted by their prefix. The shell plugin uses `scopedCommands` (argv templates) rather than a bare binary list, so each allowed argument is matched by an exact literal or a regex `validator`.
+
+A present `ryn.json` denies every command by default; only what you list is allowed. A **missing** `ryn.json` depends on the build: a **Debug** build falls back to allow-all for local convenience, while a **Release** build **fails closed and denies everything** (and logs a one-time startup warning) so a mis-deployed app never ships wide open. Always ship a `ryn.json`. Empty `scope: []` or `commands: []` = explicit deny-all. See [SECURITY.md](SECURITY.md) for the full model.
 
 ## Bundling for Distribution
 
@@ -285,16 +328,26 @@ templates/             dotnet new template pack
 tests/                 200+ xUnit tests across 7 test projects
 benchmarks/            BenchmarkDotNet suites (IPC, marshaling, JSON, escaping)
 docs/
-  plan/PLAN.md         Full project plan with milestone tracking
+  getting-started.md   Walkthrough from install to bundle
+  architecture.md      IPC pipeline, threading model, security internals
+  capabilities.md      Canonical ryn.json capability schema reference
   plugin-authoring.md  Guide for writing Ryn plugins
+  vite-integration.md  Using Vite and TypeScript with Ryn
+  accessibility-and-i18n.md  Current a11y / i18n stance
+  ROADMAP.md           Planned work beyond the current alpha
 ```
 
 ## Documentation
 
 - [Getting Started](docs/getting-started.md): full walkthrough from install to bundle
 - [Architecture](docs/architecture.md): the IPC pipeline, threading model, and security internals
+- [Security Model](SECURITY.md): the trust boundary, capabilities, and the shell/updater hardening
+- [Capabilities Reference](docs/capabilities.md): the canonical `ryn.json` schema
 - [Plugin Authoring](docs/plugin-authoring.md): writing Ryn plugins with commands, options, DI, and events
 - [Vite Integration](docs/vite-integration.md): using Vite and TypeScript with Ryn
+- [Accessibility & Internationalization](docs/accessibility-and-i18n.md): the current a11y / i18n stance
+- [Roadmap](docs/ROADMAP.md): planned capabilities beyond the current alpha
+- [Third-Party Notices](THIRD-PARTY-NOTICES.md): licenses for the native libraries Ryn redistributes
 
 ## Author
 
