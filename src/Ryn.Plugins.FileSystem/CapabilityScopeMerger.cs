@@ -1,3 +1,4 @@
+using Ryn.Core.Internal;
 using Ryn.Ipc;
 
 namespace Ryn.Plugins.FileSystem;
@@ -31,7 +32,6 @@ internal static class CapabilityScopeMerger
         }
 
         var ignoreCase = !OperatingSystem.IsLinux();
-        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
         var clamped = new List<string>();
         foreach (var programmatic in options.AllowedPaths)
@@ -39,9 +39,11 @@ internal static class CapabilityScopeMerger
             var resolved = PathValidator.Canonicalize(programmatic);
             foreach (var allowed in scope.AllowedPaths)
             {
+                // Containment uses the one canonical helper (PAP-23); the host case policy it carries
+                // (RynPath.HostComparison) is the same ordinal/ordinal-ignore-case split as the glob path.
                 var within = GlobMatcher.IsGlob(allowed)
                     ? GlobMatcher.IsMatch(allowed, resolved.Replace('\\', '/'), ignoreCase)
-                    : IsWithin(resolved, PathValidator.Canonicalize(allowed), comparison);
+                    : RynPath.IsContainedIn(resolved, PathValidator.Canonicalize(allowed), RynPath.HostComparison);
                 if (within)
                 {
                     clamped.Add(programmatic);
@@ -55,16 +57,5 @@ internal static class CapabilityScopeMerger
             options.AccessDenied = true;
         else
             options.AllowedPaths.AddRange(clamped);
-    }
-
-    private static bool IsWithin(string fullPath, string directory, StringComparison comparison)
-    {
-        var normalizedDir = directory
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var normalizedPath = fullPath
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return normalizedPath.Equals(normalizedDir, comparison)
-            || normalizedPath.StartsWith(normalizedDir + Path.DirectorySeparatorChar, comparison);
     }
 }

@@ -1,3 +1,4 @@
+using Ryn.Core.Internal;
 using Ryn.Ipc;
 
 namespace Ryn.Plugins.FileSystem;
@@ -7,18 +8,24 @@ namespace Ryn.Plugins.FileSystem;
 /// Resolved from DI as a per-application singleton rather than process-global static state, so two windows
 /// or hosts in the same process can run with different filesystem policies without clobbering each other.
 /// The path-canonicalization helpers are stateless and remain <c>static</c> (also used by
-/// <see cref="CapabilityScopeMerger"/>).
+/// <see cref="CapabilityScopeMerger"/>); the containment rule itself lives in one place for the whole
+/// framework, <see cref="RynPath.IsContainedIn"/> (PAP-23), which both this validator and the scope merger
+/// call.
 /// </summary>
 public sealed class PathValidator
 {
     private readonly FileSystemOptions _options;
 
-    // Match the host filesystem's case semantics. Linux is case-sensitive; using a
-    // case-insensitive compare there would be *over-permissive* (treat /Allowed and /allowed as the
-    // same scope when they are genuinely different directories). Windows/macOS default volumes are
-    // case-insensitive, where an ordinal compare would wrongly deny legitimate access.
-    private static readonly StringComparison PathComparison =
-        OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+    /// <summary>
+    /// The host filesystem's case semantics, the single comparison used by every containment and
+    /// glob check in this assembly. Linux is case-sensitive; using a case-insensitive compare there
+    /// would be *over-permissive* (treat <c>/Allowed</c> and <c>/allowed</c> as the same scope when
+    /// they are genuinely different directories). Windows/macOS default volumes are case-insensitive,
+    /// where an ordinal compare would wrongly deny legitimate access. This is the same host case policy
+    /// the framework-wide containment helper uses (<see cref="RynPath.HostComparison"/>); it is aliased
+    /// here so this assembly's call sites read naturally without re-deriving the rule.
+    /// </summary>
+    internal static readonly StringComparison PathComparison = RynPath.HostComparison;
 
     private static readonly bool IgnoreCase = !OperatingSystem.IsLinux();
 
@@ -50,8 +57,19 @@ public sealed class PathValidator
     /// Resolves <paramref name="path"/> to a canonical, symlink-free absolute path and verifies it is
     /// contained within an allowed scope. Symlinks are followed at every path component — including
     /// parent directories and not-yet-existing write targets — so a link whose lexical path is in
-    /// scope but whose real target escapes is rejected.
+    /// scope but whose real target escapes is rejected. Legitimate symlinks that resolve to an in-scope
+    /// real target are *not* rejected (per the medium-risk register, blanket-rejecting in-scope links
+    /// would break valid setups).
     /// </summary>
+    /// <remarks>
+    /// The value returned is the canonical (symlink-resolved) path, which is what the caller should both
+    /// authorize against and operate on. Note that returning a *string* still leaves a narrow
+    /// time-of-check/time-of-use race: a caller that re-opens the returned path by name follows symlinks
+    /// afresh, so an attacker who can swap a path component for an escaping symlink in the window between
+    /// this call and the caller's open could still escape. Closing that window fully requires the caller
+    /// to open atomically and re-verify the opened handle's real path against the scope (see PLG-03);
+    /// that is a caller-side change and is tracked separately.
+    /// </remarks>
     internal string Resolve(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -60,7 +78,9 @@ public sealed class PathValidator
             throw new UnauthorizedAccessException("File system access is denied by capability policy");
 
         // Canonical real path (resolves '..' AND symlinks). This is the value we both authorize and
-        // operate on, closing the validate-vs-open gap for the planted-symlink case.
+        // hand back, so authorization is performed on the post-symlink-resolution path, not the lexical
+        // one. (A re-opened *string* cannot pin an inode, so a racing caller-side re-open is still a
+        // residual TOCTOU — see the <remarks> above.)
         var canonical = Canonicalize(
             Path.IsPathRooted(path)
                 ? path
@@ -69,7 +89,7 @@ public sealed class PathValidator
         if (_options.AllowedPaths.Count == 0)
         {
             // Default: restrict to the app directory (also canonicalized so macOS /var->/private etc. match).
-            if (!IsWithin(canonical, Canonicalize(AppContext.BaseDirectory)))
+            if (!RynPath.IsContainedIn(canonical, Canonicalize(AppContext.BaseDirectory), PathComparison))
                 throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside the application directory");
             return canonical;
         }
@@ -81,7 +101,7 @@ public sealed class PathValidator
                 if (GlobMatcher.IsMatch(allowed, canonical.Replace('\\', '/'), IgnoreCase))
                     return canonical;
             }
-            else if (IsWithin(canonical, Canonicalize(allowed)))
+            else if (RynPath.IsContainedIn(canonical, Canonicalize(allowed), PathComparison))
             {
                 return canonical;
             }
@@ -163,14 +183,5 @@ public sealed class PathValidator
         }
 
         return current;
-    }
-
-    private static bool IsWithin(string canonicalPath, string canonicalDirectory)
-    {
-        var dir = canonicalDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var p = canonicalPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return p.Equals(dir, PathComparison)
-            || p.StartsWith(dir + Path.DirectorySeparatorChar, PathComparison);
     }
 }

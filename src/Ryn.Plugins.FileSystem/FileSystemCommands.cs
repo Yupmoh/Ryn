@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ryn.Ipc;
@@ -18,24 +19,30 @@ public sealed class FileSystemCommands
     [RynCommand("fs.readTextFile")]
     public string ReadTextFile(string path)
     {
-        var resolved = _validator.ResolveForRead(path);
-        return File.ReadAllText(resolved);
+        using var stream = OpenForRead(path);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     [RynCommand("fs.readFile")]
     public string ReadFile(string path)
     {
-        var resolved = _validator.ResolveForRead(path);
-        return Convert.ToBase64String(File.ReadAllBytes(resolved));
+        using var stream = OpenForRead(path);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return Convert.ToBase64String(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     [RynCommand("fs.writeFile")]
     public string WriteFile(string path, string data)
     {
+        // Decode before opening so a malformed payload fails before any file is created/truncated.
+        var bytes = Convert.FromBase64String(data);
         var resolved = _validator.Resolve(path);
         var dir = Path.GetDirectoryName(resolved);
         if (dir is not null) Directory.CreateDirectory(dir);
-        File.WriteAllBytes(resolved, Convert.FromBase64String(data));
+        using (var stream = OpenForWrite(path, resolved))
+            stream.Write(bytes, 0, bytes.Length);
         return resolved;
     }
 
@@ -45,7 +52,9 @@ public sealed class FileSystemCommands
         var resolved = _validator.Resolve(path);
         var dir = Path.GetDirectoryName(resolved);
         if (dir is not null) Directory.CreateDirectory(dir);
-        File.WriteAllText(resolved, text);
+        using var stream = OpenForWrite(path, resolved);
+        var bytes = Encoding.UTF8.GetBytes(text);
+        stream.Write(bytes, 0, bytes.Length);
     }
 
     [RynCommand("fs.exists")]
@@ -108,6 +117,95 @@ public sealed class FileSystemCommands
             info.LastAccessTimeUtc.ToString("O", CultureInfo.InvariantCulture));
 
         return JsonSerializer.Serialize(stat, FsJsonContext.Default.FileStat);
+    }
+
+    // --- PLG-03: open-then-re-verify, closing the validate→re-open TOCTOU window ---------------
+    //
+    // PathValidator.Resolve()/ResolveForRead() return a *string* canonical (symlink-resolved) path.
+    // Handing a string to File.ReadAllText/WriteAllBytes lets the open re-walk the path by name and
+    // re-follow symlinks afresh, so a component swapped for an escaping symlink in the window between
+    // validation and open could read/write out of scope. We close that window from the caller side:
+    //   1. validate (authorize on the canonical, symlink-resolved path),
+    //   2. open the file by name (a normal open that *follows* symlinks, so legitimate in-scope
+    //      symlinks keep working — we deliberately do NOT pass O_NOFOLLOW, per the medium-risk
+    //      register: blanket no-follow would reject valid in-scope links),
+    //   3. with the handle held open, re-validate the same user path and require it to still resolve
+    //      to the identical in-scope canonical target; otherwise reject with the same access-denied
+    //      error and touch nothing.
+    //
+    // Holding the handle open across the re-check means an attacker must keep the malicious symlink
+    // in place through both the open and the re-validation; the moment the re-resolved real path
+    // diverges from what we authorized, we refuse. This converts the old "swap once after validate"
+    // race into a much narrower one.
+    //
+    // RESIDUAL RACE (documented, not silently dropped): the re-check in step 3 is still performed by
+    // *name*, not against the inode the handle actually points at. A fully race-free guarantee needs
+    // the real path of the *open file descriptor* (e.g. fcntl F_GETPATH on macOS, /proc/self/fd
+    // readlink on Linux, GetFinalPathNameByHandle on Windows). Those are native, per-OS, and cannot be
+    // verified on this macOS-only box without risky interop, so they are intentionally not added here.
+    // An attacker who can swap a component to an escaping link, win the race so our open follows it,
+    // then swap it *back* to an in-scope target before the re-validation, could still slip through.
+    // That window is far narrower than the original and is flagged for a future fd-realpath hardening.
+
+    private FileStream OpenForRead(string path)
+    {
+        // ResolveForRead authorizes AND enforces MaxReadBytes on the canonical target.
+        var authorized = _validator.ResolveForRead(path);
+        var stream = new FileStream(
+            authorized,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        try
+        {
+            ReVerifyOpenedPath(path, authorized);
+            return stream;
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
+    private FileStream OpenForWrite(string path, string authorized)
+    {
+        // Open non-truncating (OpenOrCreate) so the destructive truncate does not land before the
+        // re-check: were a component swapped to an escaping link, a FileMode.Create open would have
+        // already truncated the out-of-scope target. We re-verify first, then truncate to 0 ourselves.
+        var stream = new FileStream(
+            authorized,
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.Read);
+        try
+        {
+            ReVerifyOpenedPath(path, authorized);
+            stream.SetLength(0);
+            return stream;
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// With the file already open, re-runs the scope check on the original user-supplied
+    /// <paramref name="path"/> and requires it to still resolve to <paramref name="authorized"/>.
+    /// A divergence (a path component swapped to an escaping symlink after the first validation)
+    /// throws <see cref="UnauthorizedAccessException"/> with the same access-denied contract as the
+    /// initial validation. See the block comment above for the narrow residual race this still leaves.
+    /// </summary>
+    private void ReVerifyOpenedPath(string path, string authorized)
+    {
+        // Re-validate throws UnauthorizedAccessException if the path now escapes scope; if it resolves
+        // to a *different* in-scope target than the one we authorized and opened, reject it too.
+        var reResolved = _validator.Resolve(path);
+        if (!string.Equals(reResolved, authorized, PathValidator.PathComparison))
+            throw new UnauthorizedAccessException(
+                $"Access denied: path '{path}' changed between validation and open");
     }
 }
 
