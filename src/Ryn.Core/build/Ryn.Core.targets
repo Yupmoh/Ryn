@@ -1,6 +1,25 @@
 <Project>
+  <!--
+    Auto-imported into every consumer of the Ryn.Core package (it lands in the nupkg under both
+    build/ and buildTransitive/, see the Pack items in Ryn.Core.csproj). When the CLI embed flag is
+    used (ryn build with embed) the CLI stages a ryn_embedded_content.zip next to the consumer
+    .csproj and passes -p:RynEmbedContent=true; this target then embeds that zip as a manifest
+    resource so EmbeddedContentExtractor can find it at runtime.
+
+    Both the property check AND Exists() gate the item, so ordinary builds that never set
+    RynEmbedContent and never stage the zip are completely unaffected.
+  -->
   <ItemGroup Condition="'$(RynEmbedContent)' == 'true' AND Exists('ryn_embedded_content.zip')">
     <EmbeddedResource Include="ryn_embedded_content.zip"
                       LogicalName="ryn_embedded_content.zip" />
+  </ItemGroup>
+
+  <!--
+    Flip RynOptions.UseEmbeddedContent on automatically when content is embedded so the app does not
+    have to opt in by hand. The flag is surfaced as assembly metadata (no reflection, AOT safe) that
+    RynApplicationBuilder reads at startup to default UseEmbeddedContent before user configuration.
+  -->
+  <ItemGroup Condition="'$(RynEmbedContent)' == 'true' AND Exists('ryn_embedded_content.zip')">
+    <AssemblyMetadata Include="Ryn.UseEmbeddedContent" Value="true" />
   </ItemGroup>
 </Project>
