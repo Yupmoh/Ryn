@@ -115,12 +115,15 @@ internal sealed class LocalWebServer : IAsyncDisposable
         {
             client.NoDelay = true;
             var stream = client.GetStream();
+            // One reader per connection so any bytes overread past a request's body (HTTP pipelining) carry
+            // forward to the next request on the same keep-alive connection.
+            var reader = new RequestReader(stream);
             try
             {
                 var keepAlive = true;
                 while (keepAlive && !ct.IsCancellationRequested)
                 {
-                    var request = await ReadRequestAsync(stream, ct).ConfigureAwait(false);
+                    var request = await reader.ReadRequestAsync(ct).ConfigureAwait(false);
                     if (request is null)
                         break;
 
@@ -136,75 +139,183 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     // ---- request parsing ----
 
-    private static async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
+    /// <summary>
+    /// Buffered, per-connection HTTP/1.1 request reader. Fills a reusable buffer from the socket in chunks
+    /// (instead of one byte per syscall), scans for the <c>CRLFCRLF</c> head terminator, then reads the body.
+    /// Any bytes read past the current request's body are retained in <see cref="_leftover"/> so a pipelined
+    /// next request on the same keep-alive connection parses without loss. Parsing/validation semantics
+    /// (head/body caps, EOF→null, IOException→null) match the previous per-byte implementation exactly.
+    /// </summary>
+    private sealed class RequestReader(NetworkStream stream)
     {
-        var head = new List<byte>(512);
-        var one = new byte[1];
+        private const int ReadChunk = 8 * 1024;
+        private readonly NetworkStream _stream = stream;
+        private readonly byte[] _readBuffer = new byte[ReadChunk];
 
-        while (true)
+        // Bytes already pulled off the socket but not yet consumed (head overread / pipelined request tails).
+        private byte[] _leftover = [];
+
+        public async Task<HttpRequest?> ReadRequestAsync(CancellationToken ct)
         {
-            int n;
-            try { n = await stream.ReadAsync(one.AsMemory(0, 1), ct).ConfigureAwait(false); }
-            catch (IOException) { return null; }
+            // Accumulate the head (request line + headers) until CRLFCRLF, starting from any carried-over bytes.
+            var head = new ByteAccumulator(_leftover);
+            _leftover = [];
 
-            if (n == 0)
-                return null; // EOF
+            // Scanning index for the CRLFCRLF terminator; resumes near the prior tail to stay O(n) overall.
+            var scanFrom = 0;
+            int headEnd;
+            while ((headEnd = IndexOfCrlfCrlf(head.Buffer, head.Count, ref scanFrom)) < 0)
+            {
+                if (head.Count > MaxHeadBytes)
+                    return null;
 
-            head.Add(one[0]);
-            if (head.Count > MaxHeadBytes)
+                int n;
+                try { n = await _stream.ReadAsync(_readBuffer.AsMemory(0, ReadChunk), ct).ConfigureAwait(false); }
+                catch (IOException) { return null; }
+
+                if (n == 0)
+                    return null; // EOF before a complete head
+
+                head.Append(_readBuffer, n);
+            }
+
+            var bodyStart = headEnd + 4; // past the CRLFCRLF
+
+            // Enforce the head cap on the terminated head (request line + headers + CRLFCRLF must be within cap),
+            // matching the per-byte loop which rejected once the accumulated head exceeded MaxHeadBytes.
+            if (bodyStart > MaxHeadBytes)
                 return null;
 
-            var c = head.Count;
-            if (c >= 4 && head[c - 4] == (byte)'\r' && head[c - 3] == (byte)'\n'
-                       && head[c - 2] == (byte)'\r' && head[c - 1] == (byte)'\n')
-                break;
+            var headText = Encoding.ASCII.GetString(head.Buffer, 0, headEnd + 2); // include the final header CRLF
+            var overread = head.Slice(bodyStart);
+
+            var request = ParseHead(headText);
+            if (request is null)
+                return null;
+
+            var body = await ReadBodyAsync(request.Headers, overread, ct).ConfigureAwait(false);
+            if (body is null)
+                return null;
+
+            return request with { Body = body };
         }
 
-        var headText = Encoding.ASCII.GetString(head.ToArray());
-        var lines = headText.Split("\r\n", StringSplitOptions.None);
-        if (lines.Length == 0)
-            return null;
-
-        var requestLine = lines[0].Split(' ');
-        if (requestLine.Length < 3)
-            return null;
-
-        var method = requestLine[0];
-        var target = requestLine[1];
-        var version = requestLine[2];
-
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 1; i < lines.Length; i++)
+        /// <summary>Reads the request body of the declared Content-Length, consuming overread bytes first.</summary>
+        private async Task<byte[]?> ReadBodyAsync(Dictionary<string, string> headers, byte[] overread, CancellationToken ct)
         {
-            var line = lines[i];
-            if (line.Length == 0) break;
-            var colon = line.IndexOf(':', StringComparison.Ordinal);
-            if (colon <= 0) continue;
-            headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
-        }
+            if (!(headers.TryGetValue("Content-Length", out var clStr)
+                  && long.TryParse(clStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var contentLength)
+                  && contentLength > 0))
+            {
+                // No body: any overread belongs to the next pipelined request.
+                _leftover = overread;
+                return [];
+            }
 
-        byte[] body = [];
-        if (headers.TryGetValue("Content-Length", out var clStr)
-            && long.TryParse(clStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var contentLength)
-            && contentLength > 0)
-        {
             if (contentLength > MaxBodyBytes)
                 return null;
 
-            body = new byte[contentLength];
+            var body = new byte[contentLength];
             var read = 0;
+
+            // Satisfy the body from overread head bytes first.
+            if (overread.Length > 0)
+            {
+                var fromOverread = (int)Math.Min(overread.Length, body.Length);
+                Array.Copy(overread, 0, body, 0, fromOverread);
+                read = fromOverread;
+                if (overread.Length > fromOverread)
+                    _leftover = overread[fromOverread..]; // tail past the body = next pipelined request
+            }
+
             while (read < body.Length)
             {
                 int n;
-                try { n = await stream.ReadAsync(body.AsMemory(read), ct).ConfigureAwait(false); }
+                try { n = await _stream.ReadAsync(body.AsMemory(read), ct).ConfigureAwait(false); }
                 catch (IOException) { return null; }
-                if (n == 0) return null;
+                if (n == 0) return null; // EOF mid-body
                 read += n;
             }
+
+            return body;
         }
 
-        var keepAlive = DetermineKeepAlive(version, headers);
-        return new HttpRequest(method, target, headers, body, keepAlive);
+        /// <summary>Scans for <c>\r\n\r\n</c> starting near <paramref name="scanFrom"/>; returns the index of the first CR or -1.</summary>
+        private static int IndexOfCrlfCrlf(byte[] buffer, int count, ref int scanFrom)
+        {
+            // Resume 3 bytes back so a terminator straddling the prior read boundary is still found.
+            var start = Math.Max(0, scanFrom - 3);
+            for (var i = start; i + 3 < count; i++)
+            {
+                if (buffer[i] == (byte)'\r' && buffer[i + 1] == (byte)'\n'
+                    && buffer[i + 2] == (byte)'\r' && buffer[i + 3] == (byte)'\n')
+                    return i;
+            }
+            scanFrom = count;
+            return -1;
+        }
+
+        private static HttpRequest? ParseHead(string headText)
+        {
+            var lines = headText.Split("\r\n", StringSplitOptions.None);
+            if (lines.Length == 0)
+                return null;
+
+            var requestLine = lines[0].Split(' ');
+            if (requestLine.Length < 3)
+                return null;
+
+            var method = requestLine[0];
+            var target = requestLine[1];
+            var version = requestLine[2];
+
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 1; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.Length == 0) break;
+                var colon = line.IndexOf(':', StringComparison.Ordinal);
+                if (colon <= 0) continue;
+                headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            }
+
+            var keepAlive = DetermineKeepAlive(version, headers);
+            return new HttpRequest(method, target, headers, [], keepAlive);
+        }
+    }
+
+    /// <summary>Growable byte buffer for accumulating the request head without per-byte <c>List</c> overhead.</summary>
+    private struct ByteAccumulator(byte[] seed)
+    {
+        private byte[] _buffer = seed.Length > 0 ? (byte[])seed.Clone() : new byte[512];
+        private int _count = seed.Length;
+
+        public readonly byte[] Buffer => _buffer;
+        public readonly int Count => _count;
+
+        public void Append(byte[] source, int length)
+        {
+            EnsureCapacity(_count + length);
+            Array.Copy(source, 0, _buffer, _count, length);
+            _count += length;
+        }
+
+        /// <summary>Copies bytes from <paramref name="from"/> to the end into a fresh array (the overread tail).</summary>
+        public readonly byte[] Slice(int from)
+        {
+            if (from >= _count) return [];
+            var slice = new byte[_count - from];
+            Array.Copy(_buffer, from, slice, 0, slice.Length);
+            return slice;
+        }
+
+        private void EnsureCapacity(int needed)
+        {
+            if (needed <= _buffer.Length) return;
+            var size = _buffer.Length * 2;
+            while (size < needed) size *= 2;
+            Array.Resize(ref _buffer, size);
+        }
     }
 
     private static bool DetermineKeepAlive(string version, Dictionary<string, string> headers)
@@ -225,19 +336,19 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var corsHeaders = BuildCorsHeaders(request);
 
         // CORS preflight for IPC.
-        if (request.Method == "OPTIONS" && path.StartsWith("/ipc/", StringComparison.Ordinal))
+        if (request.Method == "OPTIONS" && path.StartsWith(IpcProtocol.IpcPrefix, StringComparison.Ordinal))
         {
             await WriteAsync(stream, 204, "No Content", null, [], corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
-        if (path.StartsWith("/ipc/cmd/", StringComparison.Ordinal))
+        if (path.StartsWith(IpcProtocol.IpcCommandPrefix, StringComparison.Ordinal))
         {
             await HandleIpcCommandAsync(stream, request, corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
-        if (path.StartsWith("/ipc/eval/", StringComparison.Ordinal))
+        if (path.StartsWith(IpcProtocol.IpcEvalPrefix, StringComparison.Ordinal))
         {
             await HandleIpcEvalAsync(stream, request, keepAlive, ct).ConfigureAwait(false);
             return;
@@ -320,7 +431,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var token = _webView?.IpcToken;
         if (string.IsNullOrEmpty(token)) return false;
 
-        var presented = request.Headers.TryGetValue("X-Ryn-Token", out var t) ? t : "";
+        var presented = request.Headers.TryGetValue(IpcProtocol.TokenHeader, out var t) ? t : "";
         if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(presented), Encoding.UTF8.GetBytes(token)))
             return false;
 
@@ -349,7 +460,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
             headers.Add(("Access-Control-Allow-Origin", origin));
             headers.Add(("Vary", "Origin"));
             headers.Add(("Access-Control-Allow-Methods", "POST, OPTIONS"));
-            headers.Add(("Access-Control-Allow-Headers", "Content-Type, X-Ryn-Token"));
+            headers.Add(("Access-Control-Allow-Headers", $"Content-Type, {IpcProtocol.TokenHeader}"));
         }
         return headers;
     }
@@ -417,14 +528,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
         if (_contentDirectory is null) return null;
 
         var combined = Path.GetFullPath(Path.Combine(_contentDirectory, relative));
-        var root = _contentDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
-        if (combined.Equals(root, comparison)
-            || combined.StartsWith(root + Path.DirectorySeparatorChar, comparison))
-            return combined;
-
-        return null; // traversal attempt
+        // One canonical containment rule for the whole framework (PAP-23): exact-root OR child-with-sep,
+        // under the host case policy (ordinal on Linux, ordinal-ignore-case on macOS/Windows).
+        return RynPath.IsContainedIn(combined, _contentDirectory, RynPath.HostComparison)
+            ? combined
+            : null; // traversal attempt
     }
 
     private static string GetMimeType(string extension) => extension.ToUpperInvariant() switch
