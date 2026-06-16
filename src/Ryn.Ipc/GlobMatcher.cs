@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -12,6 +13,19 @@ namespace Ryn.Ipc;
 /// </summary>
 public static class GlobMatcher
 {
+    // Scope globs come from ryn.json and are fixed at startup, so the same handful of
+    // (pattern, ignoreCase) keys are matched repeatedly on hot paths (PathValidator,
+    // CapabilityScopeMerger). Compiling the regex once and caching it avoids re-parsing the
+    // pattern on every IsMatch. The cache is bounded so an attacker-influenced pattern stream
+    // (e.g. via a malicious ryn.json or scope-merge input) cannot grow it without limit — once
+    // full we stop adding entries and fall back to building a throwaway regex for the overflow
+    // keys, preserving identical match semantics either way.
+    private const int MaxCachedRegexes = 1024;
+
+    private static readonly ConcurrentDictionary<RegexKey, Regex> RegexCache = new();
+
+    private readonly record struct RegexKey(string NormalizedPattern, bool IgnoreCase);
+
     /// <summary>True if <paramref name="pattern"/> contains any glob metacharacter.</summary>
     public static bool IsGlob(string pattern)
     {
@@ -29,7 +43,7 @@ public static class GlobMatcher
         ArgumentNullException.ThrowIfNull(path);
         var normalizedPattern = Normalize(pattern);
         var normalizedPath = Normalize(path);
-        var regex = ToRegex(normalizedPattern, ignoreCase);
+        var regex = GetOrBuildRegex(normalizedPattern, ignoreCase);
         try
         {
             return regex.IsMatch(normalizedPath);
@@ -42,6 +56,23 @@ public static class GlobMatcher
 
     private static string Normalize(string value) =>
         value.Replace('\\', '/');
+
+    private static Regex GetOrBuildRegex(string normalizedPattern, bool ignoreCase)
+    {
+        var key = new RegexKey(normalizedPattern, ignoreCase);
+        if (RegexCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var built = ToRegex(normalizedPattern, ignoreCase);
+
+        // Bound the cache: only cache while under the cap. Once full, hand back the freshly built
+        // regex without storing it so pathological/attacker-supplied pattern variety can't grow the
+        // dictionary without limit. Match semantics are identical whether cached or not.
+        if (RegexCache.Count < MaxCachedRegexes)
+            return RegexCache.GetOrAdd(key, built);
+
+        return built;
+    }
 
     private static Regex ToRegex(string glob, bool ignoreCase)
     {
