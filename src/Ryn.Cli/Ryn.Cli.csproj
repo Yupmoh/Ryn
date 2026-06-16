@@ -6,7 +6,13 @@
     <PackageTags>ryn;cli;tool</PackageTags>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>ryn</ToolCommandName>
-    <PublishAot>true</PublishAot>
+    <!-- Ship a framework-dependent dotnet tool. `dotnet pack` produces a portable tool regardless of
+         PublishAot (a packed tool can't be AOT without RID-specific ToolPackageRuntimeIdentifiers),
+         so the old PublishAot here did nothing for the tool and only leaked into local `dotnet
+         publish` runs; the AOT GitHub-release binaries are published separately in release.yml.
+         RollForward=Major lets the .NET 10 FDD tool run on a machine that later carries only a newer
+         (e.g. .NET 11) runtime instead of failing to start. (CLI-17) -->
+    <RollForward>Major</RollForward>
     <NoWarn>CA1303</NoWarn>
   </PropertyGroup>
 

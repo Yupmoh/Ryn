@@ -1,8 +1,28 @@
 <Project>
-  <ItemGroup>
-    <Content Include="$(MSBuildThisFileDirectory)../runtimes/**/*"
+  <!-- Native libraries are packed at runtimes/{rid}/native/. NuGet's runtimes/ convention only
+       copies them to output for a RID-specific publish; a RID-less build (the common dev case) and
+       buildTransitive consumers get nothing, yet NativeLibraryResolver probes
+       runtimes/{rid}/native/{lib} under AppContext.BaseDirectory. This targets file fills that gap.
+
+       It used to glob runtimes/**/* unconditionally, which copied EVERY RID's natives (osx-arm64 +
+       linux-x64 + win-x64 dylib/so/dll) into every consumer's build AND publish — including the
+       single-RID AOT publish that `ryn bundle` wraps into the .app, bloating it with foreign-platform
+       payloads (CLI-05). We now copy only the consumer's target RID:
+         - explicit publish/build (-r <rid>): $(RuntimeIdentifier)
+         - RID-less build/run (no -r): the host RID ($(NETCoreSdkRuntimeIdentifier)), which is what
+           RuntimeInformation.RuntimeIdentifier resolves to at run time on the same machine, so the
+           resolver still finds the lib.
+       This covers the saucer engine/bindings AND the ryn-pty shim alike — both live under
+       runtimes/{rid}/native/ — so shell.pty's hard native dependency ships for the target RID. -->
+  <PropertyGroup>
+    <_RynNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_RynNativeRid>
+    <_RynNativeRid Condition="'$(_RynNativeRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_RynNativeRid>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_RynNativeRid)' != ''">
+    <Content Include="$(MSBuildThisFileDirectory)../runtimes/$(_RynNativeRid)/**/*"
              CopyToOutputDirectory="PreserveNewest"
-             Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)"
+             Link="runtimes/$(_RynNativeRid)/%(RecursiveDir)%(Filename)%(Extension)"
              Visible="false" />
   </ItemGroup>
 </Project>
