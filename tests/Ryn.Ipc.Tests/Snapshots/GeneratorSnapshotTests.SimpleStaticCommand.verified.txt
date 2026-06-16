@@ -31,11 +31,11 @@ file sealed class MathCommandsRouter : ICommandRouter
                 var __has0 = __root.TryGetProperty("a", out var __prop0);
                 if (!__has0)
                     throw new RynIpcArgumentException("add", "a", "required argument is missing");
-                var __p0 = __prop0.GetInt32();
+                var __p0 = __ReadArg(__prop0, static __e => __e.GetInt32(), "add", "a", "argument must be a JSON number");
                 var __has1 = __root.TryGetProperty("b", out var __prop1);
                 if (!__has1)
                     throw new RynIpcArgumentException("add", "b", "required argument is missing");
-                var __p1 = __prop1.GetInt32();
+                var __p1 = __ReadArg(__prop1, static __e => __e.GetInt32(), "add", "b", "argument must be a JSON number");
                 var __result = global::TestApp.MathCommands.Add(__p0, __p1);
                 return __result.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -70,6 +70,30 @@ file sealed class MathCommandsRouter : ICommandRouter
         }
         sb.Append('"');
         return sb.ToString();
+    }
+
+    // Runs a single JSON->parameter conversion and reshapes a type mismatch into a
+    // descriptive RynIpcArgumentException (naming the command + parameter), matching the
+    // missing/null guards above instead of leaking System.Text.Json's opaque exception.
+    // The reader is a non-capturing `static` lambda, so the delegate is cached (no per-call alloc).
+    private static T __ReadArg<T>(
+        System.Text.Json.JsonElement element,
+        System.Func<System.Text.Json.JsonElement, T> read,
+        string command, string parameter, string reason)
+    {
+        try
+        {
+            return read(element);
+        }
+        catch (System.Exception __ex) when (
+            __ex is System.InvalidOperationException
+                or System.FormatException
+                or System.OverflowException
+                or System.Text.Json.JsonException
+                or System.IndexOutOfRangeException)
+        {
+            throw new RynIpcArgumentException(command, parameter, reason);
+        }
     }
 }
 

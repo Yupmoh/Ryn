@@ -33,7 +33,7 @@ file sealed class GreeterServiceRouter : ICommandRouter
                     throw new RynIpcArgumentException("greet", "name", "required argument is missing");
                 if (__prop0.ValueKind == System.Text.Json.JsonValueKind.Null)
                     throw new RynIpcArgumentException("greet", "name", "argument must not be null");
-                var __p0 = __prop0.GetString()!;
+                var __p0 = __ReadArg(__prop0, static __e => __e.GetString()!, "greet", "name", "argument must be a JSON string");
                 var __instance = services.GetRequiredService<global::TestApp.GreeterService>();
                 var __result = __instance.Greet(__p0);
                 return __ToJson(__result);
@@ -69,6 +69,30 @@ file sealed class GreeterServiceRouter : ICommandRouter
         }
         sb.Append('"');
         return sb.ToString();
+    }
+
+    // Runs a single JSON->parameter conversion and reshapes a type mismatch into a
+    // descriptive RynIpcArgumentException (naming the command + parameter), matching the
+    // missing/null guards above instead of leaking System.Text.Json's opaque exception.
+    // The reader is a non-capturing `static` lambda, so the delegate is cached (no per-call alloc).
+    private static T __ReadArg<T>(
+        System.Text.Json.JsonElement element,
+        System.Func<System.Text.Json.JsonElement, T> read,
+        string command, string parameter, string reason)
+    {
+        try
+        {
+            return read(element);
+        }
+        catch (System.Exception __ex) when (
+            __ex is System.InvalidOperationException
+                or System.FormatException
+                or System.OverflowException
+                or System.Text.Json.JsonException
+                or System.IndexOutOfRangeException)
+        {
+            throw new RynIpcArgumentException(command, parameter, reason);
+        }
     }
 }
 

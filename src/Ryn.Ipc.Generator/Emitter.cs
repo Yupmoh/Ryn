@@ -226,6 +226,30 @@ internal static class Emitter
         sb.AppendLine("        sb.Append('\"');");
         sb.AppendLine("        return sb.ToString();");
         sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    // Runs a single JSON->parameter conversion and reshapes a type mismatch into a");
+        sb.AppendLine("    // descriptive RynIpcArgumentException (naming the command + parameter), matching the");
+        sb.AppendLine("    // missing/null guards above instead of leaking System.Text.Json's opaque exception.");
+        sb.AppendLine("    // The reader is a non-capturing `static` lambda, so the delegate is cached (no per-call alloc).");
+        sb.AppendLine("    private static T __ReadArg<T>(");
+        sb.AppendLine("        System.Text.Json.JsonElement element,");
+        sb.AppendLine("        System.Func<System.Text.Json.JsonElement, T> read,");
+        sb.AppendLine("        string command, string parameter, string reason)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        try");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return read(element);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        catch (System.Exception __ex) when (");
+        sb.AppendLine("            __ex is System.InvalidOperationException");
+        sb.AppendLine("                or System.FormatException");
+        sb.AppendLine("                or System.OverflowException");
+        sb.AppendLine("                or System.Text.Json.JsonException");
+        sb.AppendLine("                or System.IndexOutOfRangeException)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            throw new RynIpcArgumentException(command, parameter, reason);");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
         sb.AppendLine("}");
     }
 
@@ -320,24 +344,25 @@ internal static class Emitter
             // normally. The `(T?)` casts keep `var` inferring the Nullable<T> so it binds without a warning.
             var elementGetter = GetElementGetter(p.NullableUnderlyingSpecialType);
             var csType = GetCSharpTypeName(p.NullableUnderlyingSpecialType);
+            var nullableRead = WrapRead(index, $"__e{elementGetter}", MismatchReason(p.NullableUnderlyingSpecialType), camelName, commandName);
 
             if (p.HasDefault && p.DefaultLiteral != "null")
             {
                 // A non-null Nullable<T> default (e.g. `int? count = 10`): a missing arg restores the
                 // declared default instead of collapsing to null, which the old single-expression form did.
-                sb.AppendLine($"                var __p{index} = !__has{index} ? ({csType}?){p.DefaultLiteral} : (__prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null ? ({csType}?)null : __prop{index}{elementGetter});");
+                sb.AppendLine($"                var __p{index} = !__has{index} ? ({csType}?){p.DefaultLiteral} : (__prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null ? ({csType}?)null : {nullableRead});");
                 return;
             }
 
             // No default (or a `= null` default, which agrees with the missing-arg behavior): a missing arg
             // or a JSON null both yield null — the only sensible value when no non-null default is declared.
-            sb.AppendLine($"                var __p{index} = (!__has{index} || __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null) ? ({csType}?)null : __prop{index}{elementGetter};");
+            sb.AppendLine($"                var __p{index} = (!__has{index} || __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null) ? ({csType}?)null : {nullableRead};");
             return;
         }
 
         // Build the expression that reads a PRESENT, non-null property into the parameter's type. This is the
         // body that runs once the missing/null preconditions below are satisfied.
-        var read = BuildReadExpression(p, index, jsonContextType);
+        var read = BuildReadExpression(p, index, camelName, commandName, jsonContextType);
 
         if (p.IsNullableReference)
         {
@@ -381,36 +406,69 @@ internal static class Emitter
     /// type. Shared by the nullable-reference, defaulted, and required binding paths so the read logic for
     /// each supported kind lives in exactly one place.
     /// </summary>
-    private static string BuildReadExpression(ParameterInfo p, int index, string? jsonContextType)
+    private static string BuildReadExpression(
+        ParameterInfo p, int index, string camelName, string commandName, string? jsonContextType)
     {
+        // JsonElement is a verbatim passthrough — there is no conversion that can fail, so it is the one kind
+        // not wrapped in __ReadArg. Every other kind below reads through System.Text.Json and is wrapped so a
+        // type mismatch surfaces as a descriptive RynIpcArgumentException instead of an opaque STJ exception.
         if (p.IsJsonElement)
             return $"__prop{index}";
 
+        string body;
         if (p.IsArray)
         {
             var elementGetter = GetElementGetter(p.ArrayElementSpecialType);
-            return $"__prop{index}.EnumerateArray().Select(e => e{elementGetter}).ToArray()";
+            body = $"__e.EnumerateArray().Select(e => e{elementGetter}).ToArray()";
         }
-
-        if (p.SpecialType == SpecialType.System_String)
-            return $"__prop{index}.GetString()!";
-
-        if (p.SpecialType == SpecialType.System_Char)
-            return $"__prop{index}.GetString()![0]";
-
-        if (IsPrimitiveSpecialType(p.SpecialType))
-            return $"__prop{index}{GetElementGetter(p.SpecialType)}";
-
-        if (jsonContextType is not null)
+        else if (p.SpecialType == SpecialType.System_String)
+        {
+            body = "__e.GetString()!";
+        }
+        else if (p.SpecialType == SpecialType.System_Char)
+        {
+            body = "__e.GetString()![0]";
+        }
+        else if (IsPrimitiveSpecialType(p.SpecialType))
+        {
+            body = $"__e{GetElementGetter(p.SpecialType)}";
+        }
+        else if (jsonContextType is not null)
         {
             // Complex type — deserialized straight from the JsonElement (no GetRawText() string round-trip).
             var typeInfoProp = GetTypeInfoPropertyName(p.TypeDisplay);
-            return $"JsonSerializer.Deserialize(__prop{index}, {jsonContextType}.Default.{typeInfoProp})!";
+            body = $"JsonSerializer.Deserialize(__e, {jsonContextType}.Default.{typeInfoProp})!";
+        }
+        else
+        {
+            // Fallback: should not reach here if validation passed.
+            body = $"__e{GetElementGetter(p.SpecialType)}";
         }
 
-        // Fallback: should not reach here if validation passed.
-        return $"__prop{index}{GetElementGetter(p.SpecialType)}";
+        return WrapRead(index, body, MismatchReason(p), camelName, commandName);
     }
+
+    /// <summary>
+    /// Wraps a read <paramref name="lambdaBody"/> (which names the element <c>__e</c>) in a call to the emitted
+    /// <c>__ReadArg</c> helper so a JSON type mismatch becomes a descriptive <c>RynIpcArgumentException</c>.
+    /// </summary>
+    private static string WrapRead(int index, string lambdaBody, string reason, string camelName, string commandName)
+        => $"__ReadArg(__prop{index}, static __e => {lambdaBody}, \"{commandName}\", \"{camelName}\", \"{reason}\")";
+
+    /// <summary>The "argument must be a JSON …" reason used when a present value cannot convert to the parameter type.</summary>
+    private static string MismatchReason(ParameterInfo p) =>
+        p.IsArray ? "argument must be a JSON array" : MismatchReason(p.SpecialType);
+
+    private static string MismatchReason(SpecialType type) => type switch
+    {
+        SpecialType.System_String or SpecialType.System_Char => "argument must be a JSON string",
+        SpecialType.System_Boolean => "argument must be a JSON boolean",
+        SpecialType.System_Int32 or SpecialType.System_Int64 or SpecialType.System_Int16 or
+        SpecialType.System_Byte or SpecialType.System_SByte or SpecialType.System_UInt16 or
+        SpecialType.System_UInt32 or SpecialType.System_UInt64 or SpecialType.System_Single or
+        SpecialType.System_Double or SpecialType.System_Decimal => "argument must be a JSON number",
+        _ => "argument is not of the expected type",
+    };
 
     /// <summary>
     /// Emits the "must not be JSON null" guard for the non-nullable kinds that would otherwise dereference a

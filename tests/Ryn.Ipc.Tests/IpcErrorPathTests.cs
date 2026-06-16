@@ -29,19 +29,21 @@ public sealed class IpcErrorPathTests
         await act.Should().ThrowAsync<System.Text.Json.JsonException>();
     }
 
-    // ── Type mismatch (string supplied for an int param) → STJ InvalidOperationException ──
-    // The generated reader calls __prop.GetInt32() directly; a JSON string surfaces STJ's own
-    // InvalidOperationException. This pins the CURRENT contract: only missing/null are reshaped into a
-    // RynIpcArgumentException, a type mismatch is not (see CONCERNS in the task report).
+    // ── Type mismatch (string supplied for an int param) → descriptive RynIpcArgumentException ──
+    // The generated reader wraps __prop.GetInt32() in __ReadArg, so System.Text.Json's opaque
+    // InvalidOperationException is reshaped into a RynIpcArgumentException naming the command + parameter,
+    // for parity with the missing-arg and null-arg guards. The reason states the expected JSON kind.
 
     [Fact]
-    public async Task TypeMismatch_ThrowsInvalidOperationException()
+    public async Task TypeMismatch_ThrowsDescriptiveArgumentException()
     {
         var dispatcher = BuildDispatcher();
 
         var act = () => dispatcher.DispatchAsync("add", Args("{\"a\":\"x\",\"b\":3}")).AsTask();
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        (await act.Should().ThrowAsync<RynIpcArgumentException>()
+            .WithMessage("*add*a*must be a JSON number*"))
+            .Which.Should().Match<RynIpcArgumentException>(e => e.Command == "add" && e.Parameter == "a");
     }
 
     // ── Missing required argument → descriptive RynIpcArgumentException naming command + param ──

@@ -61,6 +61,30 @@ file sealed class StatusCommandsRouter : ICommandRouter
         sb.Append('"');
         return sb.ToString();
     }
+
+    // Runs a single JSON->parameter conversion and reshapes a type mismatch into a
+    // descriptive RynIpcArgumentException (naming the command + parameter), matching the
+    // missing/null guards above instead of leaking System.Text.Json's opaque exception.
+    // The reader is a non-capturing `static` lambda, so the delegate is cached (no per-call alloc).
+    private static T __ReadArg<T>(
+        System.Text.Json.JsonElement element,
+        System.Func<System.Text.Json.JsonElement, T> read,
+        string command, string parameter, string reason)
+    {
+        try
+        {
+            return read(element);
+        }
+        catch (System.Exception __ex) when (
+            __ex is System.InvalidOperationException
+                or System.FormatException
+                or System.OverflowException
+                or System.Text.Json.JsonException
+                or System.IndexOutOfRangeException)
+        {
+            throw new RynIpcArgumentException(command, parameter, reason);
+        }
+    }
 }
 
 public static class StatusCommandsRynExtensions
