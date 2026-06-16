@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using FluentAssertions;
 using Ryn.Core.Internal;
@@ -17,6 +19,7 @@ public sealed class LocalWebServerTests : IAsyncLifetime
     private LocalWebServer _server = null!;
     private FakeHost _host = null!;
     private HttpClient _client = null!;
+    private int _port;
 
     public async Task InitializeAsync()
     {
@@ -31,6 +34,7 @@ public sealed class LocalWebServerTests : IAsyncLifetime
         _server.SetWebView(_host);
         await _server.StartAsync();
 
+        _port = int.Parse(_server.Url[(_server.Url.LastIndexOf(':') + 1)..], CultureInfo.InvariantCulture);
         _client = new HttpClient { BaseAddress = new Uri(_server.Url) };
     }
 
@@ -65,13 +69,61 @@ public sealed class LocalWebServerTests : IAsyncLifetime
         (await resp.Content.ReadAsStringAsync()).Should().Contain("INDEX");
     }
 
-    [Fact]
-    public async Task PathTraversal_IsRejected_FallsBackToIndex()
+    [Theory]
+    // HttpClient would normalize these before they ever reach the server, so this MUST go over a raw socket
+    // (TST-03): a literal "../", a percent-encoded "%2e%2e%2f", and backslash variants must all be contained
+    // by ResolveWithinContent and never serve an out-of-root file.
+    [InlineData("/../../../../etc/passwd")]
+    [InlineData("/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd")]
+    [InlineData("/..%2f..%2f..%2fetc%2fpasswd")]
+    [InlineData("/..\\..\\..\\..\\etc\\passwd")]
+    [InlineData("/static/../../../../etc/passwd")]
+    public async Task PathTraversal_OverRawSocket_NeverServesOutOfRoot(string target)
     {
-        // A traversal attempt must never escape the content root; it falls back to index.html, never /etc/passwd.
-        var resp = await _client.GetAsync("/../../../../etc/passwd");
-        var body = await resp.Content.ReadAsStringAsync();
-        body.Should().NotContain("root:");
+        ArgumentNullException.ThrowIfNull(target);
+
+        // Write the literal request line so the server's own parser/ResolveWithinContent is exercised.
+        var response = await SendRawAsync(
+            $"GET {target} HTTP/1.1\r\nHost: localhost:{_port}\r\nConnection: close\r\n\r\n");
+
+        // Whatever the server returns (index fallback or 404), it must never be the contents of /etc/passwd.
+        response.Should().NotContain("root:", "a traversal must never escape the content root");
+        // It must still be a well-formed HTTP response, not a crash/hang.
+        response.Should().StartWith("HTTP/1.1 ");
+        var status = StatusOf(response);
+        status.Should().BeOneOf([200, 404], "a traversal resolves to the SPA index fallback or a not-found");
+    }
+
+    private async Task<string> SendRawAsync(string rawRequest)
+    {
+        using var client = new TcpClient();
+        await client.ConnectAsync("127.0.0.1", _port);
+        var stream = client.GetStream();
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(rawRequest));
+        await stream.FlushAsync();
+
+        var sb = new StringBuilder();
+        var buffer = new byte[4096];
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (true)
+            {
+                var n = await stream.ReadAsync(buffer, cts.Token);
+                if (n == 0) break;
+                sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (IOException) { }
+        return sb.ToString();
+    }
+
+    private static int StatusOf(string response)
+    {
+        var firstSpace = response.IndexOf(' ', StringComparison.Ordinal);
+        var secondSpace = response.IndexOf(' ', firstSpace + 1);
+        return int.Parse(response[(firstSpace + 1)..secondSpace], CultureInfo.InvariantCulture);
     }
 
     [Fact]
