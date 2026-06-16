@@ -11,7 +11,12 @@ public static class UpdaterServiceCollectionExtensions
         configure?.Invoke(options);
 
         services.AddSingleton(options);
-        services.AddSingleton<UpdaterService>();
+        // Resolve the lifetime explicitly so Apply requests an orderly shutdown (PAP-06) rather than
+        // hard-exiting. GetService (not GetRequiredService) keeps the service usable if a host ever omits the
+        // lifetime registration — it then falls back to Environment.Exit, the prior behaviour.
+        services.AddSingleton(sp => new UpdaterService(
+            sp.GetRequiredService<UpdaterOptions>(),
+            sp.GetService<IRynApplicationLifetime>()));
         services.AddSingleton<UpdaterCommands>();
         services.AddSingleton<IRynPlugin, UpdaterPlugin>();
         services.AddUpdaterCommands(); // generated

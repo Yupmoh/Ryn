@@ -16,6 +16,27 @@ public sealed class UpdaterOptions
     public TimeSpan CheckInterval { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>
+    /// When <see langword="true"/>, prerelease tags (a SemVer build with a <c>-prerelease</c> suffix, e.g.
+    /// <c>1.2.0-rc.1</c>) are eligible updates and the updater can move between prereleases of the same base
+    /// version. When <see langword="false"/> (the default) the updater stays on stable releases: a prerelease
+    /// is never offered, and a prerelease tag is never recorded as the downgrade floor (so an <c>rc</c> can
+    /// never block the matching final release). Comparison always uses full SemVer prerelease ordering, so a
+    /// stable release still correctly outranks its own prereleases regardless of this flag.
+    /// </summary>
+    /// <remarks>
+    /// GitHub's <c>/releases/latest</c> endpoint (which this updater queries) excludes prereleases by design,
+    /// so enabling this only has an effect when a custom feed is supplied or the latest stable tag itself
+    /// carries a prerelease suffix.
+    /// </remarks>
+    public bool AllowPrerelease { get; set; }
+
+    /// <summary>
+    /// Timeout for an individual HTTP request made by the updater (release metadata, asset, signature). Bounds
+    /// the startup check so an unreachable or slow endpoint logs a failure instead of hanging. Default 15s.
+    /// </summary>
+    public TimeSpan HttpTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
     /// Base64-encoded X.509 SubjectPublicKeyInfo (ECDSA P-256) public key. <strong>Required.</strong>
     /// Updates are only applied if a detached signature over the downloaded bytes verifies against this
     /// key. Generate a keypair with <c>ryn updater keygen</c> (or <see cref="UpdateSignature.GenerateKeyPair"/>),

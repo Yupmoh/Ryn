@@ -1,24 +1,43 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Globalization;
 using System.Reflection;
 using System.Security;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Ryn.Core;
 
 namespace Ryn.Plugins.Updater;
 
 public sealed class UpdaterService : IDisposable
 {
+    // Manual-redirect cap. GitHub's release-asset path is one hop (api/github.com -> objects.githubusercontent.com);
+    // a small bound stops a hostile or looping endpoint from bouncing us forever while still allowing real chains.
+    private const int MaxRedirects = 5;
+
     private readonly UpdaterOptions _options;
+    private readonly IRynApplicationLifetime? _lifetime;
+    private readonly SocketsHttpHandler _httpHandler;
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, VerifiedDownload> _verifiedDownloads = new(StringComparer.Ordinal);
     private bool _disposed;
 
-    internal UpdaterService(UpdaterOptions options)
+    // DI activates this with the lifetime injected; the tests construct it with options only (lifetime null →
+    // Apply falls back to a hard exit, which is the correct behaviour when there is no host loop to unwind).
+    internal UpdaterService(UpdaterOptions options, IRynApplicationLifetime? lifetime = null)
     {
         _options = options;
-        _httpClient = new HttpClient();
+        _lifetime = lifetime;
+
+        // Redirects are followed manually (SUP-06): auto-redirect would silently land an asset download on a
+        // host that was never checked against AllowedDownloadHosts. With it off we re-validate every Location
+        // hop ourselves before following it. The handler is owned by this service and disposed in Dispose()
+        // (disposeHandler:false), giving deterministic ownership.
+        _httpHandler = new SocketsHttpHandler { AllowAutoRedirect = false };
+        _httpClient = new HttpClient(_httpHandler, disposeHandler: false)
+        {
+            // Bounds every request so the startup check (PAP-05) can't hang the app on a slow/unreachable host.
+            Timeout = _options.HttpTimeout > TimeSpan.Zero ? _options.HttpTimeout : TimeSpan.FromSeconds(15),
+        };
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Ryn-Updater/1.0");
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/vnd.github+json");
     }
@@ -30,8 +49,10 @@ public sealed class UpdaterService : IDisposable
 
         var url = $"https://api.github.com/repos/{_options.GitHubOwner}/{_options.GitHubRepo}/releases/latest";
 
+        // Auto-redirect is disabled on the handler (SUP-06), so follow the API's own redirects manually here,
+        // constrained to GitHub API hosts (the download allowlist governs asset hosts, not this metadata call).
         var requestUri = new Uri(url);
-        using var response = await _httpClient.GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
+        using var response = await GetFollowingApiRedirectsAsync(requestUri, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -40,14 +61,21 @@ public sealed class UpdaterService : IDisposable
         if (release is null)
             return null;
 
-        var remoteVersion = ParseVersion(release.TagName);
+        var remoteVersion = SemVer.Parse(release.TagName);
         if (remoteVersion is null)
+            return null;
+
+        // Stable-only by default: a prerelease tag is only an eligible update when the app opted in. This keeps
+        // the default channel on finals while still letting opted-in builds move prerelease→prerelease.
+        if (remoteVersion.IsPrerelease && !_options.AllowPrerelease)
             return null;
 
         // Downgrade protection: the effective current version is the max of the configured/assembly
         // version and the persisted monotonic floor. An unknown current version is NOT "accept anything".
+        // Comparison is full SemVer including prerelease ordering, so 1.2.0-rc.1 < 1.2.0-rc.2 < 1.2.0 and a
+        // release always outranks its own prereleases.
         var effectiveCurrent = GetEffectiveCurrentVersion();
-        if (effectiveCurrent is not null && remoteVersion <= effectiveCurrent)
+        if (effectiveCurrent is not null && remoteVersion.CompareTo(effectiveCurrent) <= 0)
             return null;
 
         var asset = FindMatchingAsset(release);
@@ -103,8 +131,10 @@ public sealed class UpdaterService : IDisposable
             await DownloadToFileAsync(update.AssetUrl, tempPath, progress, cancellationToken).ConfigureAwait(false);
 
             // Fetch + verify the detached signature BEFORE the file is ever eligible to run.
-            // The signature is tiny; cap the read so a hostile endpoint can't stream gigabytes.
-            using var sigResponse = await _httpClient.GetAsync(update.SignatureUrl, cancellationToken).ConfigureAwait(false);
+            // The signature is tiny; cap the read so a hostile endpoint can't stream gigabytes. Redirects are
+            // followed manually so each hop's host is re-validated against the allowlist (SUP-06).
+            using var sigResponse = await SendWithValidatedRedirectsAsync(
+                update.SignatureUrl, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
             sigResponse.EnsureSuccessStatusCode();
             if (sigResponse.Content.Headers.ContentLength is > 8192)
                 throw new SecurityException("Update signature asset is implausibly large.");
@@ -139,9 +169,8 @@ public sealed class UpdaterService : IDisposable
 
     private async Task DownloadToFileAsync(Uri uri, string tempPath, IProgress<double>? progress, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        using var response = await _httpClient.SendAsync(
-            request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        using var response = await SendWithValidatedRedirectsAsync(
+            uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         var totalBytes = response.Content.Headers.ContentLength ?? -1L;
@@ -171,6 +200,92 @@ public sealed class UpdaterService : IDisposable
 
         progress?.Report(1.0);
     }
+
+    /// <summary>
+    /// GETs <paramref name="uri"/> following 3xx redirects manually, re-validating every hop's <c>Location</c>
+    /// against the host allowlist before following it (SUP-06). The <see cref="HttpClient"/> has automatic
+    /// redirects disabled, so without this an asset download could be bounced onto an unchecked host. The first
+    /// <paramref name="uri"/> is assumed already validated by the caller; each redirect target is validated here.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithValidatedRedirectsAsync(
+        Uri uri, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+    {
+        var current = uri;
+        for (var hop = 0; ; hop++)
+        {
+            // The request is disposed each iteration; once SendAsync returns, the response (and its body stream
+            // for ResponseHeadersRead) no longer depends on the request object, so the escaping response is safe.
+            HttpResponseMessage response;
+            using (var request = new HttpRequestMessage(HttpMethod.Get, current))
+            {
+                response = await _httpClient.SendAsync(request, completionOption, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!IsRedirect(response.StatusCode))
+                return response;
+
+            var location = response.Headers.Location;
+            using (response)
+            {
+                if (location is null)
+                    throw new SecurityException($"Update host '{current.Host}' returned a redirect with no Location header.");
+
+                // Resolve relative redirects against the current URL, then re-run the full HTTPS + allowlist check.
+                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+                if (hop >= MaxRedirects)
+                    throw new SecurityException($"Update download exceeded the maximum of {MaxRedirects} redirects.");
+
+                current = ValidateDownloadUri(next.AbsoluteUri);
+            }
+        }
+    }
+
+    /// <summary>
+    /// GETs the GitHub release-metadata URL, following redirects manually (auto-redirect is off on the handler)
+    /// but constraining every hop to a <c>github.com</c> host over HTTPS. Renamed-repo redirects stay within the
+    /// API host, so this preserves the previous auto-follow behaviour without letting metadata be redirected to
+    /// an arbitrary origin.
+    /// </summary>
+    private async Task<HttpResponseMessage> GetFollowingApiRedirectsAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        var current = uri;
+        for (var hop = 0; ; hop++)
+        {
+            HttpResponseMessage response;
+            using (var request = new HttpRequestMessage(HttpMethod.Get, current))
+            {
+                response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!IsRedirect(response.StatusCode))
+                return response;
+
+            var location = response.Headers.Location;
+            using (response)
+            {
+                if (location is null)
+                    throw new SecurityException($"GitHub API host '{current.Host}' returned a redirect with no Location header.");
+                if (hop >= MaxRedirects)
+                    throw new SecurityException($"Update metadata request exceeded the maximum of {MaxRedirects} redirects.");
+
+                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+                if (!string.Equals(next.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                    throw new SecurityException($"GitHub API redirect must use HTTPS (got '{next.Scheme}').");
+                if (!next.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+                    && !next.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase))
+                    throw new SecurityException($"GitHub API redirected to an unexpected host '{next.Host}'.");
+
+                current = next;
+            }
+        }
+    }
+
+    private static bool IsRedirect(System.Net.HttpStatusCode status) => status is
+        System.Net.HttpStatusCode.MovedPermanently or
+        System.Net.HttpStatusCode.Found or
+        System.Net.HttpStatusCode.SeeOther or
+        System.Net.HttpStatusCode.TemporaryRedirect or
+        System.Net.HttpStatusCode.PermanentRedirect;
 
     /// <summary>
     /// Applies a previously downloaded-and-verified update identified by the opaque handle returned from
@@ -203,7 +318,21 @@ public sealed class UpdaterService : IDisposable
         else
             throw new PlatformNotSupportedException("Auto-update is not supported on this platform.");
 
+        // The detached relaunch script is now spawned (it backs up + swaps before re-opening). Stop THIS instance
+        // through the lifecycle (PAP-06) so disposal runs — plugin/pty children, window-state save, server drain —
+        // and the window closes before the script's relaunch, instead of hard-exiting from the IPC thread and
+        // skipping all of that. When there is no host loop to unwind (e.g. unit tests) fall back to a hard exit.
+        RequestShutdownOrExit();
+
         return ValueTask.CompletedTask;
+    }
+
+    private void RequestShutdownOrExit()
+    {
+        if (_lifetime is not null)
+            _lifetime.RequestShutdown();
+        else
+            Environment.Exit(0);
     }
 
     // ---- platform apply (no shell-string interpolation; all paths passed as positional argv) ----
@@ -219,6 +348,7 @@ public sealed class UpdaterService : IDisposable
             var backupPath = Path.Combine(parentDir, $".{appName}.bak");
 
             string newAppSource;
+            string stagingToClean;
             if (downloadPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 // Extract in managed code, then locate the .app inside the staging directory.
@@ -226,24 +356,26 @@ public sealed class UpdaterService : IDisposable
                 System.IO.Compression.ZipFile.ExtractToDirectory(downloadPath, staging);
                 newAppSource = Directory.EnumerateDirectories(staging, "*.app", SearchOption.AllDirectories).FirstOrDefault()
                     ?? throw new InvalidOperationException("No .app bundle found inside the downloaded archive.");
+                stagingToClean = staging;
             }
             else
             {
                 newAppSource = downloadPath;
+                stagingToClean = ""; // nothing extracted; $5 is a no-op rm of an empty path
             }
 
-            // Constant script body; paths arrive as $1..$4 and are never interpolated into the script text.
+            // Constant script body; paths arrive as $1..$5 and are never interpolated into the script text.
+            // The final rm clears the temp staging dir created for the zip case (it was previously leaked).
             const string script =
-                "app=\"$1\"; backup=\"$2\"; src=\"$3\"; relaunch=\"$4\"; " +
-                "rm -rf \"$backup\"; mv \"$app\" \"$backup\" && cp -R \"$src\" \"$app\" && open -n \"$relaunch\" && rm -rf \"$backup\"";
-            LaunchDetachedShell(script, appBundle, backupPath, newAppSource, appBundle);
+                "app=\"$1\"; backup=\"$2\"; src=\"$3\"; relaunch=\"$4\"; stage=\"$5\"; " +
+                "rm -rf \"$backup\"; mv \"$app\" \"$backup\" && cp -R \"$src\" \"$app\" && open -n \"$relaunch\" && rm -rf \"$backup\"; " +
+                "[ -n \"$stage\" ] && rm -rf \"$stage\"";
+            LaunchDetachedShell(script, appBundle, backupPath, newAppSource, appBundle, stagingToClean);
         }
         else
         {
             ReplaceStandaloneBinary(downloadPath, currentExePath);
         }
-
-        Environment.Exit(0);
     }
 
     private static void ApplyWindows(string downloadPath, string currentExePath)
@@ -277,14 +409,11 @@ public sealed class UpdaterService : IDisposable
         psi.ArgumentList.Add(downloadPath);
         psi.ArgumentList.Add(backupPath);
         Process.Start(psi);
-
-        Environment.Exit(0);
     }
 
     private static void ApplyLinux(string downloadPath, string currentExePath)
     {
         ReplaceStandaloneBinary(downloadPath, currentExePath);
-        Environment.Exit(0);
     }
 
     private static void ReplaceStandaloneBinary(string downloadPath, string currentExePath)
@@ -329,15 +458,15 @@ public sealed class UpdaterService : IDisposable
 
     // ---- version / floor ----
 
-    private Version? GetEffectiveCurrentVersion()
+    private SemVer? GetEffectiveCurrentVersion()
     {
-        var configured = _options.CurrentVersion is not null ? ParseVersion(_options.CurrentVersion) : null;
-        configured ??= ParseVersion(Assembly.GetEntryAssembly()?.GetName().Version?.ToString());
+        var configured = _options.CurrentVersion is not null ? SemVer.Parse(_options.CurrentVersion) : null;
+        configured ??= SemVer.Parse(Assembly.GetEntryAssembly()?.GetName().Version?.ToString());
         var floor = ReadVersionFloor();
 
         if (configured is null) return floor;
         if (floor is null) return configured;
-        return configured >= floor ? configured : floor;
+        return configured.CompareTo(floor) >= 0 ? configured : floor;
     }
 
     private string VersionFloorFile() =>
@@ -345,12 +474,12 @@ public sealed class UpdaterService : IDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Ryn", "updates", $"{_options.GitHubOwner}_{_options.GitHubRepo}.floor");
 
-    private Version? ReadVersionFloor()
+    private SemVer? ReadVersionFloor()
     {
         try
         {
             var path = VersionFloorFile();
-            return File.Exists(path) ? ParseVersion(File.ReadAllText(path).Trim()) : null;
+            return File.Exists(path) ? SemVer.Parse(File.ReadAllText(path).Trim()) : null;
         }
         catch (IOException) { return null; }
         catch (UnauthorizedAccessException) { return null; }
@@ -360,10 +489,19 @@ public sealed class UpdaterService : IDisposable
     {
         try
         {
-            var parsed = ParseVersion(version);
+            var parsed = SemVer.Parse(version);
             if (parsed is null) return;
+
+            // Stable-only apps must never record a prerelease floor: doing so could leave a stale prerelease
+            // floor that compares above some other prerelease but, more importantly, keeps the floor file
+            // carrying a channel the app doesn't track. Because SemVer orders rc < final, a recorded prerelease
+            // floor never blocks its matching final anyway — but we still skip it when prereleases are off so the
+            // persisted floor reflects only versions the app actually rides. (SUP-03)
+            if (parsed.IsPrerelease && !_options.AllowPrerelease)
+                return;
+
             var existing = ReadVersionFloor();
-            if (existing is not null && parsed <= existing) return;
+            if (existing is not null && parsed.CompareTo(existing) <= 0) return;
 
             var path = VersionFloorFile();
             var dir = Path.GetDirectoryName(path);
@@ -453,23 +591,6 @@ public sealed class UpdaterService : IDisposable
         return [];
     }
 
-    private static Version? ParseVersion(string? versionString)
-    {
-        if (string.IsNullOrEmpty(versionString))
-            return null;
-
-        var normalized = versionString.StartsWith('v') || versionString.StartsWith('V')
-            ? versionString[1..]
-            : versionString;
-
-        // Drop SemVer prerelease / build metadata so e.g. "1.2.3-rc1+build" parses as 1.2.3.
-        var dash = normalized.IndexOfAny(['-', '+']);
-        if (dash >= 0)
-            normalized = normalized[..dash];
-
-        return Version.TryParse(normalized, out var version) ? version : null;
-    }
-
     private static string GetAssetExtension(string url)
     {
         var uri = new Uri(url);
@@ -490,7 +611,138 @@ public sealed class UpdaterService : IDisposable
             return;
         _disposed = true;
         _httpClient.Dispose();
+        _httpHandler.Dispose();
     }
 
     private sealed record VerifiedDownload(string Path, string Version);
+
+    /// <summary>
+    /// A minimal SemVer 2.0.0 value that orders correctly across prereleases — the previous
+    /// <see cref="Version"/>-based parse discarded the <c>-prerelease</c> suffix, so every prerelease of a base
+    /// version compared equal and an rc could never advance to its final (SUP-03). Build metadata (after <c>+</c>)
+    /// is ignored for ordering, exactly as the spec requires. Parsing is lenient about a leading <c>v</c> and a
+    /// missing minor/patch (<c>1</c> / <c>1.2</c> → <c>1.0.0</c> / <c>1.2.0</c>) to match the prior behaviour.
+    /// </summary>
+    private sealed class SemVer : IComparable<SemVer>
+    {
+        private readonly int _major;
+        private readonly int _minor;
+        private readonly int _patch;
+        private readonly string[] _prerelease; // empty => stable release
+        private readonly string _display;
+
+        private SemVer(int major, int minor, int patch, string[] prerelease, string display)
+        {
+            _major = major;
+            _minor = minor;
+            _patch = patch;
+            _prerelease = prerelease;
+            _display = display;
+        }
+
+        public bool IsPrerelease => _prerelease.Length > 0;
+
+        public static SemVer? Parse(string? versionString)
+        {
+            if (string.IsNullOrEmpty(versionString))
+                return null;
+
+            var s = versionString.Trim();
+            if (s.Length > 0 && (s[0] == 'v' || s[0] == 'V'))
+                s = s[1..];
+
+            // Split off build metadata first (ignored for precedence), then the prerelease segment.
+            var plus = s.IndexOf('+', StringComparison.Ordinal);
+            if (plus >= 0)
+                s = s[..plus];
+
+            string corePart;
+            string[] prerelease;
+            var dash = s.IndexOf('-', StringComparison.Ordinal);
+            if (dash >= 0)
+            {
+                corePart = s[..dash];
+                var pre = s[(dash + 1)..];
+                if (pre.Length == 0)
+                    return null; // trailing '-' with no identifiers is malformed
+                prerelease = pre.Split('.');
+                foreach (var id in prerelease)
+                    if (id.Length == 0)
+                        return null; // empty identifier (e.g. "1.0.0-a..b")
+            }
+            else
+            {
+                corePart = s;
+                prerelease = [];
+            }
+
+            var parts = corePart.Split('.');
+            if (parts.Length is < 1 or > 3)
+                return null;
+
+            if (!TryParseComponent(parts[0], out var major))
+                return null;
+            var minor = 0;
+            var patch = 0;
+            if (parts.Length >= 2 && !TryParseComponent(parts[1], out minor))
+                return null;
+            if (parts.Length >= 3 && !TryParseComponent(parts[2], out patch))
+                return null;
+
+            return new SemVer(major, minor, patch, prerelease, versionString.Trim());
+        }
+
+        private static bool TryParseComponent(string text, out int value) =>
+            int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value);
+
+        public int CompareTo(SemVer? other)
+        {
+            if (other is null) return 1;
+
+            var cmp = _major.CompareTo(other._major);
+            if (cmp != 0) return cmp;
+            cmp = _minor.CompareTo(other._minor);
+            if (cmp != 0) return cmp;
+            cmp = _patch.CompareTo(other._patch);
+            if (cmp != 0) return cmp;
+
+            // Equal core. Per SemVer: a version WITH a prerelease has LOWER precedence than one without.
+            var thisPre = _prerelease.Length > 0;
+            var otherPre = other._prerelease.Length > 0;
+            if (!thisPre && !otherPre) return 0;
+            if (!thisPre) return 1;  // this is the release, other is a prerelease
+            if (!otherPre) return -1; // this is a prerelease, other is the release
+
+            return ComparePrerelease(_prerelease, other._prerelease);
+        }
+
+        // SemVer 2.0.0 §11: compare prerelease identifiers left to right. Numeric identifiers compare
+        // numerically; alphanumerics compare by ASCII ordinal; numeric always ranks below alphanumeric; a
+        // larger set of fields (when all preceding are equal) ranks higher.
+        private static int ComparePrerelease(string[] a, string[] b)
+        {
+            var min = Math.Min(a.Length, b.Length);
+            for (var i = 0; i < min; i++)
+            {
+                var aNum = int.TryParse(a[i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var ai);
+                var bNum = int.TryParse(b[i], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var bi);
+
+                int cmp;
+                if (aNum && bNum)
+                    cmp = ai.CompareTo(bi);
+                else if (aNum)
+                    cmp = -1; // numeric < alphanumeric
+                else if (bNum)
+                    cmp = 1;
+                else
+                    cmp = string.CompareOrdinal(a[i], b[i]);
+
+                if (cmp != 0) return cmp;
+            }
+
+            return a.Length.CompareTo(b.Length);
+        }
+
+        public override string ToString() => _display;
+    }
 }
