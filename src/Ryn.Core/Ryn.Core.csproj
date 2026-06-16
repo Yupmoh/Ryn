@@ -9,8 +9,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ryn.Core.Tests" />
     <InternalsVisibleTo Include="Ryn.Integration.Tests" />
+    <InternalsVisibleTo Include="Ryn.Interop.Tests" />
     <InternalsVisibleTo Include="Ryn.Plugins.Dialog" />
+    <InternalsVisibleTo Include="Ryn.Plugins.FileSystem" />
     <InternalsVisibleTo Include="Ryn.Plugins.Shell" />
+    <InternalsVisibleTo Include="Ryn.Plugins.Tray" />
+    <InternalsVisibleTo Include="Ryn.Plugins.Audio" />
     <InternalsVisibleTo Include="Ryn.Benchmarks" />
   </ItemGroup>
 
@@ -36,5 +40,17 @@
     <EmbeddedResource Include="Assets/ryn-icon.png">
       <LogicalName>Ryn.Core.ryn-icon.png</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <!--
+    Pack the auto-import targets into the nupkg so consumers of the Ryn.Core package pick up the
+    `ryn build` embed machinery (RynEmbedContent triggers embedding ryn_embedded_content.zip).
+    buildTransitive/ flows it through project references too; build/ covers a direct PackageReference.
+    Without this the targets stayed in-source and the embed flag was a silent no-op for packaged
+    consumers.
+  -->
+  <ItemGroup>
+    <None Include="build/Ryn.Core.targets" Pack="true" PackagePath="buildTransitive" />
+    <None Include="build/Ryn.Core.targets" Pack="true" PackagePath="build" />
   </ItemGroup>
 </Project>
