@@ -28,8 +28,14 @@ file sealed class MathCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("a").GetInt32();
-                var __p1 = __root.GetProperty("b").GetInt32();
+                var __has0 = __root.TryGetProperty("a", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("add", "a", "required argument is missing");
+                var __p0 = __prop0.GetInt32();
+                var __has1 = __root.TryGetProperty("b", out var __prop1);
+                if (!__has1)
+                    throw new RynIpcArgumentException("add", "b", "required argument is missing");
+                var __p1 = __prop1.GetInt32();
                 var __result = global::TestApp.MathCommands.Add(__p0, __p1);
                 return __result.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }

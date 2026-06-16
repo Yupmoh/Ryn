@@ -28,7 +28,10 @@ file sealed class ResultCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("id").GetInt32();
+                var __has0 = __root.TryGetProperty("id", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("getResult", "id", "required argument is missing");
+                var __p0 = __prop0.GetInt32();
                 var __result = global::TestApp.ResultCommands.GetResult(__p0);
                 return JsonSerializer.Serialize(__result, global::TestApp.MyJsonContext.Default.MyOutput);
             }

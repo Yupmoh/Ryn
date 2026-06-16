@@ -28,7 +28,12 @@ file sealed class GreeterRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("name").GetString()!;
+                var __has0 = __root.TryGetProperty("name", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("sayHello", "name", "required argument is missing");
+                if (__prop0.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    throw new RynIpcArgumentException("sayHello", "name", "argument must not be null");
+                var __p0 = __prop0.GetString()!;
                 var __result = global::TestApp.Greeter.Hello(__p0);
                 return __ToJson(__result);
             }

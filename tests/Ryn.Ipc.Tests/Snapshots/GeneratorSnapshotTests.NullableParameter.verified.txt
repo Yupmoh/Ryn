@@ -28,8 +28,8 @@ file sealed class NullableCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __prop0 = __root.GetProperty("value");
-                var __p0 = __prop0.ValueKind == System.Text.Json.JsonValueKind.Null ? (int?)null : __prop0.GetInt32();
+                var __has0 = __root.TryGetProperty("value", out var __prop0);
+                var __p0 = (!__has0 || __prop0.ValueKind == System.Text.Json.JsonValueKind.Null) ? (int?)null : __prop0.GetInt32();
                 var __result = global::TestApp.NullableCommands.Format(__p0);
                 return __ToJson(__result);
             }

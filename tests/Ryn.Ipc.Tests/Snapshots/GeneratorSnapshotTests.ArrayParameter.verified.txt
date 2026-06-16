@@ -28,7 +28,12 @@ file sealed class ArrayCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("values").EnumerateArray().Select(e => e.GetInt32()).ToArray();
+                var __has0 = __root.TryGetProperty("values", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("sum", "values", "required argument is missing");
+                if (__prop0.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    throw new RynIpcArgumentException("sum", "values", "argument must not be null");
+                var __p0 = __prop0.EnumerateArray().Select(e => e.GetInt32()).ToArray();
                 var __result = global::TestApp.ArrayCommands.Sum(__p0);
                 return __result.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }

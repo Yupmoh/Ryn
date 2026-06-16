@@ -28,8 +28,16 @@ file sealed class DataCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("name").GetString()!;
-                var __p1 = __root.GetProperty("data");
+                var __has0 = __root.TryGetProperty("name", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("processData", "name", "required argument is missing");
+                if (__prop0.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    throw new RynIpcArgumentException("processData", "name", "argument must not be null");
+                var __p0 = __prop0.GetString()!;
+                var __has1 = __root.TryGetProperty("data", out var __prop1);
+                if (!__has1)
+                    throw new RynIpcArgumentException("processData", "data", "required argument is missing");
+                var __p1 = __prop1;
                 var __result = global::TestApp.DataCommands.ProcessData(__p0, __p1);
                 return __ToJson(__result);
             }

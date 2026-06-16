@@ -243,6 +243,46 @@ public sealed class GeneratorSnapshotTests
     }
 
     [Fact]
+    public Task NullableReferenceParameter()
+    {
+        // GEN-03: a nullable-annotated reference type (string?) must bind a missing arg OR a JSON null
+        // as null, emitting `(!__has || Null) ? null : __prop.GetString()!` — not the non-nullable throw.
+        var source = """
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class NullableRefCommands
+            {
+                [RynCommand]
+                public static string Echo(string? value) => value ?? "(nil)";
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
+    public Task DefaultValueParameter()
+    {
+        // GEN-02: a parameter with a C# default value must bind the default when the arg is MISSING,
+        // emitting `!__has ? "world" : __prop.GetString()!`, while a present explicit null still throws.
+        var source = """
+            using Ryn.Ipc;
+
+            namespace TestApp;
+
+            public class DefaultValueCommands
+            {
+                [RynCommand]
+                public static string Greet(string name = "world") => $"Hello, {name}!";
+            }
+            """;
+
+        return VerifyGenerator(source);
+    }
+
+    [Fact]
     public Task NullableReturn()
     {
         var source = """

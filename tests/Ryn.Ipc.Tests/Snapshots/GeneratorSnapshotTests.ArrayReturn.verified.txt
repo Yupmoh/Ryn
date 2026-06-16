@@ -28,7 +28,12 @@ file sealed class ArrayReturnCommandsRouter : ICommandRouter
             {
                 using var __doc = JsonDocument.Parse(args);
                 var __root = __doc.RootElement;
-                var __p0 = __root.GetProperty("prefix").GetString()!;
+                var __has0 = __root.TryGetProperty("prefix", out var __prop0);
+                if (!__has0)
+                    throw new RynIpcArgumentException("getTags", "prefix", "required argument is missing");
+                if (__prop0.ValueKind == System.Text.Json.JsonValueKind.Null)
+                    throw new RynIpcArgumentException("getTags", "prefix", "argument must not be null");
+                var __p0 = __prop0.GetString()!;
                 var __result = global::TestApp.ArrayReturnCommands.GetTags(__p0);
                 if (__result is null) return "null";
                 var __sb = new System.Text.StringBuilder("[");
