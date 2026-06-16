@@ -1,0 +1,43 @@
+# TST-11: Dependabot keeps both dependency ecosystems current so the SHA-pinned actions and the
+# NuGet graph don't silently age. The github-actions ecosystem is what refreshes the pins: when a
+# pinned action ships a new release, Dependabot opens a PR bumping the SHA AND its `# vX.Y.Z` comment,
+# which the build.yml pin-check then re-validates. The nuget ecosystem (repo root) covers the managed
+# package graph (central package management via Directory.Packages.props).
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions fresh. Dependabot understands `uses: owner/repo@<sha> # vX.Y.Z`
+  # and bumps both the SHA and the trailing version comment together.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      # Batch action bumps into a single PR per week to cut review churn.
+      actions:
+        patterns:
+          - "*"
+
+  # Managed NuGet dependencies. Central package management means every version lives in
+  # Directory.Packages.props; Dependabot updates those <PackageVersion> entries.
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+      - nuget
+    groups:
+      # One PR for patch/minor bumps; majors still come through individually for manual review.
+      nuget-minor-patch:
+        update-types:
+          - minor
+          - patch

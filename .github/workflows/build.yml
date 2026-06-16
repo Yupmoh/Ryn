@@ -6,12 +6,42 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+# TST-17: cancel superseded runs for the same ref so rapid pushes to a PR don't stack up
+# redundant 9-job matrices. Pushes to main keep their own group per-SHA so main builds aren't
+# cancelled by a follow-up commit racing in.
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
+  # Supply-chain guard (SUP-02): every third-party action must be pinned to a full
+  # 40-char commit SHA (a moving tag like @v6 can be repointed at malicious code by a
+  # compromised maintainer). A trailing `# vX.Y.Z` comment is required for readability.
+  pin-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Verify all actions are SHA-pinned
+        shell: bash
+        run: |
+          # Every `uses:` line must reference a 40-hex SHA followed by a version comment.
+          bad=$(grep -rnE '^\s*-?\s*uses:' .github/workflows/*.yml \
+                  | grep -vE 'uses:\s*\S+@[0-9a-f]{40} # ' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Unpinned or uncommented action reference(s) found:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "All actions are pinned to a 40-char SHA with a version comment."
+
   build:
     strategy:
       fail-fast: false
@@ -33,15 +63,21 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: recursive
           fetch-depth: 0   # MinVer needs full history + tags to compute the version
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
         with:
-          dotnet-version: "10.0.x"
+          # TST-17: pin the SDK to global.json (10.0.100, rollForward latestMinor) so CI and local
+          # SDKs can't drift, and cache the restored NuGet packages. The repo uses central package
+          # management with no lockfiles, so the cache key is derived from Directory.Packages.props
+          # (the single source of truth for every package version).
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
 
       # The Linux saucer libs link against GTK4 + WebKitGTK 6.0 (libwebkitgtk-6.0-4),
       # which aren't on a bare runner — without them dlopen of saucer-bindings.so fails
@@ -64,14 +100,35 @@ jobs:
           # releases (v*) are prereleases too, so GitHub reports no latest and a bare
           # `gh release download` silently finds nothing. Match the native-v* tag explicitly
           # (same approach as release.yml).
-          TAG=$(gh release list --repo ${{ github.repository }} --limit 50 --json tagName \
-                  --jq 'map(select(.tagName | startswith("native-v"))) | sort_by(.tagName) | last.tagName')
+          #
+          # TST-05: select the MOST RECENT native-v* release by publish date, not the lexicographic
+          # max of the tag name. Tags are shaped native-v{version}-{shortsha}; the short SHA is
+          # effectively random hex and old releases are never deleted, so `sort_by(.tagName)|last`
+          # could pin a STALE native lib whose ABI no longer matches the regenerated bindings.
+          # Sorting by createdAt (falling back to publishedAt for drafts) always picks the newest.
+          TAG=$(gh release list --repo ${{ github.repository }} --limit 50 --json tagName,createdAt,publishedAt \
+                  --jq 'map(select(.tagName | startswith("native-v"))) | sort_by(.publishedAt // .createdAt) | last.tagName')
           if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
             echo "::error::No native-v* release found. Run native-libs.yml first to publish the saucer-bindings artifacts."
             exit 1
           fi
 
           if gh release download "$TAG" --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber; then
+            # Supply-chain guard (SUP-01): verify the downloaded archive against its pinned SHA-256
+            # in build/native-checksums.txt BEFORE extracting. Fails CLOSED — a mismatch OR a missing
+            # pin aborts the job so a tampered, corrupt, or unpinned artifact is never used.
+            EXPECTED=$(grep -E "[[:space:]]${ARCHIVE}\$" build/native-checksums.txt | grep -v '^#' | awk '{print $1}' | head -n1)
+            if [ -z "$EXPECTED" ]; then
+              echo "::error::No pinned checksum for $ARCHIVE in build/native-checksums.txt. Refusing to use an unpinned native artifact (fail-closed supply-chain check)."
+              exit 1
+            fi
+            ACTUAL=$(shasum -a 256 "/tmp/$ARCHIVE" | awk '{print $1}')
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "::error::CHECKSUM MISMATCH for $ARCHIVE — expected $EXPECTED but got $ACTUAL. Refusing to use a tampered or corrupt artifact."
+              exit 1
+            fi
+            echo "Checksum verified for $ARCHIVE ($EXPECTED)"
+
             if [[ "${{ matrix.archive-ext }}" == ".zip" ]]; then
               unzip -o "/tmp/$ARCHIVE" -d "$DEST"
             else
@@ -96,6 +153,28 @@ jobs:
       - name: Build
         run: dotnet build -c ${{ matrix.configuration }}
 
+      # TST-11: NuGet vulnerability audit gate. `dotnet list package --vulnerable --include-transitive`
+      # queries the GitHub Advisory Database for every restored package (direct + transitive) and
+      # prints a table when any has a known advisory. The command itself always exits 0, so we grep
+      # its output and fail the job on a hit — restore/build then stops shipping a known-vulnerable
+      # dependency. Runs once (macOS/Release leg) since the package graph is identical across the
+      # matrix; needs network to reach the advisory DB.
+      - name: NuGet vulnerability audit
+        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        shell: bash
+        run: |
+          echo "Auditing restored packages against the GitHub Advisory Database..."
+          REPORT=$(dotnet list Ryn.slnx package --vulnerable --include-transitive 2>&1)
+          echo "$REPORT"
+          # `dotnet list package --vulnerable` always exits 0; it prints "has the following vulnerable
+          # packages" per project on a hit and "has no vulnerable packages" when clean. Match the hit
+          # phrase (and the severity column as a belt-and-braces fallback) to fail the job.
+          if echo "$REPORT" | grep -qiE 'has the following vulnerable packages|>\s*(Critical|High|Moderate|Low)'; then
+            echo "::error::Vulnerable NuGet package(s) detected — see the report above. Bump or replace the flagged dependency."
+            exit 1
+          fi
+          echo "No vulnerable packages found."
+
       - name: Test
         run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category!=Integration&Category!=Package" --logger "trx;LogFileName=results.trx"
 
@@ -112,9 +191,27 @@ jobs:
       - name: Integration test
         run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category=Integration" --logger "trx;LogFileName=integration-results.trx"
 
+      # TST-02: the package smoke test (Ryn.PackageTests, [Trait Category=Package]) is the end-to-end
+      # guard for the alpha.1 duplicate-generator regression — it packs Ryn + a plugin, restores from
+      # a local feed, and builds a consumer app asserting exactly one Router.g.cs. It was excluded from
+      # every job by the Test/Integration filters above, so packaging regressions stayed green on PRs.
+      # Wire it in on one runner (macOS) only: it pack/restore/consumer-builds and is slow, but the
+      # graph is platform-independent so a single leg is sufficient. It builds its own consumer project,
+      # so no --no-build here.
+      - name: Package smoke test
+        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        run: dotnet test tests/Ryn.PackageTests/Ryn.PackageTests.csproj -c ${{ matrix.configuration }} --filter "Category=Package" --logger "trx;LogFileName=package-results.trx"
+
+      # TST-14: capture EVERY .trx, not just results.trx. The integration step logs
+      # integration-results.trx and the package step package-results.trx, which the old basename glob
+      # "**/results.trx" silently dropped — exactly the logs needed when a platform-specific native
+      # load fails on a runner you can't access. `**/*.trx` (plus any coverage) covers all loggers.
       - name: Upload test results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.configuration }}
-          path: "**/results.trx"
+          path: |
+            **/*.trx
+            **/coverage.cobertura.xml
+          if-no-files-found: ignore
