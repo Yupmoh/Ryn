@@ -1,7 +1,9 @@
 namespace Ryn.Core;
 
 /// <summary>
-/// Exposes streaming health counters from an <see cref="Internal.EventBatcher"/>.
+/// Exposes streaming health counters for an event batcher: how many items were enqueued, emitted to the
+/// webview, and dropped because the queue was full. Implemented by the internal event batcher and surfaced
+/// through the shell plugin's stream-stats commands.
 /// </summary>
 public interface IEventMetrics
 {

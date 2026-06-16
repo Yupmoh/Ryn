@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Ryn.Core.Internal;
 
-internal sealed class EventBatcher : IDisposable
+internal sealed class EventBatcher : IEventMetrics, IDisposable
 {
     private readonly IRynWebView _webView;
     private readonly string _eventName;
@@ -31,9 +31,14 @@ internal sealed class EventBatcher : IDisposable
         _flushTimer = new Timer(_ => Flush(), null, FlushIntervalMs, FlushIntervalMs);
     }
 
-    internal long AddedCount => Interlocked.Read(ref _addedCount);
-    internal long FlushedCount => Interlocked.Read(ref _flushedCount);
-    internal long DroppedCount => Interlocked.Read(ref _droppedCount);
+    /// <inheritdoc />
+    public long AddedCount => Interlocked.Read(ref _addedCount);
+
+    /// <inheritdoc />
+    public long FlushedCount => Interlocked.Read(ref _flushedCount);
+
+    /// <inheritdoc />
+    public long DroppedCount => Interlocked.Read(ref _droppedCount);
 
     internal void Add(string jsonData)
     {
@@ -106,8 +111,28 @@ internal sealed class EventBatcher : IDisposable
         }
         _sb.Append(']');
 
+        // The flush Timer can fire after the webview (or its owning window) has been torn down: batchers are
+        // singletons disposed after the window, and the proxy throws once the live webview is gone. Swallow
+        // exactly those teardown exceptions so a background flush can never crash the process; any other
+        // exception still surfaces. This is scoped to the timer/flush emit path only, so direct EmitEvent
+        // callers elsewhere keep their normal error behavior. FlushedCount is bumped only after a successful
+        // emit so a dropped-on-teardown batch is not counted as delivered.
+        try
+        {
+            _webView.EmitEvent(_eventName, _sb.ToString());
+        }
+        catch (ObjectDisposedException)
+        {
+            // RynWebView.EmitEvent once the native webview is disposed.
+            return;
+        }
+        catch (InvalidOperationException)
+        {
+            // DeferredRynWebView once the owning window/webview is no longer available.
+            return;
+        }
+
         Interlocked.Add(ref _flushedCount, items.Count);
-        _webView.EmitEvent(_eventName, _sb.ToString());
     }
 
     public void Dispose()
