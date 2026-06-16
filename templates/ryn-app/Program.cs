@@ -1,6 +1,6 @@
 using Ryn.Core;
 using Ryn.Ipc;
-using RynApp;
+using RynApp1;
 
 public static class Program
 {

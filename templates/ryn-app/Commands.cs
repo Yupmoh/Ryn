@@ -1,7 +1,7 @@
 using System.Globalization;
 using Ryn.Ipc;
 
-namespace RynApp;
+namespace RynApp1;
 
 public static class AppCommands
 {

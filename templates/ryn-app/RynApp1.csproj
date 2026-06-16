@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <RootNamespace>RynApp</RootNamespace>
+    <RootNamespace>RynApp1</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -9,7 +9,7 @@
     "language": "C#",
     "type": "project"
   },
-  "sourceName": "RynApp",
+  "sourceName": "RynApp1",
   "preferNameDirectory": true,
   "symbols": {
     "Framework": {
@@ -18,6 +18,25 @@
       "datatype": "string",
       "defaultValue": "net10.0",
       "replaces": "net10.0"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "false",
+      "description": "If specified, skips the automatic restore of the project on create."
     }
-  }
+  },
+  "primaryOutputs": [
+    { "path": "RynApp1.csproj" }
+  ],
+  "postActions": [
+    {
+      "id": "restore",
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [{ "text": "Run 'dotnet restore'" }],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    }
+  ]
 }
