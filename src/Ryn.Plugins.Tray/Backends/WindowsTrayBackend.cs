@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Ryn.Core.Internal;
 
 namespace Ryn.Plugins.Tray.Backends;
 
@@ -156,36 +157,39 @@ internal sealed partial class WindowsTrayBackend : ITrayBackend
     }
 
     private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
-    {
-        if (msg == WmTrayCallback)
+        // On a throwing handler, return 0 ("message handled") rather than crossing the boundary; the onError
+        // value is evaluated eagerly, so it must be a plain default and not a re-entrant DefWindowProc call.
+        => NativeGuard.Invoke("WindowsTrayBackend.WndProc", (nint)0, () =>
         {
-            var mouseMsg = (int)(lParam & 0xFFFF);
-            if (mouseMsg == WmLButtonUp)
+            if (msg == WmTrayCallback)
             {
-                IconClicked?.Invoke();
+                var mouseMsg = (int)(lParam & 0xFFFF);
+                if (mouseMsg == WmLButtonUp)
+                {
+                    IconClicked?.Invoke();
+                }
+                else if (mouseMsg == WmRButtonUp)
+                {
+                    ShowContextMenu();
+                }
+                return 0;
             }
-            else if (mouseMsg == WmRButtonUp)
-            {
-                ShowContextMenu();
-            }
-            return 0;
-        }
 
-        if (msg == WmCommand)
-        {
-            var menuId = (int)(wParam & 0xFFFF);
-            string? itemId;
-            lock (_menuLock)
+            if (msg == WmCommand)
             {
-                _menuIdMap.TryGetValue(menuId, out itemId);
+                var menuId = (int)(wParam & 0xFFFF);
+                string? itemId;
+                lock (_menuLock)
+                {
+                    _menuIdMap.TryGetValue(menuId, out itemId);
+                }
+                if (itemId is not null)
+                    MenuItemClicked?.Invoke(itemId);
+                return 0;
             }
-            if (itemId is not null)
-                MenuItemClicked?.Invoke(itemId);
-            return 0;
-        }
 
-        return DefWindowProc(hwnd, msg, wParam, lParam);
-    }
+            return DefWindowProc(hwnd, msg, wParam, lParam);
+        });
 
     private void ShowContextMenu()
     {

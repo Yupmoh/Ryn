@@ -1,3 +1,4 @@
+using Ryn.Core;
 using Ryn.Plugins.Tray.Backends;
 
 namespace Ryn.Plugins.Tray;
@@ -10,14 +11,15 @@ public sealed class TrayService : IDisposable
 
     internal Action<string, string>? EmitEvent { get; set; }
 
-    internal TrayService(TrayOptions options)
+    internal TrayService(TrayOptions options, IMainThreadDispatcher mainThread)
     {
+        ArgumentNullException.ThrowIfNull(mainThread);
         _options = options;
 
         if (OperatingSystem.IsWindows())
             _backend = new WindowsTrayBackend();
         else if (OperatingSystem.IsMacOS())
-            _backend = new MacOsTrayBackend();
+            _backend = new MacOsTrayBackend(mainThread);
         else if (OperatingSystem.IsLinux())
             _backend = new LinuxTrayBackend();
         else

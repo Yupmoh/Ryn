@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Ryn.Core.Internal;
 
 namespace Ryn.Plugins.Tray.Backends;
 
@@ -26,8 +27,13 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
     // Store delegate references to prevent GC collection of callbacks
     private readonly List<GCallback> _callbackRefs = [];
-    private GSourceFunc? _quitCallback;
-    private GSourceFunc? _rebuildCallback;
+
+    // Pending g_idle_add delegates (rebuild/quit). Each idle source posts a fresh GSourceFunc whose marshaled
+    // function pointer GTK invokes later on the GTK thread; the delegate must stay rooted until then. PAP-16:
+    // a single overwritable field would let a rapid second SetMenu drop the still-pending first delegate and
+    // let it be collected mid-callback. We hold every pending delegate here and each removes itself once run.
+    private readonly List<GSourceFunc> _pendingIdle = [];
+    private readonly object _pendingIdleLock = new();
 
     public event Action? IconClicked;
     public event Action<string>? MenuItemClicked;
@@ -83,8 +89,39 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
         // RebuildMenu touches GTK widget APIs, which must only run on the GTK thread. SetMenu can be
         // called from any thread, so marshal the rebuild onto the GTK loop via g_idle_add.
-        _rebuildCallback = _ => { RebuildMenu(); return 0; };
-        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_rebuildCallback), nint.Zero);
+        PostIdle(RebuildMenu);
+    }
+
+    // Queue work onto the GTK main loop and keep the marshaled delegate rooted until GTK has invoked it.
+    // The delegate removes itself from _pendingIdle inside the callback and returns G_SOURCE_REMOVE (0) so the
+    // idle source fires exactly once. NativeGuard fences the body so a managed throw never crosses into GLib.
+    private void PostIdle(Action work)
+    {
+        GSourceFunc? func = null;
+        func = userData => NativeGuard.Invoke("LinuxTrayBackend.idle", 0, () =>
+        {
+            try
+            {
+                work();
+            }
+            finally
+            {
+                lock (_pendingIdleLock)
+                {
+                    // func is captured before assignment but is non-null by the time the callback runs.
+                    _ = _pendingIdle.Remove(func!);
+                }
+            }
+
+            return 0; // G_SOURCE_REMOVE
+        });
+
+        lock (_pendingIdleLock)
+        {
+            _pendingIdle.Add(func);
+        }
+
+        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(func), nint.Zero);
     }
 
     public void ShowNotification(string title, string message)
@@ -147,10 +184,15 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
         var newMenu = gtk_menu_new();
 
+        // Build the new menu's activate callbacks into a fresh list, then swap it in for the live one only
+        // after the new menu is installed. The previous menu's callbacks stay rooted (in _callbackRefs) until
+        // the swap, so a pending "activate" on the old menu can't invoke a collected delegate while GTK
+        // finishes tearing the old menu down.
+        var newCallbacks = new List<GCallback>();
+
         lock (_lock)
         {
             _menuIdMap.Clear();
-            _callbackRefs.Clear();
 
             for (var i = 0; i < _menuItems.Count; i++)
             {
@@ -172,7 +214,7 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
                     var capturedId = item.Id;
                     GCallback callback = (_, _) => OnMenuItemActivated(capturedId);
-                    _callbackRefs.Add(callback);
+                    newCallbacks.Add(callback);
 
                     g_signal_connect_data(
                         menuItem,
@@ -191,12 +233,19 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
         _menu = newMenu;
         app_indicator_set_menu(_indicator, _menu);
+
+        // The new menu is live; the old menu's callbacks can no longer be invoked, so replace the rooted set.
+        lock (_lock)
+        {
+            _callbackRefs.Clear();
+            _callbackRefs.AddRange(newCallbacks);
+        }
     }
 
+    // GTK "activate" callback body — fenced so a managed throw never unwinds across the GLib boundary.
     private void OnMenuItemActivated(string itemId)
-    {
-        MenuItemClicked?.Invoke(itemId);
-    }
+        => NativeGuard.Invoke("LinuxTrayBackend.OnMenuItemActivated",
+            () => MenuItemClicked?.Invoke(itemId));
 
     private static string EscapeShellArg(string value)
     {
@@ -225,9 +274,10 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
 
         if (_available && _glibThread is not null && _glibRunning)
         {
-            // Marshal gtk_main_quit onto the GTK thread (returns G_SOURCE_REMOVE so it runs once).
-            _quitCallback = _ => { gtk_main_quit(); return 0; };
-            _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_quitCallback), nint.Zero);
+            // Marshal gtk_main_quit onto the GTK thread. PostIdle keeps the marshaled delegate rooted until
+            // GTK invokes it (it returns G_SOURCE_REMOVE so it runs once); the join below waits for the loop
+            // to actually exit, after which the delegate has already run and removed itself.
+            PostIdle(gtk_main_quit);
         }
         _glibRunning = false;
 
@@ -240,6 +290,11 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
         lock (_lock)
         {
             _callbackRefs.Clear();
+        }
+
+        lock (_pendingIdleLock)
+        {
+            _pendingIdle.Clear();
         }
 
         _indicator = 0;
