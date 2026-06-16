@@ -24,11 +24,38 @@
     <RepositoryUrl>https://github.com/Yupmoh/Ryn</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
 
-  <!-- Pack the repository README into every NuGet package so PackageReadmeFile resolves (NU5039). -->
+  <!-- Pack the README, package icon, and license/third-party notices into every NuGet package.
+       README satisfies PackageReadmeFile (NU5039); icon satisfies PackageIcon. The LICENSE and
+       THIRD-PARTY-NOTICES.md are shipped so every Ryn.* nupkg (especially Ryn.Interop, which
+       redistributes the compiled saucer binaries and their statically-linked dependencies)
+       carries the upstream MIT/BSD/Boost/CC-BY notices it is required to preserve. -->
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)assets/logo.png" Pack="true" PackagePath="icon.png" Visible="false"
+          Condition="Exists('$(MSBuildThisFileDirectory)assets/logo.png')" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="" Visible="false"
+          Condition="Exists('$(MSBuildThisFileDirectory)LICENSE')" />
+    <None Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="" Visible="false"
+          Condition="Exists('$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md')" />
+  </ItemGroup>
+
+  <!-- Source Link, deterministic builds, and symbol packages (snupkg) for every packable project,
+       so consumers can source-step into Ryn.* and tooling can verify provenance (DOC-06 / SUP-07). -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DeterministicSourcePaths>true</DeterministicSourcePaths>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- CI sets this to true (GitHub Actions sets $CI); locally it stays false to keep dev builds fast. -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -45,8 +72,20 @@
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!-- Packable libraries emit portable PDBs in Release so `dotnet pack` produces non-empty snupkg
+       symbol packages (IncludeSymbols above). The AOT-published sample apps under samples/ keep no
+       symbols so their self-contained native binary is not bloated by a managed PDB. Keyed on the
+       project path (not IsPackable) because samples set IsPackable after importing this file, so
+       IsPackable is not yet observable here. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and !$(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)samples$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and $(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)samples$([System.IO.Path]::DirectorySeparatorChar)'))">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <Optimize>true</Optimize>
   </PropertyGroup>
 </Project>
