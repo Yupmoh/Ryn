@@ -34,8 +34,16 @@ public sealed partial class RynApplication : IAsyncDisposable
     /// <summary>The dependency injection service provider for this application.</summary>
     public IServiceProvider Services => _services;
 
-    /// <summary>The main application window. Only available after <see cref="RunAsync"/> has been called.</summary>
-    public IRynWindow Window => _host?.MainWindow ?? throw new InvalidOperationException("Application is not running");
+    /// <summary>The main application window — the first window opened. Only available after
+    /// <see cref="RunAsync"/> has been called.</summary>
+    public IRynWindow MainWindow => _host?.MainWindow ?? throw new InvalidOperationException("Application is not running");
+
+    /// <summary>The main application window. Alias of <see cref="MainWindow"/> kept for source compatibility.</summary>
+    public IRynWindow Window => MainWindow;
+
+    /// <summary>All currently-open windows, main first. Empty before <see cref="RunAsync"/> has opened the main
+    /// window; never throws, so it is safe to enumerate at any point.</summary>
+    public IReadOnlyList<IRynWindow> Windows => _host?.Windows ?? [];
 
     /// <summary>The main application webview. Only available after <see cref="RunAsync"/> has been called.</summary>
     public IRynWebView WebView => _host?.MainWindow?.WebView ?? throw new InvalidOperationException("Application is not running");
@@ -106,6 +114,26 @@ public sealed partial class RynApplication : IAsyncDisposable
 
         try
         {
+            var options = _services.GetRequiredService<RynOptions>();
+
+            // Create and publish the host BEFORE plugins initialize, so a plugin backend that resolves
+            // IMainThreadDispatcher / IRynApplicationLifetime during its InitializeAsync marshals onto (and can
+            // request shutdown of) the real host. The host buffers pre-loop work and drains it on the UI thread
+            // once the loop starts (Cluster C / INT-02). No native work happens until host.Run.
+            var host = new NativeAppHost(options);
+            _host = host;
+
+            var accessor = _services.GetRequiredService<RynWindowAccessor>();
+            var nativeAccessor = _services.GetRequiredService<NativeApplicationAccessor>();
+            nativeAccessor.Host = host;
+            host.NativeReady = handle => nativeAccessor.ApplicationHandle = handle;
+            // Wire IPC command dispatcher if registered. The host applies it to the main window's webview
+            // during OnReady, before the window is initialized.
+            host.CommandHandler = _services.GetService<CommandDispatchHandler>();
+            // Publish the live main window once it is fully initialized (inside OnReady, on the UI thread) so
+            // deferred IRynWindow/IRynWebView injections and queued main-thread work resolve against it.
+            host.MainWindowCreated = window => accessor.Window = window;
+
             foreach (var plugin in _plugins)
             {
                 try
@@ -122,8 +150,6 @@ public sealed partial class RynApplication : IAsyncDisposable
                     Log.PluginInitFailed(_logger, plugin.Name, ex);
                 }
             }
-
-            var options = _services.GetRequiredService<RynOptions>();
 
             // Opt-in process-global exception net: log and surface AppDomain / unobserved-task exceptions
             // via the UnhandledException event so apps can install a crash logger.
@@ -151,20 +177,6 @@ public sealed partial class RynApplication : IAsyncDisposable
                 if (deepLink is not null)
                     RaiseDeepLink(deepLink);
             }
-
-            var host = new NativeAppHost(options);
-            _host = host;
-
-            // Wire IPC command dispatcher if registered. The host applies it to the main window's webview
-            // during OnReady, before the window is initialized.
-            host.CommandHandler = _services.GetService<CommandDispatchHandler>();
-
-            var accessor = _services.GetRequiredService<RynWindowAccessor>();
-            var nativeAccessor = _services.GetRequiredService<NativeApplicationAccessor>();
-            host.NativeReady = handle => nativeAccessor.ApplicationHandle = handle;
-            // Publish the live main window once it is fully initialized (inside OnReady, on the UI thread) so
-            // deferred IRynWindow/IRynWebView injections and queued main-thread work resolve against it.
-            host.MainWindowCreated = window => accessor.Window = window;
 
             Log.Running(_logger);
 

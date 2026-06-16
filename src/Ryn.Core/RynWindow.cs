@@ -83,7 +83,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     /// <summary>Stable per-application window identifier, assigned by the host when the window is created.</summary>
-    internal int Id { get; }
+    public int Id { get; }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
 

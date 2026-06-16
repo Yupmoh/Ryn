@@ -149,8 +149,8 @@ public sealed class RynApplicationBuilder
         // resolve them; a user registration of the same interface still overrides via last-wins.
         // - IMainThreadDispatcher: marshal native UI calls (tray/audio AppKit work) onto the main thread.
         // - IRynApplicationLifetime: request orderly shutdown (updater relaunch) instead of Environment.Exit.
-        _services.AddSingleton<IMainThreadDispatcher>(sp => new MainThreadDispatcher(sp.GetRequiredService<RynWindowAccessor>()));
-        _services.AddSingleton<IRynApplicationLifetime>(sp => new RynApplicationLifetime(sp.GetRequiredService<RynWindowAccessor>()));
+        _services.AddSingleton<IMainThreadDispatcher>(sp => new MainThreadDispatcher(sp.GetRequiredService<NativeApplicationAccessor>()));
+        _services.AddSingleton<IRynApplicationLifetime>(sp => new RynApplicationLifetime(sp.GetRequiredService<NativeApplicationAccessor>()));
 
         // 5. User service configuration
         foreach (var configure in _configureActions)

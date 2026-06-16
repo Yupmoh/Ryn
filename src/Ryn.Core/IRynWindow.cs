@@ -3,6 +3,8 @@ namespace Ryn.Core;
 /// <summary>Represents the native application window.</summary>
 public interface IRynWindow
 {
+    /// <summary>A stable identifier for this window, unique within the application. The main window is 1.</summary>
+    public int Id { get; }
     /// <summary>The window title text.</summary>
     public string Title { get; set; }
     /// <summary>The window width in pixels.</summary>

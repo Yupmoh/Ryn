@@ -42,6 +42,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
         ?? throw new InvalidOperationException(
             "The window is not available yet. IRynWindow can be injected anywhere, but its members are only usable after RunAsync has started.");
 
+    public int Id => Live.Id;
     public string Title { get => Live.Title; set => Live.Title = value; }
     public int Width { get => Live.Width; set => Live.Width = value; }
     public int Height { get => Live.Height; set => Live.Height = value; }
