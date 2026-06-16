@@ -3,12 +3,3 @@
 // These files are a derivative work of those headers; see THIRD-PARTY-NOTICES.md
 // at the repository root for the full license text. Ryn itself is MIT-licensed.
 
-namespace Ryn.Interop
-{
-    [NativeTypeName("unsigned int")]
-    public enum saucer_state : uint
-    {
-        SAUCER_STATE_STARTED,
-        SAUCER_STATE_FINISHED,
-    }
-}

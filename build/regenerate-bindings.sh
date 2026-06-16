@@ -44,8 +44,11 @@ echo "   libclang: $LLVM_LIB_DIR"
 echo "   libClangSharp: $CLANGSHARP_LIB_DIR"
 
 echo "==> Clearing existing generated bindings..."
-rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"
+# Clear only the ClangSharp output subdirectory (matches --output in ryn-bindings.rsp). Clearing the
+# whole $OUTPUT_DIR would also delete Generated/.editorconfig, which marks these files generated and
+# suppresses analyzers on them — losing it breaks the build on the next regen.
+rm -rf "$OUTPUT_DIR/Saucer.cs"
+mkdir -p "$OUTPUT_DIR/Saucer.cs"
 
 echo "==> Generating C# bindings from saucer headers..."
 cd "$CONFIG_DIR"
