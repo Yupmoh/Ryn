@@ -27,6 +27,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// resolves from <c>onload</c>) rather than via a second <c>window.__ryn._resolve</c> eval hop —
     /// this removes a per-call UI-thread round trip and an extra escape pass.
     /// </summary>
+    /// <remarks>
+    /// The route prefixes (<c>/ipc/cmd/</c>, <c>/ipc/eval/</c>) and the token header (<c>X-Ryn-Token</c>)
+    /// below are the page-side end of the IPC wire contract. Their canonical source is
+    /// <see cref="Internal.IpcProtocol"/>; they cannot be interpolated into this raw-string template without
+    /// breaking its <c>{{ }}</c> escaping, so this copy is kept in sync by hand. If a value in
+    /// <see cref="Internal.IpcProtocol"/> changes, update the literals here (and the host-side parser) to match.
+    /// </remarks>
     private static string BuildBridgeScript(string token) =>
         $$"""
         (function(){
@@ -43,6 +50,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
               var id = nextId++;
               var body = args ? JSON.stringify(args) : '{}';
               var x = new XMLHttpRequest();
+              // Route prefix + header literals: canonical source is Ryn.Core.Internal.IpcProtocol (kept in sync by hand).
               x.open('POST', ryn._ipcBase + '/ipc/cmd/' + id + '/' + encodeURIComponent(command), true);
               x.setRequestHeader('Content-Type', 'application/json');
               if (token) x.setRequestHeader('X-Ryn-Token', token);
@@ -84,20 +92,40 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             }
           };
 
-          ryn.eval = function(id, encoded) {
+          // Decodes a base64 string of UTF-8 bytes back to a JS string. atob() yields one latin-1 code
+          // unit per byte, so multi-byte UTF-8 characters must be reassembled via TextDecoder — using
+          // atob() alone corrupts every non-ASCII script (e.g. 'héllo' would mis-measure its length).
+          function __ryn_b64utf8(b64) {
+            var bin = atob(b64);
+            var bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return new TextDecoder('utf-8').decode(bytes);
+          }
+
+          // The result is returned as JSON (JSON.stringify) so the host can JSON.parse it: objects survive
+          // round-trips, null/undefined are distinguishable, and there is no String() coercion. undefined
+          // has no JSON form, so it is sent as the literal "null".
+          function __ryn_result(v) {
+            try { var s = JSON.stringify(v); return s === undefined ? 'null' : s; }
+            catch (e) { return JSON.stringify(String(v)); }
+          }
+
+          ryn.eval = function(id, nonce, encoded) {
             try {
-              var script = atob(encoded);
+              var script = __ryn_b64utf8(encoded);
               var result = eval(script);
               Promise.resolve(result).then(
-                function(v) { __ryn_send(id, 1, String(v)); },
-                function(e) { __ryn_send(id, 0, String(e)); }
+                function(v) { __ryn_send(id, nonce, 1, __ryn_result(v)); },
+                function(e) { __ryn_send(id, nonce, 0, JSON.stringify(String(e))); }
               );
-            } catch (e) { __ryn_send(id, 0, String(e)); }
+            } catch (e) { __ryn_send(id, nonce, 0, JSON.stringify(String(e))); }
           };
 
-          function __ryn_send(id, ok, data) {
+          // Path is /ipc/eval/{id}/{ok}/{nonce}: {ok} stays the third segment so the local-server transport
+          // (which reads only id+ok) is unaffected, while the ryn:// scheme path additionally checks {nonce}.
+          function __ryn_send(id, nonce, ok, data) {
             var x = new XMLHttpRequest();
-            x.open('POST', ryn._ipcBase + '/ipc/eval/' + id + '/' + ok, true);
+            x.open('POST', ryn._ipcBase + '/ipc/eval/' + id + '/' + ok + '/' + encodeURIComponent(nonce), true);
             if (token) x.setRequestHeader('X-Ryn-Token', token);
             x.send(data);
           }
@@ -155,8 +183,23 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private nint _app;
     private nint _selfHandle;
 
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<string>> _pendingEvals = new();
+    /// <summary>
+    /// Pending host-initiated JS evals, keyed by id. Each carries a per-eval random nonce that the eval
+    /// response must present (constant-time compare) before the result is accepted — so page script that
+    /// has IPC reach cannot spoof an in-flight eval result by guessing the sequential id (IPC-04).
+    /// </summary>
+    private readonly ConcurrentDictionary<long, PendingEval> _pendingEvals = new();
     private long _nextEvalId;
+
+    /// <summary>A pending host-initiated eval: the completion source plus the nonce gating its response.</summary>
+    private sealed record PendingEval(TaskCompletionSource<string> Completion, string Nonce);
+
+    /// <summary>
+    /// Default ceiling on a host-initiated JS eval. Without it a navigation or a page that never answers
+    /// would leave the awaiting <see cref="TaskCompletionSource{TResult}"/> hung forever (ARC-10). A caller
+    /// can still pass a <see cref="CancellationToken"/> for a tighter bound.
+    /// </summary>
+    private static readonly TimeSpan EvalTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Outstanding GCHandles for actions posted to saucer's UI thread via <see cref="ExecuteOnUiThread"/>.
@@ -176,9 +219,25 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     // HTML content to serve from ryn://app/
     private string? _htmlContent;
     private string? _contentDirectory;
-    private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { "ryn://app" };
+    private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { IpcProtocol.AppOrigin };
+
+    /// <summary>
+    /// Schemes the app declared up front (RynOptions.CustomSchemes), which the host registered with the
+    /// engine via <c>saucer_webview_register_scheme</c> before the webview was created. <see cref="RegisterCustomScheme"/>
+    /// only attaches handlers for these — saucer silently no-ops <c>handle_scheme</c> for an unregistered
+    /// scheme, so attaching to an undeclared scheme would be a dead handler (ARC-02).
+    /// </summary>
+    private readonly HashSet<string> _declaredSchemes = new(StringComparer.OrdinalIgnoreCase);
 
     private volatile bool _disposed;
+
+    /// <summary>
+    /// Count of in-flight async scheme/command responses that hold a copied <c>saucer_scheme_executor</c>
+    /// (INT-03). Disposal waits for these to drain before freeing <see cref="_selfHandle"/>, and each
+    /// responder skips its native accept/free once <see cref="_disposed"/> is set, so a window closing or a
+    /// dispose racing an in-flight command can never call accept/free on an executor whose webview is gone.
+    /// </summary>
+    private int _inFlightResponses;
 
     internal unsafe RynWebView(saucer_webview* webview, saucer_application* app)
     {
@@ -197,19 +256,38 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     void Internal.ILocalServerHost.HandleEvalFromServer(long evalId, int ok, string body)
     {
-        if (_pendingEvals.TryRemove(evalId, out var tcs))
-        {
-            if (ok == 1)
-                tcs.TrySetResult(body);
-            else
-                tcs.TrySetException(new JavaScriptException(body));
-        }
+        // Local-server transport: already gated by the loopback + per-launch token + same-origin checks in
+        // LocalWebServer.IsAuthorized, and the interface does not carry the eval nonce, so resolve by id here.
+        if (_pendingEvals.TryRemove(evalId, out var pending))
+            CompletePendingEval(pending, ok, body);
+    }
+
+    private static void CompletePendingEval(PendingEval pending, int ok, string body)
+    {
+        if (ok == 1)
+            pending.Completion.TrySetResult(body);
+        else
+            pending.Completion.TrySetException(new JavaScriptException(body));
     }
 
     internal void SetAllowedOrigins(List<string> origins)
     {
         foreach (var origin in origins)
             _allowedOrigins.Add(origin);
+    }
+
+    /// <summary>
+    /// Records the custom schemes the host registered with the engine (from <c>RynOptions.CustomSchemes</c>)
+    /// before the webview was created. Only these may later be wired up via <see cref="RegisterCustomScheme"/>.
+    /// The reserved <c>ryn</c> scheme is never accepted here — it backs the built-in IPC/content transport.
+    /// </summary>
+    internal void SetDeclaredSchemes(IEnumerable<string> schemes)
+    {
+        foreach (var scheme in schemes)
+        {
+            if (!string.Equals(scheme, AppScheme, StringComparison.OrdinalIgnoreCase))
+                _declaredSchemes.Add(scheme);
+        }
     }
 
     internal void SetHtmlContent(string html) => _htmlContent = html;
@@ -219,7 +297,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     internal unsafe void NavigateToAppScheme()
     {
         Span<byte> buf = stackalloc byte[64];
-        var str = Utf8String.Create("ryn://app/index.html", buf);
+        var str = Utf8String.Create($"{IpcProtocol.AppOrigin}/index.html", buf);
         Saucer.saucer_webview_set_url_str((saucer_webview*)_webview, str.Pointer);
         str.Dispose();
     }
@@ -248,31 +326,55 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Evaluates a JavaScript expression in the page and returns its result. The script is transported as
+    /// base64 of its UTF-8 bytes and decoded page-side with <c>TextDecoder</c>, so non-ASCII scripts are not
+    /// corrupted. The result is returned as a JSON document (the page <c>JSON.stringify</c>s it): a string
+    /// result comes back as a quoted JSON string, objects/arrays/numbers/booleans as their JSON form, and
+    /// <c>undefined</c> as <c>"null"</c>. Callers that want the raw value should <c>JSON.parse</c> it. The
+    /// eval is bounded by a default 30s timeout (and any supplied <paramref name="cancellationToken"/>).
+    /// </summary>
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(script);
 
         var id = Interlocked.Increment(ref _nextEvalId);
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var nonce = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
-        _pendingEvals[id] = tcs;
+        _pendingEvals[id] = new PendingEval(tcs, nonce);
 
-        if (cancellationToken.CanBeCanceled)
+        // Bound the wait so a navigation (which abandons the in-flight eval) or an unresponsive page cannot
+        // hang the awaiter forever. The caller's token, if any, is linked in so either can cancel. Ownership of
+        // the CTS is transferred to the completion continuation below, which disposes it once the eval settles.
+#pragma warning disable CA2000 // Disposed in the tcs.Task continuation; the eval always settles (result/fault/cancel/timeout).
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+#pragma warning restore CA2000
+        timeoutCts.CancelAfter(EvalTimeout);
+        var registration = timeoutCts.Token.Register(() =>
         {
-            var registration = cancellationToken.Register(() =>
+            if (_pendingEvals.TryRemove(id, out var removed))
             {
-                if (_pendingEvals.TryRemove(id, out var removed))
-                    removed.TrySetCanceled(cancellationToken);
-            });
-            // Release the registration once the eval settles (resolved, faulted, or cancelled), so a
-            // long-lived token doesn't accumulate one registration per call.
-            _ = tcs.Task.ContinueWith(
-                static (_, state) => ((CancellationTokenRegistration)state!).Dispose(),
-                registration, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
-        }
+                if (cancellationToken.IsCancellationRequested)
+                    removed.Completion.TrySetCanceled(cancellationToken);
+                else
+                    removed.Completion.TrySetException(new TimeoutException($"JavaScript eval timed out after {EvalTimeout.TotalSeconds:0}s."));
+            }
+        });
+        // Release the registration + linked source once the eval settles (resolved, faulted, or cancelled),
+        // so a long-lived token doesn't accumulate one registration per call.
+        _ = tcs.Task.ContinueWith(
+            static (_, state) =>
+            {
+                var (reg, cts) = ((CancellationTokenRegistration, CancellationTokenSource))state!;
+                reg.Dispose();
+                cts.Dispose();
+            },
+            (registration, timeoutCts), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
 
         var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(script));
-        ExecuteOnUiThread($"window.__ryn.eval({id},'{base64}')");
+        ExecuteOnUiThread($"window.__ryn.eval({id},'{nonce}','{base64}')");
 
         return new ValueTask<string>(tcs.Task);
     }
@@ -289,9 +391,32 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Attaches a handler for a custom URL scheme. The scheme must have been declared up front via
+    /// <c>RynOptions.CustomSchemes</c> (registered with the engine before the webview was created) — saucer
+    /// silently ignores <c>handle_scheme</c> for a scheme it was never told about pre-creation, so attaching
+    /// to an undeclared scheme would install a handler that never fires (ARC-02). The reserved <c>ryn</c>
+    /// scheme is rejected because it backs the built-in IPC and content transport.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="scheme"/> is <c>ryn</c> or was not declared in <c>RynOptions.CustomSchemes</c>.
+    /// </exception>
     public unsafe void RegisterCustomScheme(string scheme, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>> handler)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrEmpty(scheme);
+        ArgumentNullException.ThrowIfNull(handler);
+
+        if (string.Equals(scheme, AppScheme, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException(
+                "The 'ryn' scheme is reserved for Ryn's IPC and content transport and cannot be re-registered.",
+                nameof(scheme));
+
+        if (!_declaredSchemes.Contains(scheme))
+            throw new ArgumentException(
+                $"Scheme '{scheme}' was not declared. Add it to RynOptions.CustomSchemes so it is registered " +
+                "with the engine before the webview is created; handlers cannot be attached to undeclared schemes.",
+                nameof(scheme));
 
         _schemeHandlers[scheme] = handler;
 
@@ -436,8 +561,16 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void OnAppSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
     {
-        var self = NativeCallbackHelper.Resolve<RynWebView>(userdata);
-        self.HandleAppSchemeRequest(request, executor);
+        // Route through NativeGuard so no managed exception can cross the native boundary (Contract A). The
+        // native pointers are carried as nint because a lambda display class cannot hold pointer-typed fields.
+        var req = (nint)request;
+        var exec = (nint)executor;
+        var data = (nint)userdata;
+        NativeGuard.Invoke(nameof(OnAppSchemeRequest), () =>
+        {
+            var self = NativeCallbackHelper.Resolve<RynWebView>(data);
+            self.HandleAppSchemeRequest((saucer_scheme_request*)req, (saucer_scheme_executor*)exec);
+        });
     }
 
     private unsafe void HandleAppSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor)
@@ -446,11 +579,15 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var path = SaucerStringReader.ReadUrlPath(url);
         Saucer.saucer_url_free(url);
 
-        var requestOrigin = ParseRequestOrigin(request);
+        // Read the headers once and pull out everything the guards need (origin + token).
+        var headers = SaucerStringReader.ReadRequestHeaders(request);
+        var requestOrigin = ParseOriginHeader(headers);
         var matchedOrigin = ResolveAllowedOrigin(requestOrigin);
 
-        // CORS preflight — reject if origin is explicitly disallowed
         var method = SaucerStringReader.ReadRequestMethod(request);
+        var isIpc = path.StartsWith(IpcProtocol.IpcPrefix, StringComparison.Ordinal);
+
+        // CORS preflight — reject if origin is explicitly disallowed
         if (string.Equals(method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
         {
             if (matchedOrigin is null && requestOrigin is not null)
@@ -462,28 +599,42 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             return;
         }
 
-        // Validate request origin for IPC endpoints
-        if (path.StartsWith("/ipc/", StringComparison.Ordinal) && matchedOrigin is null && requestOrigin is not null)
+        // IPC endpoints (cmd/eval) are privileged: enforce the per-launch token, require POST, and treat a
+        // missing Origin as denied (IPC-01). The bridge always sends the token + POST, so legitimate calls
+        // are unaffected; a no-Origin GET (e.g. an <img>/iframe probe) and any wrong/absent token are
+        // rejected instead of being mapped onto the app origin. The token check is constant-time.
+        if (isIpc)
         {
-            Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
-            return;
+            var presentedToken = ParseHeaderValue(headers, IpcProtocol.TokenHeader);
+            var authorized =
+                requestOrigin is not null              // null Origin is denied for /ipc/
+                && matchedOrigin is not null           // origin must be on the allowlist
+                && string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+                && TokenMatches(presentedToken);
+            if (!authorized)
+            {
+                Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
+                return;
+            }
         }
 
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-        // /ipc/eval/{id}/{ok} — JS eval response
-        if (parts.Length >= 4 && parts[0] == "ipc" && parts[1] == "eval"
+        // /ipc/eval/{id}/{ok}/{nonce} — JS eval response. The per-eval nonce (IPC-04) must match the one
+        // issued for this id before the pending eval is resolved, so page script with IPC reach cannot
+        // spoof a host-initiated eval result by guessing the sequential id.
+        if (parts.Length >= 5 && parts[0] == "ipc" && parts[1] == "eval"
             && long.TryParse(parts[2], out var evalId)
             && int.TryParse(parts[3], out var ok))
         {
+            var nonce = Uri.UnescapeDataString(parts[4]);
             var body = ReadRequestBody(request);
 
-            if (_pendingEvals.TryRemove(evalId, out var tcs))
+            if (_pendingEvals.TryGetValue(evalId, out var pending)
+                && NonceMatches(pending.Nonce, nonce)
+                && _pendingEvals.TryRemove(evalId, out pending))
             {
-                if (ok == 1)
-                    tcs.TrySetResult(body);
-                else
-                    tcs.TrySetException(new JavaScriptException(body));
+                CompletePendingEval(pending, ok, body);
             }
 
             AcceptEmptyResponse(executor, matchedOrigin);
@@ -498,10 +649,12 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             var body = ReadRequestBody(request);
             var args = Encoding.UTF8.GetBytes(body);
 
-            // Keep the executor alive across the async dispatch and deliver the result on the response
-            // body itself (no second window.__ryn._resolve eval hop).
-            var execCopy = (nint)Saucer.saucer_scheme_executor_copy(executor);
-            _ = RespondToCommandAsync(command, args, execCopy, matchedOrigin);
+            // Keep the executor alive across the async dispatch and deliver the result on the response body
+            // itself (no second window.__ryn._resolve eval hop). The copy is refcounted (INT-03) so Dispose
+            // waits for the response to drain before freeing native handles; if we're already disposing,
+            // TryBeginNativeResponse rejects and returns false.
+            if (TryBeginNativeResponse(executor, out var execCopy))
+                _ = RespondToCommandAsync(command, args, execCopy, matchedOrigin);
             return;
         }
 
@@ -510,10 +663,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         {
             var relativePath = (path is "/" or "") ? "index.html" : path.TrimStart('/');
             var filePath = Path.GetFullPath(Path.Combine(_contentDirectory, relativePath));
-            var canonicalBase = Path.GetFullPath(_contentDirectory + Path.DirectorySeparatorChar);
-            var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
-            if (filePath.StartsWith(canonicalBase, comparison) && File.Exists(filePath))
+            // One canonical containment rule for the whole framework (PAP-23): exact-root OR
+            // child-with-trailing-separator. Replaces a bare StartsWith(base + sep), which had no exact-root
+            // branch and could be fooled by a sibling-prefix path (e.g. /content-evil vs /content).
+            if (RynPath.IsContainedIn(filePath, _contentDirectory, RynPath.HostComparison) && File.Exists(filePath))
             {
                 ServeFile(executor, filePath);
                 return;
@@ -543,6 +697,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_NOT_FOUND);
     }
 
+    // TODO(ARC-21, roadmap): this reads the whole file synchronously on saucer's UI thread and has no
+    // Range/206 support, so large assets block the UI and media scrubbing (mp4/webm/mp3) over ryn:// does not
+    // work. Move to the copied-executor async pattern used for commands (saucer_scheme_executor_copy + async
+    // accept, refcounted via TryBeginNativeResponse/EndNativeResponse) and add Range handling. Deferred: it is
+    // gated on the INT-03 executor-lifetime work landing first. Tracked in PLAN.md's performance backlog.
     private static unsafe void ServeFile(saucer_scheme_executor* executor, string filePath)
     {
         var fileBytes = File.ReadAllBytes(filePath);
@@ -608,20 +767,66 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Do not leak raw exception text to web content (IPC-03): an absolute path or plugin internal in
+            // the message would be readable by hostile/XSS page script via the rejected invoke promise. The
+            // full exception still reaches the host via the dispatcher's IIpcObserver.OnCommandFailed hook
+            // (logged server-side). Keep the detailed message only in Debug builds to aid development.
+#if DEBUG
             return (false, ex.InnerException?.Message ?? ex.Message);
+#else
+            return (false, "Command failed");
+#endif
         }
     }
 
+    /// <summary>
+    /// Begins a refcounted, async native response: copies the executor so it survives the off-thread hop and
+    /// records the in-flight op so <see cref="Dispose"/> drains it before freeing native handles (INT-03). If
+    /// disposal already began, the request is rejected synchronously and <c>false</c> is returned so the
+    /// caller skips the async path entirely.
+    /// </summary>
+    private unsafe bool TryBeginNativeResponse(saucer_scheme_executor* executor, out nint executorCopy)
+    {
+        // Publish the increment before re-checking _disposed; Dispose sets _disposed then reads the count, so
+        // the two orderings can't both miss each other (either Dispose sees our increment and waits, or we see
+        // _disposed and back out).
+        Interlocked.Increment(ref _inFlightResponses);
+        if (_disposed)
+        {
+            Interlocked.Decrement(ref _inFlightResponses);
+            executorCopy = 0;
+            Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
+            return false;
+        }
+
+        executorCopy = (nint)Saucer.saucer_scheme_executor_copy(executor);
+        return true;
+    }
+
+    private void EndNativeResponse() => Interlocked.Decrement(ref _inFlightResponses);
+
     private async Task RespondToCommandAsync(string command, byte[] args, nint executorHandle, string? origin)
     {
-        var (ok, data) = await ExecuteCommandAsync(command, args).ConfigureAwait(false);
         try
         {
-            unsafe { WriteCommandResponse((saucer_scheme_executor*)executorHandle, ok, data, origin); }
+            var (ok, data) = await ExecuteCommandAsync(command, args).ConfigureAwait(false);
+            // Skip the native write+free entirely if disposal began while the command ran: the webview that
+            // backs this executor copy may already be freed, so accept/free would be a use-after-free (INT-03).
+            if (!_disposed)
+            {
+                try
+                {
+                    unsafe { WriteCommandResponse((saucer_scheme_executor*)executorHandle, ok, data, origin); }
+                }
+                finally
+                {
+                    unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+                }
+            }
         }
         finally
         {
-            unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+            EndNativeResponse();
         }
     }
 
@@ -666,7 +871,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var mime = Utf8String.Create(ok ? "application/json" : "text/plain", mimeBuf);
         var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
         Saucer.saucer_scheme_response_set_status(response, ok ? 200 : 500);
-        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? "ryn://app");
+        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? IpcProtocol.AppOrigin);
         AppendHeader(response, "Vary", "Origin");
         AppendHeader(response, "X-Content-Type-Options", "nosniff");
         Saucer.saucer_scheme_executor_accept(executor, response);
@@ -702,16 +907,21 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private static unsafe void ExecutePostedAction(void* userdata)
     {
         var handle = (nint)userdata;
-        // Safe to resolve: saucer only invokes posted callbacks while its run loop is alive, and Dispose
-        // (which reclaims leftovers) runs only after that loop has stopped — the two never overlap.
-        var payload = NativeCallbackHelper.Resolve<PostedAction>(userdata);
+        // Route through NativeGuard (Contract A): a throw from the posted action (e.g. the JS-execute body)
+        // must not unwind into saucer's native run loop and kill the process.
+        NativeGuard.Invoke(nameof(ExecutePostedAction), () =>
+        {
+            // Safe to resolve: saucer only invokes posted callbacks while its run loop is alive, and Dispose
+            // (which reclaims leftovers) runs only after that loop has stopped — the two never overlap.
+            var payload = NativeCallbackHelper.Resolve<PostedAction>(handle);
 
-        // Claim the handle so a Dispose racing at shutdown can't also free it; whoever removes it frees it.
-        if (!payload.Owner._postedCallbacks.TryRemove(handle, out _))
-            return;
+            // Claim the handle so a Dispose racing at shutdown can't also free it; whoever removes it frees it.
+            if (!payload.Owner._postedCallbacks.TryRemove(handle, out _))
+                return;
 
-        try { payload.Run(); }
-        finally { NativeCallbackHelper.Free(userdata); }
+            try { payload.Run(); }
+            finally { NativeCallbackHelper.Free(handle); }
+        });
     }
 
     /// <summary>Pairs an action posted to the UI thread with its owning webview, so the static native
@@ -721,8 +931,14 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void OnSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
     {
-        var self = NativeCallbackHelper.Resolve<RynWebView>(userdata);
-        self.HandleUserSchemeRequest(request, executor);
+        var req = (nint)request;
+        var exec = (nint)executor;
+        var data = (nint)userdata;
+        NativeGuard.Invoke(nameof(OnSchemeRequest), () =>
+        {
+            var self = NativeCallbackHelper.Resolve<RynWebView>(data);
+            self.HandleUserSchemeRequest((saucer_scheme_request*)req, (saucer_scheme_executor*)exec);
+        });
     }
 
     private unsafe void HandleUserSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor)
@@ -739,38 +955,58 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
 
         var method = SaucerStringReader.ReadRequestMethod(request);
+        var headers = SaucerStringReader.ReadRequestHeaders(request);
         var body = ReadRequestBody(request);
+
+        // Scope the response ACAO to the request's allowed origin instead of "*" (IPC-05): a same-origin or
+        // allowlisted origin gets reflected; anything else gets no ACAO header (engine default = same-origin).
+        var matchedOrigin = ResolveAllowedOrigin(ParseOriginHeader(headers));
 
         var rynRequest = new RynSchemeRequest(
             new Uri(urlString),
             method,
             Encoding.UTF8.GetBytes(body));
 
-        var execCopy = (nint)Saucer.saucer_scheme_executor_copy(executor);
-        _ = DispatchSchemeHandlerAsync(handler, rynRequest, execCopy);
+        // Refcounted executor copy (INT-03): if disposal already began, reject and skip the async hop.
+        if (TryBeginNativeResponse(executor, out var execCopy))
+            _ = DispatchSchemeHandlerAsync(handler, rynRequest, execCopy, matchedOrigin);
     }
 
-    private static async Task DispatchSchemeHandlerAsync(
+    private async Task DispatchSchemeHandlerAsync(
         Func<RynSchemeRequest, ValueTask<RynSchemeResponse>> handler,
         RynSchemeRequest request,
-        nint executorHandle)
+        nint executorHandle,
+        string? origin)
     {
         try
         {
-            var rynResponse = await handler(request).ConfigureAwait(false);
-            unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, rynResponse); }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            unsafe { Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED); }
+            RynSchemeResponse rynResponse;
+            try
+            {
+                rynResponse = await handler(request).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                if (!_disposed)
+                    unsafe { Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED); }
+                return;
+            }
+
+            // Skip the native accept entirely once disposal began — the backing webview may be gone (INT-03).
+            if (!_disposed)
+                unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, rynResponse, origin); }
         }
         finally
         {
-            unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+            // The free pairs with saucer_scheme_executor_copy and is itself skipped once disposed, since the
+            // copy's backing webview may already be gone; the leaked copy is harmless at process teardown.
+            if (!_disposed)
+                unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+            EndNativeResponse();
         }
     }
 
-    private static unsafe void AcceptSchemeResponse(saucer_scheme_executor* executor, RynSchemeResponse rynResponse)
+    private static unsafe void AcceptSchemeResponse(saucer_scheme_executor* executor, RynSchemeResponse rynResponse, string? origin)
     {
         saucer_stash* stash;
         if (rynResponse.Body.Length > 0)
@@ -789,7 +1025,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var mime = Utf8String.Create(rynResponse.ContentType, mimeBuf);
         var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
         Saucer.saucer_scheme_response_set_status(response, rynResponse.StatusCode);
-        AppendHeader(response, "Access-Control-Allow-Origin", "*");
+        // Reflect ACAO only for an allowlisted/same-origin request (IPC-05); omit it otherwise so custom-scheme
+        // data is not blanket-readable cross-origin. A null origin means same-origin/no CORS — no header needed.
+        if (origin is not null)
+        {
+            AppendHeader(response, "Access-Control-Allow-Origin", origin);
+            AppendHeader(response, "Vary", "Origin");
+        }
         Saucer.saucer_scheme_executor_accept(executor, response);
         Saucer.saucer_scheme_response_free(response);
         Saucer.saucer_stash_free(stash);
@@ -816,8 +1058,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var mime = Utf8String.Create("text/plain", mimeBuf);
         var response = Saucer.saucer_scheme_response_new(emptyStash, mime.Pointer);
         AppendCorsHeaders(response, matchedOrigin);
-        AppendHeader(response, "Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-        AppendHeader(response, "Access-Control-Allow-Headers", "Content-Type");
+        AppendHeader(response, "Access-Control-Allow-Methods", "POST, OPTIONS");
+        AppendHeader(response, "Access-Control-Allow-Headers", "Content-Type, X-Ryn-Token");
         Saucer.saucer_scheme_executor_accept(executor, response);
         Saucer.saucer_scheme_response_free(response);
         Saucer.saucer_stash_free(emptyStash);
@@ -826,30 +1068,57 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     private static unsafe void AppendCorsHeaders(saucer_scheme_response* response, string? origin)
     {
-        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? "ryn://app");
+        AppendHeader(response, "Access-Control-Allow-Origin", origin ?? IpcProtocol.AppOrigin);
         AppendHeader(response, "Vary", "Origin");
     }
 
-    private static unsafe string? ParseRequestOrigin(saucer_scheme_request* request)
+    /// <summary>
+    /// Extracts the request Origin from the raw header blob, normalizing an absent/empty/"null" Origin to
+    /// <c>null</c>. A null result means "no usable origin" — for /ipc/ that is treated as <em>denied</em>.
+    /// </summary>
+    private static string? ParseOriginHeader(string headers)
     {
-        var headers = SaucerStringReader.ReadRequestHeaders(request);
+        var value = ParseHeaderValue(headers, "Origin");
+        if (value is null || value.Length == 0 || string.Equals(value, "null", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return value;
+    }
+
+    /// <summary>Reads a single header value out of saucer's newline-separated <c>Name: value</c> header blob.</summary>
+    private static string? ParseHeaderValue(string headers, string name)
+    {
         foreach (var line in headers.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (line.StartsWith("Origin:", StringComparison.OrdinalIgnoreCase))
-            {
-                var origin = line[7..].Trim().TrimEnd('\r');
-                if (origin.Length == 0 || string.Equals(origin, "null", StringComparison.OrdinalIgnoreCase))
-                    return null;
-                return origin;
-            }
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
+            if (colon <= 0) continue;
+            if (line.AsSpan(0, colon).Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+                return line[(colon + 1)..].Trim().TrimEnd('\r');
         }
         return null;
+    }
+
+    /// <summary>Constant-time comparison of a presented IPC token against the per-launch token (IPC-01).</summary>
+    private bool TokenMatches(string? presented)
+    {
+        if (string.IsNullOrEmpty(presented))
+            return false;
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(presented), Encoding.UTF8.GetBytes(_ipcToken));
+    }
+
+    /// <summary>Constant-time comparison of a presented eval nonce against the one issued for that id (IPC-04).</summary>
+    private static bool NonceMatches(string expected, string presented)
+    {
+        if (string.IsNullOrEmpty(presented))
+            return false;
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(presented), Encoding.UTF8.GetBytes(expected));
     }
 
     private string? ResolveAllowedOrigin(string? requestOrigin)
     {
         if (requestOrigin is null)
-            return "ryn://app";
+            return IpcProtocol.AppOrigin;
         return _allowedOrigins.Contains(requestOrigin) ? requestOrigin : null;
     }
 
@@ -898,13 +1167,24 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     public unsafe void Dispose()
     {
         if (_disposed) return;
+        // Set first: in-flight responders observe this and skip their native accept/free (INT-03), and
+        // TryBeginNativeResponse will reject any newly-arriving request instead of copying its executor.
         _disposed = true;
 
         foreach (var kvp in _pendingEvals)
         {
-            kvp.Value.TrySetCanceled();
+            kvp.Value.Completion.TrySetCanceled();
         }
         _pendingEvals.Clear();
+
+        // Drain any in-flight async scheme/command responses before freeing _selfHandle — they resolve
+        // GCHandle userdata and we must not free it out from under them (INT-03). Each is already past the
+        // _disposed re-check so it will skip native accept/free; we just wait for the managed task to unwind.
+        // The run loop has already stopped here, so these are short tail-end completions, not new work.
+        var spin = new SpinWait();
+        var deadline = Environment.TickCount64 + 5000;
+        while (Volatile.Read(ref _inFlightResponses) > 0 && Environment.TickCount64 < deadline)
+            spin.SpinOnce();
 
         // The saucer run loop has stopped by the time Dispose runs (RynWindow.DisposeNative is invoked after
         // saucer_application_run returns), so no posted callback can still fire. Reclaim any GCHandles saucer
