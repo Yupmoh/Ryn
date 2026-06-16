@@ -76,17 +76,17 @@ var html = """
         <script>
             async function doGreet() {
                 var name = document.getElementById('name').value;
-                var result = await window.__ryn.invoke('greet', { name: name });
+                var result = await window.__ryn.invoke('app.greet', { name: name });
                 document.getElementById('greetResult').textContent = result;
             }
             async function doAdd() {
                 var a = parseInt(document.getElementById('a').value);
                 var b = parseInt(document.getElementById('b').value);
-                var result = await window.__ryn.invoke('add', { a: a, b: b });
+                var result = await window.__ryn.invoke('app.add', { a: a, b: b });
                 document.getElementById('addResult').textContent = a + ' + ' + b + ' = ' + result;
             }
             async function doTime() {
-                var result = await window.__ryn.invoke('getTime', {});
+                var result = await window.__ryn.invoke('app.getTime', {});
                 document.getElementById('timeResult').textContent = result;
             }
         </script>

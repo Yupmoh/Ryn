@@ -50,7 +50,7 @@
     <script>
         async function doGreet() {
             var name = document.getElementById('name').value;
-            var result = await window.__ryn.invoke('greet', { name: name });
+            var result = await window.__ryn.invoke('app.greet', { name: name });
             document.getElementById('result').textContent = result;
         }
     </script>

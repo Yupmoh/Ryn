@@ -5,12 +5,12 @@ namespace RynApp;
 
 public static class AppCommands
 {
-    [RynCommand]
+    [RynCommand("app.greet")]
     public static string Greet(string name) => $"Hello, {name}!";
 
-    [RynCommand]
+    [RynCommand("app.add")]
     public static int Add(int a, int b) => a + b;
 
-    [RynCommand]
+    [RynCommand("app.getTime")]
     public static string GetTime() => DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 }

@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
-using System.Text.RegularExpressions;
 
 namespace Ryn.Cli.Commands;
 
@@ -24,9 +22,9 @@ internal static class NewCommand
 
         var name = args[0];
         var useVite = args.Contains("--vite");
-        if (!IsValidProjectName(name))
+        if (ValidateProjectName(name) is { } nameError)
         {
-            Console.Error.WriteLine($"Invalid project name: '{name}'. Use only letters, digits, and underscores.");
+            Console.Error.WriteLine(nameError);
             return 1;
         }
 
@@ -127,11 +125,10 @@ internal static class NewCommand
         {
             Console.WriteLine($"  cd {name}/frontend");
             Console.WriteLine("  npm install");
-            Console.WriteLine("  npm run dev");
             Console.WriteLine();
-            Console.WriteLine("  # In another terminal:");
             Console.WriteLine($"  cd {name}");
-            Console.WriteLine("  ryn dev");
+            Console.WriteLine("  ryn dev            # auto-detects vite");
+            Console.WriteLine("  # or: ryn dev --vite");
         }
         else
         {
@@ -144,9 +141,64 @@ internal static class NewCommand
         return 0;
     }
 
-    private static bool IsValidProjectName(string name) =>
-        name.Length > 0 && char.IsLetter(name[0]) &&
-        name.All(c => char.IsLetterOrDigit(c) || c == '_');
+    /// <summary>
+    /// C# reserved keywords (and contextual keywords that are unsafe as a namespace/identifier). The
+    /// project name is emitted verbatim as a <c>namespace</c>, a <c>using</c>, and a
+    /// <c>&lt;RootNamespace&gt;</c>, so a keyword here produces code that does not compile. We carry an
+    /// explicit set rather than depend on Roslyn's <c>SyntaxFacts</c>: the CLI is NativeAOT-published and
+    /// must not pull in Microsoft.CodeAnalysis just to validate a name.
+    /// </summary>
+    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal)
+    {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class",
+        "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event",
+        "explicit", "extern", "false", "finally", "fixed", "float", "for", "foreach", "goto", "if",
+        "implicit", "in", "int", "interface", "internal", "is", "lock", "long", "namespace", "new",
+        "null", "object", "operator", "out", "override", "params", "private", "protected", "public",
+        "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static",
+        "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong",
+        "unchecked", "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+    };
+
+    /// <summary>
+    /// Windows reserved device names. The project name is also used as a directory and file name
+    /// (<c>{name}.csproj</c>), and these names cannot be created as files/directories on Windows, so a
+    /// scaffolded project would be unusable there. Rejected on every OS for portability.
+    /// </summary>
+    private static readonly HashSet<string> WindowsReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    /// <summary>
+    /// Validates a project name for use as a C# namespace/identifier, a directory name, and a file
+    /// name. Returns <c>null</c> when the name is acceptable, or a clear, actionable error message
+    /// explaining the specific rule that was violated.
+    /// </summary>
+    private static string? ValidateProjectName(string name)
+    {
+        if (name.Length == 0)
+            return "Invalid project name: name is empty.";
+
+        if (!(char.IsLetter(name[0]) || name[0] == '_'))
+            return $"Invalid project name: '{name}'. A name must start with a letter or underscore.";
+
+        foreach (var c in name)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_'))
+                return $"Invalid project name: '{name}'. Use only letters, digits, and underscores.";
+        }
+
+        if (CSharpKeywords.Contains(name))
+            return $"Invalid project name: '{name}' is a C# keyword and cannot be used as a namespace. Pick a different name (e.g. '{name}App').";
+
+        if (WindowsReservedNames.Contains(name))
+            return $"Invalid project name: '{name}' is a reserved device name and cannot be used as a folder. Pick a different name (e.g. '{name}App').";
+
+        return null;
+    }
 
     private static string? FindRynSourceRoot()
     {
@@ -245,13 +297,13 @@ internal static class NewCommand
 
         public static class AppCommands
         {
-            [RynCommand]
+            [RynCommand("app.greet")]
             public static string Greet(string name) => $"Hello, {name}!";
 
-            [RynCommand]
+            [RynCommand("app.add")]
             public static int Add(int a, int b) => a + b;
 
-            [RynCommand]
+            [RynCommand("app.getTime")]
             public static string GetTime() => DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         }
         """;
@@ -309,7 +361,7 @@ internal static class NewCommand
             <script>
                 async function doGreet() {
                     var name = document.getElementById('name').value;
-                    var result = await window.__ryn.invoke('greet', { name: name });
+                    var result = await window.__ryn.invoke('app.greet', { name: name });
                     document.getElementById('result').textContent = result;
                 }
             </script>
@@ -336,11 +388,7 @@ internal static class NewCommand
     private static string GetRynJson() => """
         {
           "capabilities": {
-            "fs": {
-              "allow": ["readTextFile", "readDir", "exists", "stat"]
-            },
-            "clipboard": true,
-            "notification": true
+            "app": true
           }
         }
         """;
@@ -475,7 +523,7 @@ internal static class NewCommand
 
         document.getElementById('greet-btn')!.addEventListener('click', async () => {
           const nameInput = document.getElementById('name') as HTMLInputElement;
-          const result = await window.__ryn.invoke('greet', { name: nameInput.value });
+          const result = await window.__ryn.invoke('app.greet', { name: nameInput.value });
           document.getElementById('result')!.textContent = result as string;
         });
         """;
