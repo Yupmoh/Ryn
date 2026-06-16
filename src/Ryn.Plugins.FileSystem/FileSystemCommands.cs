@@ -138,14 +138,13 @@ public sealed class FileSystemCommands
     // diverges from what we authorized, we refuse. This converts the old "swap once after validate"
     // race into a much narrower one.
     //
-    // RESIDUAL RACE (documented, not silently dropped): the re-check in step 3 is still performed by
-    // *name*, not against the inode the handle actually points at. A fully race-free guarantee needs
-    // the real path of the *open file descriptor* (e.g. fcntl F_GETPATH on macOS, /proc/self/fd
-    // readlink on Linux, GetFinalPathNameByHandle on Windows). Those are native, per-OS, and cannot be
-    // verified on this macOS-only box without risky interop, so they are intentionally not added here.
-    // An attacker who can swap a component to an escaping link, win the race so our open follows it,
-    // then swap it *back* to an in-scope target before the re-validation, could still slip through.
-    // That window is far narrower than the original and is flagged for a future fd-realpath hardening.
+    // FD-REALPATH (PLG-03 closed): step 3 now re-checks the real path of the OPEN file descriptor itself
+    // (fcntl F_GETPATH on macOS, readlink /proc/self/fd on Linux, GetFinalPathNameByHandle on Windows —
+    // see HandleRealPath), not just the user path re-walked by name. Because that path names the very inode
+    // the kernel opened, the "swap to an escaping link, then swap back before re-validation" attack no
+    // longer slips through: the handle's real path is the escaped target and the check fails. When the
+    // platform/handle cannot supply an fd-realpath we fall back to the by-name re-check, which is strictly
+    // no weaker than the prior behavior.
 
     private FileStream OpenForRead(string path)
     {
@@ -158,7 +157,7 @@ public sealed class FileSystemCommands
             FileShare.ReadWrite | FileShare.Delete);
         try
         {
-            ReVerifyOpenedPath(path, authorized);
+            ReVerifyOpenedPath(path, authorized, stream.SafeFileHandle);
             return stream;
         }
         catch
@@ -180,7 +179,7 @@ public sealed class FileSystemCommands
             FileShare.Read);
         try
         {
-            ReVerifyOpenedPath(path, authorized);
+            ReVerifyOpenedPath(path, authorized, stream.SafeFileHandle);
             stream.SetLength(0);
             return stream;
         }
@@ -192,16 +191,29 @@ public sealed class FileSystemCommands
     }
 
     /// <summary>
-    /// With the file already open, re-runs the scope check on the original user-supplied
-    /// <paramref name="path"/> and requires it to still resolve to <paramref name="authorized"/>.
-    /// A divergence (a path component swapped to an escaping symlink after the first validation)
-    /// throws <see cref="UnauthorizedAccessException"/> with the same access-denied contract as the
-    /// initial validation. See the block comment above for the narrow residual race this still leaves.
+    /// With the file already open, requires the opened handle to still be the authorized in-scope target.
+    /// The strong check compares the real path of the open descriptor (<see cref="HandleRealPath"/>) against
+    /// <paramref name="authorized"/>; when that is unavailable it falls back to re-resolving the original
+    /// user-supplied <paramref name="path"/> by name. A divergence (a path component swapped to an escaping
+    /// symlink after the first validation) throws <see cref="UnauthorizedAccessException"/> with the same
+    /// access-denied contract as the initial validation. See the block comment above.
     /// </summary>
-    private void ReVerifyOpenedPath(string path, string authorized)
+    private void ReVerifyOpenedPath(string path, string authorized, Microsoft.Win32.SafeHandles.SafeFileHandle handle)
     {
-        // Re-validate throws UnauthorizedAccessException if the path now escapes scope; if it resolves
-        // to a *different* in-scope target than the one we authorized and opened, reject it too.
+        // Strongest check: the real path of the inode actually opened. Canonicalize it through the same
+        // helper as `authorized` so symlink/normalization forms compare equal for a legitimate open.
+        var handleReal = HandleRealPath.TryGet(handle);
+        if (handleReal is not null)
+        {
+            if (!string.Equals(PathValidator.Canonicalize(handleReal), authorized, PathValidator.PathComparison))
+                throw new UnauthorizedAccessException(
+                    $"Access denied: path '{path}' changed between validation and open");
+            return;
+        }
+
+        // Fallback (fd-realpath unavailable on this platform/handle): re-validate by name. This throws if
+        // the path now escapes scope, and rejects a resolve to a *different* in-scope target than the one
+        // we authorized and opened.
         var reResolved = _validator.Resolve(path);
         if (!string.Equals(reResolved, authorized, PathValidator.PathComparison))
             throw new UnauthorizedAccessException(
