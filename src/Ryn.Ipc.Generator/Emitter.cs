@@ -6,6 +6,14 @@ namespace Ryn.Ipc.Generator;
 
 internal static class Emitter
 {
+    /// <summary>
+    /// Fully-qualified display form (<see cref="SymbolDisplayFormat.FullyQualifiedFormat"/>) of
+    /// <c>System.Text.Json.JsonElement</c> as it appears in <see cref="CommandInfo.InnerReturnType"/>.
+    /// Used for an EXACT match instead of a brittle <c>EndsWith("JsonElement")</c> heuristic that would
+    /// also catch user types whose name merely ends in "JsonElement".
+    /// </summary>
+    private const string JsonElementFullName = "global::System.Text.Json.JsonElement";
+
     public static string? Emit(CommandGroup group, SourceProductionContext ctx)
     {
         if (!Validate(group, ctx))
@@ -115,6 +123,11 @@ internal static class Emitter
         if (p.IsNullable)
             return IsPrimitiveSpecialType(p.NullableUnderlyingSpecialType);
 
+        // GEN-03: a nullable reference type (`string?`, `MyDto?`) is supported on the same terms as its
+        // non-nullable form — a primitive (string) directly, anything else only with a JsonSerializerContext.
+        if (p.IsNullableReference)
+            return p.SpecialType == SpecialType.System_String || hasJsonContext;
+
         if (IsPrimitiveSpecialType(p.SpecialType))
             return true;
 
@@ -134,6 +147,10 @@ internal static class Emitter
             return IsPrimitiveSpecialType(cmd.ReturnNullableUnderlyingSpecialType);
 
         if (IsPrimitiveSpecialType(cmd.InnerReturnSpecialType))
+            return true;
+
+        // A JsonElement return is serialized verbatim via GetRawText() and needs no JsonSerializerContext.
+        if (cmd.InnerReturnType == JsonElementFullName)
             return true;
 
         // Non-primitive return types are allowed when a JsonSerializerContext is provided
@@ -228,7 +245,7 @@ internal static class Emitter
             {
                 var p = jsonParams[i];
                 var camelName = ToCamelCase(p.Name);
-                EmitParameterExtraction(sb, p, i, camelName, group.JsonContextTypeFullName);
+                EmitParameterExtraction(sb, p, i, camelName, cmd.CommandName, group.JsonContextTypeFullName);
             }
         }
 
@@ -288,41 +305,140 @@ internal static class Emitter
         sb.AppendLine("            }");
     }
 
-    private static void EmitParameterExtraction(StringBuilder sb, ParameterInfo p, int index, string camelName, string? jsonContextType)
+    private static void EmitParameterExtraction(
+        StringBuilder sb, ParameterInfo p, int index, string camelName, string commandName, string? jsonContextType)
     {
-        if (p.IsJsonElement)
+        // Look the property up once with TryGetProperty so we can give a descriptive error when a
+        // required argument is absent, instead of the opaque KeyNotFoundException GetProperty throws.
+        sb.AppendLine($"                var __has{index} = __root.TryGetProperty(\"{camelName}\", out var __prop{index});");
+
+        if (p.IsNullable)
         {
-            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\");");
-        }
-        else if (p.IsArray)
-        {
-            var elementGetter = GetElementGetter(p.ArrayElementSpecialType);
-            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\").EnumerateArray().Select(e => e{elementGetter}).ToArray();");
-        }
-        else if (p.IsNullable)
-        {
+            // Nullable<T> (struct, e.g. `int?`, `double?`). Precedence mirrors the non-nullable defaulted
+            // path: a present explicit JSON null always binds null; a MISSING arg binds the declared C#
+            // default if one is non-null (GEN-02 for nullables), otherwise null; a present value reads
+            // normally. The `(T?)` casts keep `var` inferring the Nullable<T> so it binds without a warning.
             var elementGetter = GetElementGetter(p.NullableUnderlyingSpecialType);
             var csType = GetCSharpTypeName(p.NullableUnderlyingSpecialType);
-            sb.AppendLine($"                var __prop{index} = __root.GetProperty(\"{camelName}\");");
-            sb.AppendLine($"                var __p{index} = __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null ? ({csType}?)null : __prop{index}{elementGetter};");
+
+            if (p.HasDefault && p.DefaultLiteral != "null")
+            {
+                // A non-null Nullable<T> default (e.g. `int? count = 10`): a missing arg restores the
+                // declared default instead of collapsing to null, which the old single-expression form did.
+                sb.AppendLine($"                var __p{index} = !__has{index} ? ({csType}?){p.DefaultLiteral} : (__prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null ? ({csType}?)null : __prop{index}{elementGetter});");
+                return;
+            }
+
+            // No default (or a `= null` default, which agrees with the missing-arg behavior): a missing arg
+            // or a JSON null both yield null — the only sensible value when no non-null default is declared.
+            sb.AppendLine($"                var __p{index} = (!__has{index} || __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null) ? ({csType}?)null : __prop{index}{elementGetter};");
+            return;
         }
-        else if (IsPrimitiveSpecialType(p.SpecialType))
+
+        // Build the expression that reads a PRESENT, non-null property into the parameter's type. This is the
+        // body that runs once the missing/null preconditions below are satisfied.
+        var read = BuildReadExpression(p, index, jsonContextType);
+
+        if (p.IsNullableReference)
         {
-            var getter = GetElementGetter(p.SpecialType);
-            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\"){getter};");
+            // GEN-03: a nullable-annotated reference type (`string?`, `MyDto?`) accepts a missing arg or an
+            // explicit JSON null as null — restoring the pre-P5 behavior. The `var` local infers the nullable
+            // reference type, which binds to the (also nullable) parameter without a warning.
+            sb.AppendLine($"                var __p{index} = (!__has{index} || __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null) ? null : {read};");
+            return;
         }
-        else if (jsonContextType is not null)
+
+        // A NON-nullable reference type whose C# default is null/`default` (a contradictory but legal
+        // declaration — the user's own method already warns) still binds missing/explicit-null to null,
+        // since that is the only value the declared default can produce. A null default literal is only ever
+        // produced for a reference type, so no value-type guard is needed. The trailing `!` forgives the
+        // null so the `var` local infers the non-nullable type and binds without a CS8604 warning.
+        if (p.HasDefault && p.DefaultLiteral == "null")
         {
-            // Complex type — deserialize via the user-supplied JsonSerializerContext
+            sb.AppendLine($"                var __p{index} = ((!__has{index} || __prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null) ? null : {read})!;");
+            return;
+        }
+
+        // Non-nullable from here. Precedence: a present explicit null is rejected by the null guard below;
+        // a MISSING arg binds the C# default literal if one exists (GEN-02), otherwise throws.
+        if (p.HasDefault)
+        {
+            // JsonElement parameters never reach here: a JsonElement default is not expressible in C#, so
+            // HasExplicitDefaultValue is only ever true for the value/string/complex kinds handled by read.
+            EmitNullArgGuardForPresent(sb, p, index, camelName, commandName);
+            sb.AppendLine($"                var __p{index} = !__has{index} ? {p.DefaultLiteral} : {read};");
+            return;
+        }
+
+        // No default: a missing arg is an error.
+        EmitMissingArgGuard(sb, index, camelName, commandName);
+        EmitNullArgGuardForPresent(sb, p, index, camelName, commandName);
+        sb.AppendLine($"                var __p{index} = {read};");
+    }
+
+    /// <summary>
+    /// Builds the C# expression that reads a present, non-null <c>__prop{index}</c> into the parameter's
+    /// type. Shared by the nullable-reference, defaulted, and required binding paths so the read logic for
+    /// each supported kind lives in exactly one place.
+    /// </summary>
+    private static string BuildReadExpression(ParameterInfo p, int index, string? jsonContextType)
+    {
+        if (p.IsJsonElement)
+            return $"__prop{index}";
+
+        if (p.IsArray)
+        {
+            var elementGetter = GetElementGetter(p.ArrayElementSpecialType);
+            return $"__prop{index}.EnumerateArray().Select(e => e{elementGetter}).ToArray()";
+        }
+
+        if (p.SpecialType == SpecialType.System_String)
+            return $"__prop{index}.GetString()!";
+
+        if (p.SpecialType == SpecialType.System_Char)
+            return $"__prop{index}.GetString()![0]";
+
+        if (IsPrimitiveSpecialType(p.SpecialType))
+            return $"__prop{index}{GetElementGetter(p.SpecialType)}";
+
+        if (jsonContextType is not null)
+        {
+            // Complex type — deserialized straight from the JsonElement (no GetRawText() string round-trip).
             var typeInfoProp = GetTypeInfoPropertyName(p.TypeDisplay);
-            sb.AppendLine($"                var __p{index} = JsonSerializer.Deserialize(__root.GetProperty(\"{camelName}\").GetRawText(), {jsonContextType}.Default.{typeInfoProp})!;");
+            return $"JsonSerializer.Deserialize(__prop{index}, {jsonContextType}.Default.{typeInfoProp})!";
         }
-        else
-        {
-            // Fallback: should not reach here if validation passed, but use GetRawText
-            var getter = GetElementGetter(p.SpecialType);
-            sb.AppendLine($"                var __p{index} = __root.GetProperty(\"{camelName}\"){getter};");
-        }
+
+        // Fallback: should not reach here if validation passed.
+        return $"__prop{index}{GetElementGetter(p.SpecialType)}";
+    }
+
+    /// <summary>
+    /// Emits the "must not be JSON null" guard for the non-nullable kinds that would otherwise dereference a
+    /// null (string/char/array/complex). Primitive value types and JsonElement do not need it.
+    /// </summary>
+    private static void EmitNullArgGuardForPresent(
+        StringBuilder sb, ParameterInfo p, int index, string camelName, string commandName)
+    {
+        var needsNullGuard = p.IsArray
+            || p.SpecialType == SpecialType.System_String
+            || p.SpecialType == SpecialType.System_Char
+            || (!p.IsJsonElement && !IsPrimitiveSpecialType(p.SpecialType));
+        if (needsNullGuard)
+            EmitNullArgGuard(sb, index, camelName, commandName);
+    }
+
+    /// <summary>Emits a guard that throws a descriptive error when a required argument is absent from the JSON.</summary>
+    private static void EmitMissingArgGuard(StringBuilder sb, int index, string camelName, string commandName)
+    {
+        sb.AppendLine($"                if (!__has{index})");
+        sb.AppendLine($"                    throw new RynIpcArgumentException(\"{commandName}\", \"{camelName}\", \"required argument is missing\");");
+    }
+
+    /// <summary>Emits a guard that throws a descriptive error when a non-nullable argument is JSON null.</summary>
+    private static void EmitNullArgGuard(StringBuilder sb, int index, string camelName, string commandName)
+    {
+        sb.AppendLine($"                if (__prop{index}.ValueKind == System.Text.Json.JsonValueKind.Null)");
+        sb.AppendLine($"                    throw new RynIpcArgumentException(\"{commandName}\", \"{camelName}\", \"argument must not be null\");");
     }
 
     private static string GetElementGetter(SpecialType type) => type switch
@@ -388,7 +504,7 @@ internal static class Emitter
             var serializer = GetScalarSerializer("__result", cmd.InnerReturnSpecialType);
             sb.AppendLine($"                return {serializer};");
         }
-        else if (cmd.InnerReturnType.EndsWith("JsonElement", System.StringComparison.Ordinal))
+        else if (cmd.InnerReturnType == JsonElementFullName)
         {
             sb.AppendLine("                return __result.GetRawText();");
         }
@@ -407,10 +523,13 @@ internal static class Emitter
 
     private static string GetScalarSerializer(string varName, SpecialType type) => type switch
     {
-        SpecialType.System_Int32 or SpecialType.System_Int64 or SpecialType.System_Single or
-        SpecialType.System_Double or SpecialType.System_Byte or SpecialType.System_SByte or
-        SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_UInt32 or
-        SpecialType.System_UInt64 or SpecialType.System_Decimal =>
+        // Non-finite floats (NaN/±Infinity) are NOT valid JSON; emit `null` to match JSON.stringify
+        // rather than a bare token the bridge would silently deliver as a corrupt string.
+        SpecialType.System_Single or SpecialType.System_Double =>
+            $"(double.IsFinite({varName}) ? {varName}.ToString(System.Globalization.CultureInfo.InvariantCulture) : \"null\")",
+        SpecialType.System_Int32 or SpecialType.System_Int64 or SpecialType.System_Byte or
+        SpecialType.System_SByte or SpecialType.System_Int16 or SpecialType.System_UInt16 or
+        SpecialType.System_UInt32 or SpecialType.System_UInt64 or SpecialType.System_Decimal =>
             $"{varName}.ToString(System.Globalization.CultureInfo.InvariantCulture)",
         SpecialType.System_Boolean => $"{varName} ? \"true\" : \"false\"",
         SpecialType.System_String => $"__ToJson({varName})",
@@ -436,6 +555,11 @@ internal static class Emitter
         else if (elementType == SpecialType.System_Boolean)
         {
             sb.AppendLine("                    __sb.Append(__result[__i] ? \"true\" : \"false\");");
+        }
+        else if (elementType is SpecialType.System_Single or SpecialType.System_Double)
+        {
+            // Non-finite floats (NaN/±Infinity) are not valid JSON — emit `null` to match JSON.stringify.
+            sb.AppendLine("                    __sb.Append(double.IsFinite(__result[__i]) ? __result[__i].ToString(System.Globalization.CultureInfo.InvariantCulture) : \"null\");");
         }
         else
         {
@@ -508,8 +632,38 @@ internal static class Emitter
         if (lastDot >= 0)
             name = name.Substring(lastDot + 1);
 
-        return name;
+        // FullyQualifiedFormat renders primitives as C# keywords ("string", "int"), but STJ's
+        // JsonSerializerContext derives JsonTypeInfo property names from the CLR metadata simple name
+        // ("String", "Int32"). Map keyword forms back so e.g. List<string> -> "ListString" (not "Liststring")
+        // and Dictionary<string,int> -> "DictionaryStringInt32", matching the generated context.
+        return KeywordToMetadataName(name);
     }
+
+    /// <summary>
+    /// Maps a C# primitive keyword to its CLR metadata simple name (the form System.Text.Json uses for
+    /// generated <c>JsonTypeInfo</c> property names). Non-keyword type names pass through unchanged.
+    /// </summary>
+    private static string KeywordToMetadataName(string name) => name switch
+    {
+        "bool" => "Boolean",
+        "byte" => "Byte",
+        "sbyte" => "SByte",
+        "char" => "Char",
+        "decimal" => "Decimal",
+        "double" => "Double",
+        "float" => "Single",
+        "int" => "Int32",
+        "uint" => "UInt32",
+        "long" => "Int64",
+        "ulong" => "UInt64",
+        "short" => "Int16",
+        "ushort" => "UInt16",
+        "object" => "Object",
+        "string" => "String",
+        "nint" => "IntPtr",
+        "nuint" => "UIntPtr",
+        _ => name,
+    };
 
     private static IEnumerable<string> SplitGenericArgs(string argsText)
     {
