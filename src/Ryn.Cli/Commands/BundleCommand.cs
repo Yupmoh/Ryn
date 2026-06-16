@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text.Json;
 
 namespace Ryn.Cli.Commands;
@@ -8,10 +9,11 @@ internal static class BundleCommand
 {
     internal static int Execute(ReadOnlySpan<string> args)
     {
-        var csproj = FindCsproj();
+        var (csproj, error) = ProjectResolver.Resolve(
+            Directory.GetCurrentDirectory(), ProjectResolver.ReadExplicitProject(args));
         if (csproj is null)
         {
-            Console.Error.WriteLine("No .csproj file found in the current directory.");
+            Console.Error.WriteLine(error);
             return 1;
         }
 
@@ -30,6 +32,8 @@ internal static class BundleCommand
         if (dotnet is null)
             return 1;
 
+        // The exact same publish arguments are reused both for the build and for the deterministic
+        // PublishDir query below, so the directory we bundle from is the one this publish produced.
         var publishArgs = BuildPublishArgs(args);
 
         Console.WriteLine($"Building {projectName} for release...");
@@ -48,7 +52,13 @@ internal static class BundleCommand
             return 1;
         }
 
-        var publishDir = ResolvePublishDir(projectDir);
+        var publishDir = ResolvePublishDir(dotnet, projectDir, publishArgs);
+        if (publishDir is null)
+        {
+            Console.Error.WriteLine("  Could not locate the publish output directory.");
+            Console.Error.WriteLine("  The build reported success but no publish output was found — try `dotnet publish` manually to diagnose.");
+            return 1;
+        }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return CreateMacAppBundle(projectDir, projectName, publishDir, args);
@@ -85,7 +95,11 @@ internal static class BundleCommand
         var bundleVersion = GetArgValue(args, "--version") ?? "1.0.0";
         var iconPath = GetArgValue(args, "--icon");
         var signIdentity = GetArgValue(args, "--sign");
+        var entitlements = GetArgValue(args, "--entitlements");
+        var notaryProfile = GetArgValue(args, "--notary-profile") ?? "notarize";
         var notarize = args.Contains("--notarize");
+        var makeDmg = args.Contains("--dmg");
+        var deepLinkSchemes = GetArgValues(args, "--deep-link-scheme");
 
         var rynJsonPath = Path.Combine(projectDir, "ryn.json");
         if (File.Exists(rynJsonPath))
@@ -103,6 +117,8 @@ internal static class BundleCommand
                         iconPath = ico.GetString();
                     if (signIdentity is null && bundle.TryGetProperty("sign", out var sig))
                         signIdentity = sig.GetString();
+                    if (deepLinkSchemes.Count == 0)
+                        deepLinkSchemes = ReadDeepLinkSchemes(bundle);
                 }
             }
             catch (JsonException) { /* use defaults */ }
@@ -112,34 +128,41 @@ internal static class BundleCommand
         // Build Contents/Resources/AppIcon.icns from the app's icon, or the bundled Ryn default.
         var icnsName = ResolveMacIcon(projectDir, resourcesDir, iconPath);
         var iconEntry = icnsName is not null
-            ? $"\n            <key>CFBundleIconFile</key>\n            <string>{icnsName}</string>"
+            ? $"\n    <key>CFBundleIconFile</key>\n    <string>{XmlEscape(icnsName)}</string>"
             : "";
+        var urlTypesEntry = BuildUrlTypesPlist(bundleId, deepLinkSchemes);
         var plist = $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
             <plist version="1.0">
             <dict>
                 <key>CFBundleExecutable</key>
-                <string>{projectName}</string>
+                <string>{XmlEscape(projectName)}</string>
                 <key>CFBundleIdentifier</key>
-                <string>{bundleId}</string>
+                <string>{XmlEscape(bundleId)}</string>
                 <key>CFBundleName</key>
-                <string>{projectName}</string>
+                <string>{XmlEscape(projectName)}</string>
+                <key>CFBundleDisplayName</key>
+                <string>{XmlEscape(projectName)}</string>
                 <key>CFBundlePackageType</key>
                 <string>APPL</string>
                 <key>CFBundleVersion</key>
-                <string>{bundleVersion}</string>
+                <string>{XmlEscape(bundleVersion)}</string>
                 <key>CFBundleShortVersionString</key>
-                <string>{bundleVersion}</string>
+                <string>{XmlEscape(bundleVersion)}</string>
+                <key>LSMinimumSystemVersion</key>
+                <string>11.0</string>
                 <key>NSHighResolutionCapable</key>
-                <true/>{iconEntry}
+                <true/>{iconEntry}{urlTypesEntry}
             </dict>
             </plist>
             """;
 
         File.WriteAllText(Path.Combine(contentsDir, "Info.plist"), plist);
 
-        // Copy published output to MacOS/
+        // Copy published output to MacOS/. The runtime reads wwwroot from AppContext.BaseDirectory,
+        // which is Contents/MacOS, so the publish output (which already contains wwwroot) is the only
+        // copy the app needs — there is intentionally no separate Contents/Resources/wwwroot copy.
         foreach (var file in Directory.GetFiles(publishDir, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(publishDir, file);
@@ -156,33 +179,19 @@ internal static class BundleCommand
             Process.Start("chmod", $"+x \"{execPath}\"")?.WaitForExit();
         }
 
-        // Copy wwwroot to Resources/ if it exists
-        var wwwrootDir = Path.Combine(projectDir, "wwwroot");
-        if (Directory.Exists(wwwrootDir))
+        if (notarize && signIdentity is null)
         {
-            foreach (var file in Directory.GetFiles(wwwrootDir, "*", SearchOption.AllDirectories))
-            {
-                var relativePath = Path.GetRelativePath(wwwrootDir, file);
-                var destPath = Path.Combine(resourcesDir, relativePath);
-                var destDir = Path.GetDirectoryName(destPath);
-                if (destDir is not null) Directory.CreateDirectory(destDir);
-                File.Copy(file, destPath, overwrite: true);
-            }
+            Console.Error.WriteLine("  Error: --notarize requires a signing identity. Pass --sign \"Developer ID Application: ...\".");
+            return 1;
         }
 
-        // Code sign if identity specified
+        // Code sign if identity specified. Hardened runtime (--options runtime) and a secure timestamp are
+        // mandatory for notarization, and nested Mach-O binaries must be signed inside-out (deepest first)
+        // because the now-deprecated `codesign --deep` cannot apply per-file options/entitlements reliably.
         if (signIdentity is not null)
         {
             Console.WriteLine($"  Signing with identity: {signIdentity}");
-            var signProcess = Process.Start(new ProcessStartInfo
-            {
-                FileName = "codesign",
-                Arguments = $"--force --deep --sign \"{signIdentity}\" \"{bundleDir}\"",
-                UseShellExecute = false,
-                RedirectStandardError = true,
-            });
-            signProcess?.WaitForExit();
-            if (signProcess?.ExitCode != 0)
+            if (!CodesignBundle(bundleDir, signIdentity, entitlements))
                 Console.Error.WriteLine("  Warning: code signing failed");
             else
                 Console.WriteLine("  Code signing succeeded");
@@ -191,26 +200,41 @@ internal static class BundleCommand
         // Notarize if requested
         if (notarize && signIdentity is not null)
         {
-            Console.WriteLine("  Submitting for notarization...");
+            Console.WriteLine($"  Submitting for notarization (keychain profile: {notaryProfile})...");
             var zipPath = bundleDir + ".zip";
-            Process.Start("ditto", $"-c -k --keepParent \"{bundleDir}\" \"{zipPath}\"")?.WaitForExit();
-            var notarizeProcess = Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = "xcrun",
-                Arguments = $"notarytool submit \"{zipPath}\" --keychain-profile \"notarize\" --wait",
-                UseShellExecute = false,
-            });
-            notarizeProcess?.WaitForExit();
-            if (notarizeProcess?.ExitCode == 0)
-            {
-                Process.Start("xcrun", $"stapler staple \"{bundleDir}\"")?.WaitForExit();
-                Console.WriteLine("  Notarization succeeded");
+                if (!RunTool("ditto", "-c", "-k", "--keepParent", bundleDir, zipPath))
+                {
+                    Console.Error.WriteLine("  Warning: could not create the notarization archive");
+                }
+                else if (SubmitForNotarization(zipPath, notaryProfile))
+                {
+                    if (RunTool("xcrun", "stapler", "staple", bundleDir))
+                        Console.WriteLine("  Notarization succeeded and the ticket was stapled");
+                    else
+                        Console.Error.WriteLine("  Warning: notarization succeeded but stapling failed");
+                }
+                else
+                {
+                    Console.Error.WriteLine("  Warning: notarization failed (see the notarytool log above)");
+                }
             }
+            finally
+            {
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+            }
+        }
+
+        if (makeDmg)
+        {
+            var dmgPath = Path.Combine(projectDir, "bin", "bundle", $"{projectName}-{bundleVersion}.dmg");
+            if (File.Exists(dmgPath)) File.Delete(dmgPath);
+            Console.WriteLine("  Creating .dmg...");
+            if (RunTool("hdiutil", "create", "-volname", projectName, "-srcfolder", bundleDir, "-ov", "-format", "UDZO", dmgPath))
+                Console.WriteLine($"  Disk image created: {dmgPath}");
             else
-            {
-                Console.Error.WriteLine("  Warning: notarization failed");
-            }
-            File.Delete(zipPath);
+                Console.Error.WriteLine("  Warning: hdiutil failed to create the .dmg");
         }
 
         Console.WriteLine();
@@ -218,6 +242,152 @@ internal static class BundleCommand
         Console.WriteLine($"  Run with: open \"{bundleDir}\"");
         return 0;
     }
+
+    /// <summary>
+    /// Signs every nested Mach-O binary (dylibs and executables) inside-out, then the bundle itself, with the
+    /// hardened runtime and a secure timestamp. Returns true only if every signature succeeded.
+    /// </summary>
+    private static bool CodesignBundle(string bundleDir, string identity, string? entitlements)
+    {
+        // Sign nested binaries deepest-first so each enclosing seal covers already-signed contents.
+        var nested = new List<string>();
+        foreach (var file in Directory.GetFiles(bundleDir, "*", SearchOption.AllDirectories))
+        {
+            var ext = Path.GetExtension(file);
+            if (ext.Equals(".dylib", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".so", StringComparison.OrdinalIgnoreCase) ||
+                IsMachOExecutable(file))
+            {
+                nested.Add(file);
+            }
+        }
+        nested.Sort(static (a, b) => b.Length.CompareTo(a.Length)); // longer path == deeper == signed first
+
+        var ok = true;
+        foreach (var binary in nested)
+            ok &= CodesignOne(binary, identity, entitlements);
+
+        // Finally seal the bundle as a whole.
+        ok &= CodesignOne(bundleDir, identity, entitlements);
+        return ok;
+    }
+
+    private static bool CodesignOne(string target, string identity, string? entitlements)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "codesign",
+            UseShellExecute = false,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("--force");
+        psi.ArgumentList.Add("--options");
+        psi.ArgumentList.Add("runtime");
+        psi.ArgumentList.Add("--timestamp");
+        if (entitlements is not null)
+        {
+            psi.ArgumentList.Add("--entitlements");
+            psi.ArgumentList.Add(entitlements);
+        }
+        psi.ArgumentList.Add("--sign");
+        psi.ArgumentList.Add(identity);
+        psi.ArgumentList.Add(target);
+
+        try
+        {
+            var process = Process.Start(psi);
+            if (process is null) return false;
+            var err = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0 && !string.IsNullOrWhiteSpace(err))
+                Console.Error.WriteLine($"    codesign: {err.Trim()}");
+            return process.ExitCode == 0;
+        }
+        catch (System.ComponentModel.Win32Exception) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>Heuristically detects a Mach-O executable by its magic number (no extension on macOS binaries).</summary>
+    private static bool IsMachOExecutable(string path)
+    {
+        if (Path.HasExtension(path)) return false; // dylibs handled separately; data files have extensions
+        try
+        {
+            using var fs = File.OpenRead(path);
+            Span<byte> magic = stackalloc byte[4];
+            if (fs.Read(magic) < 4) return false;
+            // Mach-O magic numbers (32/64-bit, both endiannesses) and fat/universal.
+            var value = (uint)(magic[0] | (magic[1] << 8) | (magic[2] << 16) | (magic[3] << 24));
+            return value is 0xFEEDFACE or 0xFEEDFACF or 0xCEFAEDFE or 0xCFFAEDFE or 0xCAFEBABE or 0xBEBAFECA;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    /// <summary>Submits a zipped bundle to notarytool, streaming its log so failures are diagnosable.</summary>
+    private static bool SubmitForNotarization(string zipPath, string keychainProfile)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xcrun",
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("notarytool");
+        psi.ArgumentList.Add("submit");
+        psi.ArgumentList.Add(zipPath);
+        psi.ArgumentList.Add("--keychain-profile");
+        psi.ArgumentList.Add(keychainProfile);
+        psi.ArgumentList.Add("--wait");
+
+        try
+        {
+            var process = Process.Start(psi);
+            if (process is null) return false;
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (System.ComponentModel.Win32Exception) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>Builds the <c>CFBundleURLTypes</c> plist fragment, one URL-type dict per deep-link scheme.</summary>
+    private static string BuildUrlTypesPlist(string bundleId, List<string> schemes)
+    {
+        if (schemes.Count == 0) return "";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("\n    <key>CFBundleURLTypes</key>\n    <array>");
+        foreach (var scheme in schemes)
+        {
+            sb.Append("\n        <dict>");
+            sb.Append("\n            <key>CFBundleURLName</key>");
+            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n            <string>{XmlEscape(bundleId)}.{XmlEscape(scheme)}</string>");
+            sb.Append("\n            <key>CFBundleURLSchemes</key>");
+            sb.Append("\n            <array>");
+            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"\n                <string>{XmlEscape(scheme)}</string>");
+            sb.Append("\n            </array>");
+            sb.Append("\n        </dict>");
+        }
+        sb.Append("\n    </array>");
+        return sb.ToString();
+    }
+
+    /// <summary>Reads <c>bundle.deepLinkSchemes</c> (array of strings) from a parsed ryn.json bundle element.</summary>
+    private static List<string> ReadDeepLinkSchemes(JsonElement bundle)
+    {
+        var schemes = new List<string>();
+        if (bundle.TryGetProperty("deepLinkSchemes", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in arr.EnumerateArray())
+            {
+                var s = item.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) schemes.Add(s);
+            }
+        }
+        return schemes;
+    }
+
+    private static string XmlEscape(string value) => SecurityElement.Escape(value) ?? value;
 
     private static string? GetArgValue(ReadOnlySpan<string> args, string flag)
     {
@@ -227,6 +397,18 @@ internal static class BundleCommand
                 return args[i + 1];
         }
         return null;
+    }
+
+    /// <summary>Collects every value of a repeatable flag (e.g. <c>--deep-link-scheme a --deep-link-scheme b</c>).</summary>
+    private static List<string> GetArgValues(ReadOnlySpan<string> args, string flag)
+    {
+        var values = new List<string>();
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == flag && !string.IsNullOrWhiteSpace(args[i + 1]))
+                values.Add(args[i + 1]);
+        }
+        return values;
     }
 
     /// <summary>
@@ -360,6 +542,9 @@ internal static class BundleCommand
         var bundleVersion = GetArgValue(args, "--version") ?? "1.0.0";
         var iconPath = GetArgValue(args, "--icon");
         string? manufacturer = null;
+#pragma warning disable CA1308 // Bundle identifiers are lowercase by convention
+        var bundleId = $"com.ryn.{projectName.ToLowerInvariant()}";
+#pragma warning restore CA1308
 
         var rynJsonPath = Path.Combine(projectDir, "ryn.json");
         if (File.Exists(rynJsonPath))
@@ -375,6 +560,8 @@ internal static class BundleCommand
                         iconPath = ico.GetString();
                     if (bundle.TryGetProperty("manufacturer", out var mfr))
                         manufacturer = mfr.GetString();
+                    if (bundle.TryGetProperty("identifier", out var id))
+                        bundleId = id.GetString() ?? bundleId;
                 }
             }
             catch (JsonException) { /* use defaults */ }
@@ -434,7 +621,7 @@ internal static class BundleCommand
 
         // Generate WiX v5 .wxs file for MSI creation
         var wxsPath = Path.Combine(bundleDir, $"{projectName}.wxs");
-        GenerateWixFile(wxsPath, bundleDir, projectName, bundleVersion, manufacturer, bundledIconName);
+        GenerateWixFile(wxsPath, bundleDir, projectName, bundleVersion, manufacturer, bundleId, bundledIconName);
 
         Console.WriteLine();
         Console.WriteLine($"  Windows bundle created: {bundleDir}");
@@ -444,31 +631,24 @@ internal static class BundleCommand
         return 0;
     }
 
-    private static void GenerateWixFile(string wxsPath, string bundleDir, string projectName, string bundleVersion, string manufacturer, string? iconPath)
+    private static void GenerateWixFile(string wxsPath, string bundleDir, string projectName, string bundleVersion, string manufacturer, string bundleId, string? iconPath)
     {
-        var upgradeCode = GenerateDeterministicGuid(projectName, "upgrade");
-        var componentGuid = GenerateDeterministicGuid(projectName, "component");
-        var shortcutGuid = GenerateDeterministicGuid(projectName, "shortcut");
+        // Seed the UpgradeCode with the stable bundle identifier so two apps that happen to share a project
+        // name never collide on the same upgrade lineage.
+        var upgradeCode = GenerateDeterministicGuid(bundleId, "upgrade");
+        var shortcutGuid = GenerateDeterministicGuid(bundleId, "shortcut");
 
-        // Collect all files from the bundle directory, excluding the .wxs itself
-        var fileEntries = new System.Text.StringBuilder();
-        var fileIndex = 0;
-        foreach (var file in Directory.GetFiles(bundleDir, "*", SearchOption.AllDirectories))
-        {
-            var fileName = Path.GetFileName(file);
-            if (fileName.EndsWith(".wxs", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var relativePath = Path.GetRelativePath(bundleDir, file);
-            fileEntries.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"            <File Id=\"File{fileIndex}\" Source=\"{relativePath.Replace("/", "\\", StringComparison.Ordinal)}\" />");
-            fileIndex++;
-        }
+        // Build a nested Directory/Component tree mirroring the on-disk layout (wwwroot, runtimes, etc.) so a
+        // built MSI installs the app with its real directory structure instead of flattening everything into
+        // the install root. Each directory becomes its own Component (one KeyPath file per Component).
+        var componentRefs = new System.Text.StringBuilder();
+        var dirTree = BuildWixDirectoryTree(bundleDir, bundleId, componentRefs, indent: "                    ");
 
         // Icon reference for Add/Remove Programs
         var iconElements = "";
         if (iconPath is not null)
         {
-            var iconFileName = Path.GetFileName(iconPath);
+            var iconFileName = XmlEscape(Path.GetFileName(iconPath));
             iconElements = $"""
 
                     <Icon Id="AppIcon" SourceFile="{iconFileName}" />
@@ -476,34 +656,36 @@ internal static class BundleCommand
             """;
         }
 
+        var escName = XmlEscape(projectName);
+        var escManufacturer = XmlEscape(manufacturer);
+        var escVersion = XmlEscape(bundleVersion);
+
         var wxs = $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-                <Package Name="{projectName}"
-                         Version="{bundleVersion}"
-                         Manufacturer="{manufacturer}"
+                <Package Name="{escName}"
+                         Version="{escVersion}"
+                         Manufacturer="{escManufacturer}"
                          UpgradeCode="{upgradeCode}"
                          Compressed="yes">
 
-                    <MajorUpgrade DowngradeErrorMessage="A newer version of {projectName} is already installed." />
+                    <MajorUpgrade DowngradeErrorMessage="A newer version of {escName} is already installed." />
                     <MediaTemplate EmbedCab="yes" />{iconElements}
 
                     <StandardDirectory Id="ProgramFiles6432Folder">
-                        <Directory Id="INSTALLFOLDER" Name="{projectName}">
-                            <Component Id="MainComponent" Guid="{componentGuid}">
-            {fileEntries}
-                            </Component>
+                        <Directory Id="INSTALLFOLDER" Name="{escName}">
+            {dirTree}
                         </Directory>
                     </StandardDirectory>
 
                     <StandardDirectory Id="ProgramMenuFolder">
                         <Component Id="StartMenuShortcut" Guid="{shortcutGuid}">
                             <Shortcut Id="AppShortcut"
-                                      Name="{projectName}"
-                                      Target="[INSTALLFOLDER]{projectName}.exe"
+                                      Name="{escName}"
+                                      Target="[INSTALLFOLDER]{escName}.exe"
                                       WorkingDirectory="INSTALLFOLDER" />
                             <RegistryValue Root="HKCU"
-                                           Key="Software\\{manufacturer}\\{projectName}"
+                                           Key="Software\{escManufacturer}\{escName}"
                                            Name="StartMenuShortcut"
                                            Type="integer"
                                            Value="1"
@@ -512,8 +694,7 @@ internal static class BundleCommand
                     </StandardDirectory>
 
                     <Feature Id="Main" Level="1">
-                        <ComponentRef Id="MainComponent" />
-                        <ComponentRef Id="StartMenuShortcut" />
+            {componentRefs}            <ComponentRef Id="StartMenuShortcut" />
                     </Feature>
                 </Package>
             </Wix>
@@ -523,12 +704,86 @@ internal static class BundleCommand
     }
 
     /// <summary>
+    /// Recursively emits a nested <c>Directory</c>/<c>Component</c>/<c>File</c> tree for everything under
+    /// <paramref name="dir"/> (skipping the generated .wxs). Each directory level gets one Component whose files
+    /// install into that level, preserving wwwroot and other subfolders. Appends a ComponentRef for every emitted
+    /// component to <paramref name="componentRefs"/>.
+    /// </summary>
+    private static string BuildWixDirectoryTree(string dir, string idSeed, System.Text.StringBuilder componentRefs, string indent)
+    {
+        var sb = new System.Text.StringBuilder();
+        BuildWixLevel(dir, dir, idSeed, sb, componentRefs, indent, new IdAllocator());
+        return sb.ToString().TrimEnd('\r', '\n');
+    }
+
+    private static void BuildWixLevel(string root, string dir, string idSeed, System.Text.StringBuilder sb, System.Text.StringBuilder componentRefs, string indent, IdAllocator ids)
+    {
+        // Files directly in this directory -> one Component.
+        var files = Directory.GetFiles(dir)
+            .Where(f => !Path.GetFileName(f).EndsWith(".wxs", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f, StringComparer.Ordinal)
+            .ToArray();
+
+        if (files.Length > 0)
+        {
+            var relDirForId = Path.GetRelativePath(root, dir).Replace(Path.DirectorySeparatorChar, '_').Replace("..", "root", StringComparison.Ordinal);
+            var componentId = ids.Next("Cmp_" + Sanitize(relDirForId));
+            var componentGuid = GenerateDeterministicGuid(idSeed, "component:" + Path.GetRelativePath(root, dir));
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}<Component Id=\"{componentId}\" Guid=\"{componentGuid}\">");
+            foreach (var file in files)
+            {
+                var fileId = ids.Next("File_" + Sanitize(Path.GetFileName(file)));
+                var source = XmlEscape(Path.GetRelativePath(root, file).Replace('/', '\\'));
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}    <File Id=\"{fileId}\" Source=\"{source}\" />");
+            }
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}</Component>");
+            componentRefs.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"            <ComponentRef Id=\"{componentId}\" />");
+        }
+
+        // Subdirectories -> nested Directory elements.
+        foreach (var sub in Directory.GetDirectories(dir).OrderBy(d => d, StringComparer.Ordinal))
+        {
+            var name = XmlEscape(Path.GetFileName(sub));
+            var dirId = ids.Next("Dir_" + Sanitize(Path.GetRelativePath(root, sub).Replace(Path.DirectorySeparatorChar, '_')));
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}<Directory Id=\"{dirId}\" Name=\"{name}\">");
+            BuildWixLevel(root, sub, idSeed, sb, componentRefs, indent + "    ", ids);
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}</Directory>");
+        }
+    }
+
+    /// <summary>Reduces a string to characters legal in a WiX Id (letters, digits, '.', '_'), prefixing if needed.</summary>
+    private static string Sanitize(string value)
+    {
+        var chars = value.Select(c => char.IsLetterOrDigit(c) || c is '.' or '_' ? c : '_').ToArray();
+        var s = new string(chars);
+        return s.Length == 0 ? "x" : s;
+    }
+
+    /// <summary>Hands out unique, WiX-legal element Ids (a 72-char limit-safe truncation plus a counter).</summary>
+    private sealed class IdAllocator
+    {
+        private readonly HashSet<string> _used = new(StringComparer.Ordinal);
+        private int _counter;
+
+        public string Next(string baseId)
+        {
+            if (baseId.Length > 60) baseId = baseId[..60];
+            if (baseId.Length == 0 || !char.IsLetter(baseId[0]) && baseId[0] != '_')
+                baseId = "_" + baseId;
+            var id = baseId;
+            while (!_used.Add(id))
+                id = $"{baseId}_{_counter++}";
+            return id;
+        }
+    }
+
+    /// <summary>
     /// Generates a deterministic GUID from a seed string using a simple hash-based approach.
     /// This ensures the same project always gets the same GUIDs across builds.
     /// </summary>
-    private static string GenerateDeterministicGuid(string projectName, string purpose)
+    private static string GenerateDeterministicGuid(string seed, string purpose)
     {
-        var input = $"ryn:{projectName}:{purpose}";
+        var input = $"ryn:{seed}:{purpose}";
         var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
         // Use first 16 bytes of SHA256 to form a GUID
         var guidBytes = new byte[16];
@@ -581,6 +836,14 @@ internal static class BundleCommand
             catch (IOException) { /* use defaults */ }
         }
 
+        // Linux freedesktop Categories must end with a trailing ';' per the menu spec.
+        if (!string.IsNullOrEmpty(categories) && !categories.EndsWith(';'))
+            categories += ";";
+
+        // The AppImage filename and the appimagetool ARCH env var must match the host's `uname -m`, which is
+        // derived from the target RID (we already reject cross-RID bundling above).
+        var appImageArch = AppImageArch();
+
         // Copy published output
         foreach (var file in Directory.GetFiles(publishDir, "*", SearchOption.AllDirectories))
         {
@@ -631,15 +894,17 @@ internal static class BundleCommand
             Console.WriteLine(usingDefaultIcon ? "  Icon: bundled Ryn default" : $"  Icon: {Path.GetFileName(resolvedIcon)}");
         }
 
-        // Generate .desktop entry with categories and icon
+        // Generate a spec-compliant .desktop entry. Exec is the bare executable name (AppRun prepends
+        // usr/bin to PATH), and the Version key is the *Desktop Entry spec* version (1.0), not the app
+        // version — the app version lives in CFBundleVersion-equivalent metadata, not here.
         var commentLine = comment is not null ? $"\nComment={comment}" : "";
         var desktopEntry = $"""
             [Desktop Entry]
             Type=Application
+            Version=1.0
             Name={projectName}
-            Exec=usr/bin/{projectName}
+            Exec={projectName}
             Categories={categories}{iconLine}{commentLine}
-            Version={bundleVersion}
             Terminal=false
             """;
         File.WriteAllText(Path.Combine(bundleDir, $"{lowerName}.desktop"), desktopEntry);
@@ -672,7 +937,7 @@ internal static class BundleCommand
             set -e
             SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
             APPDIR="$SCRIPT_DIR/{projectName}.AppDir"
-            OUTPUT="$SCRIPT_DIR/{projectName}-{bundleVersion}-x86_64.AppImage"
+            OUTPUT="$SCRIPT_DIR/{projectName}-{bundleVersion}-{appImageArch}.AppImage"
 
             if ! command -v appimagetool >/dev/null 2>&1; then
                 echo "appimagetool not found in PATH. Downloading..."
@@ -704,7 +969,7 @@ internal static class BundleCommand
 
         // Try to build AppImage directly if appimagetool is available
         var builtAppImage = false;
-        var appImagePath = Path.Combine(projectDir, "bin", "bundle", $"{projectName}-{bundleVersion}-x86_64.AppImage");
+        var appImagePath = Path.Combine(projectDir, "bin", "bundle", $"{projectName}-{bundleVersion}-{appImageArch}.AppImage");
         if (TryFindInPath("appimagetool"))
         {
             Console.WriteLine("  Found appimagetool, building AppImage...");
@@ -716,7 +981,7 @@ internal static class BundleCommand
             };
             psi.ArgumentList.Add(bundleDir);
             psi.ArgumentList.Add(appImagePath);
-            psi.Environment["ARCH"] = "x86_64";
+            psi.Environment["ARCH"] = appImageArch;
 
             var appImageProcess = Process.Start(psi);
             appImageProcess?.WaitForExit();
@@ -736,6 +1001,16 @@ internal static class BundleCommand
         }
         return 0;
     }
+
+    /// <summary>Maps the host process architecture to the `uname -m`-style label appimagetool expects.</summary>
+    private static string AppImageArch() => RuntimeInformation.OSArchitecture switch
+    {
+        Architecture.X64 => "x86_64",
+        Architecture.X86 => "i686",
+        Architecture.Arm64 => "aarch64",
+        Architecture.Arm => "armhf",
+        _ => "x86_64",
+    };
 
     private static void SetExecutable(string path)
     {
@@ -799,23 +1074,61 @@ internal static class BundleCommand
         return sb.ToString();
     }
 
-    private static string ResolvePublishDir(string projectDir)
+    /// <summary>
+    /// Resolves the directory the just-completed publish wrote to, deterministically, by asking MSBuild for the
+    /// evaluated <c>PublishDir</c> with the exact same arguments used for the build (so RID, configuration and
+    /// TFM all match what was produced). Returns null only if MSBuild reports nothing and no directory can be
+    /// found, so a stale RID-named directory is never silently bundled.
+    /// </summary>
+    private static string? ResolvePublishDir(string dotnet, string projectDir, string publishArgs)
     {
-        var releaseDir = Path.Combine(projectDir, "bin", "Release", "net10.0");
+        var queried = QueryPublishDir(dotnet, projectDir, publishArgs);
+        if (queried is not null)
+        {
+            var resolved = Path.IsPathRooted(queried) ? queried : Path.Combine(projectDir, queried);
+            if (Directory.Exists(resolved))
+                return resolved;
+        }
 
-        // Check RID-specific path first (NativeAOT publish uses this)
-        var rid = RuntimeInformation.RuntimeIdentifier;
-        var ridPath = Path.Combine(releaseDir, rid, "publish");
+        // MSBuild query failed (older SDK, evaluation error) — fall back to the legacy guess so behavior never
+        // regresses for the common case, but only return a path that actually exists.
+        var releaseDir = Path.Combine(projectDir, "bin", "Release", "net10.0");
+        var ridPath = Path.Combine(releaseDir, RuntimeInformation.RuntimeIdentifier, "publish");
         if (Directory.Exists(ridPath))
             return ridPath;
-
-        // Fall back to non-RID path
-        return Path.Combine(releaseDir, "publish");
+        var nonRid = Path.Combine(releaseDir, "publish");
+        return Directory.Exists(nonRid) ? nonRid : null;
     }
 
-    private static string? FindCsproj()
+    /// <summary>
+    /// Runs `dotnet publish ... --getProperty:PublishDir` (a fast evaluation, no rebuild) and returns the
+    /// evaluated relative/absolute PublishDir as MSBuild reports it, or null if the query failed.
+    /// </summary>
+    private static string? QueryPublishDir(string dotnet, string projectDir, string publishArgs)
     {
-        var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.csproj");
-        return files.Length == 1 ? files[0] : null;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = dotnet,
+                Arguments = publishArgs + " --getProperty:PublishDir",
+                WorkingDirectory = projectDir,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            var process = Process.Start(psi);
+            if (process is null) return null;
+            var stdout = process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) return null;
+
+            // --getProperty prints the property value; take the last non-empty line to skip any preamble.
+            var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return lines.Length == 0 ? null : lines[^1];
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+        catch (InvalidOperationException) { return null; }
     }
 }
