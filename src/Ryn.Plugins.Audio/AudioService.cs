@@ -1,3 +1,4 @@
+using Ryn.Core;
 using Ryn.Plugins.Audio.Backends;
 
 namespace Ryn.Plugins.Audio;
@@ -7,12 +8,15 @@ public sealed class AudioService : IDisposable
     private readonly IAudioBackend _backend;
     private bool _disposed;
 
-    internal AudioService()
+    internal AudioService(IMainThreadDispatcher dispatcher)
     {
+        ArgumentNullException.ThrowIfNull(dispatcher);
+
         if (OperatingSystem.IsWindows())
             _backend = new WindowsAudioBackend();
         else if (OperatingSystem.IsMacOS())
-            _backend = new MacOsAudioBackend();
+            // macOS NSSound is an AppKit type; the backend marshals every call onto the UI thread (INT-02).
+            _backend = new MacOsAudioBackend(dispatcher);
         else if (OperatingSystem.IsLinux())
             _backend = new LinuxAudioBackend();
         else

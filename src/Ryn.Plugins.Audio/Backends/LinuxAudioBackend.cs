@@ -6,10 +6,14 @@ namespace Ryn.Plugins.Audio.Backends;
 [SupportedOSPlatform("linux")]
 internal sealed class LinuxAudioBackend : IAudioBackend
 {
+    // paplay's native --volume is a linear scale where 65536 == 100% (PA_VOLUME_NORM).
+    private const int PaVolumeNorm = 65536;
+
     private Process? _currentProcess;
     private readonly object _lock = new();
     private volatile bool _looping;
     private string? _loopPath;
+    private int _loopVolume;
     private bool _disposed;
 
     public void Play(string path, int volume, bool loop)
@@ -18,32 +22,19 @@ internal sealed class LinuxAudioBackend : IAudioBackend
 
         _looping = loop;
         _loopPath = loop ? path : null;
+        _loopVolume = volume;
 
-        if (volume < 100 && IsToolAvailable("pactl"))
-        {
-            try
-            {
-                var psi = new ProcessStartInfo("pactl")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                };
-                psi.ArgumentList.Add("set-sink-volume");
-                psi.ArgumentList.Add("@DEFAULT_SINK@");
-                psi.ArgumentList.Add($"{volume}%");
-                Process.Start(psi)?.WaitForExit(2000);
-            }
-            catch (InvalidOperationException) { }
-            catch (System.ComponentModel.Win32Exception) { }
-        }
-
-        StartPlayback(path);
+        // PAP-07: do NOT change the user's global system volume (the old `pactl set-sink-volume @DEFAULT_SINK@`
+        // permanently lowered the whole desktop's output and never restored it). Apply the requested level as
+        // a per-stream volume on the paplay invocation instead, which dies with the stream. The aplay fallback
+        // has no per-stream volume control, so it plays at full volume — documented on SetVolume.
+        StartPlayback(path, volume);
     }
 
-    private void StartPlayback(string path)
+    private void StartPlayback(string path, int volume)
     {
-        var tool = IsToolAvailable("paplay") ? "paplay" : "aplay";
+        var usePaplay = IsToolAvailable("paplay");
+        var tool = usePaplay ? "paplay" : "aplay";
 
         var psi = new ProcessStartInfo(tool)
         {
@@ -51,6 +42,14 @@ internal sealed class LinuxAudioBackend : IAudioBackend
             CreateNoWindow = true,
             RedirectStandardError = true,
         };
+
+        if (usePaplay && volume < 100)
+        {
+            // Map 0-100% to paplay's linear 0-65536 scale, clamped to PA_VOLUME_NORM (no amplification).
+            var paVolume = Math.Clamp(volume * PaVolumeNorm / 100, 0, PaVolumeNorm);
+            psi.ArgumentList.Add($"--volume={paVolume.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+
         psi.ArgumentList.Add(path);
 
         try
@@ -74,7 +73,7 @@ internal sealed class LinuxAudioBackend : IAudioBackend
                     process.Dispose();
 
                     if (_looping && _loopPath is not null)
-                        StartPlayback(_loopPath);
+                        StartPlayback(_loopPath, _loopVolume);
                 };
             }
         }
@@ -149,8 +148,11 @@ internal sealed class LinuxAudioBackend : IAudioBackend
 
     public void SetVolume(int percent)
     {
-        // Volume control not easily supported on Linux without PulseAudio API bindings.
-        // Return silently as documented.
+        // No-op by design. Volume is applied per-stream at Play() time via paplay's --volume, so there is no
+        // live handle to retarget here, and changing it mid-stream would require PulseAudio API bindings.
+        // The aplay fallback has no per-stream volume at all. We deliberately do NOT touch the global system
+        // sink (PAP-07) — that would alter the whole desktop's volume, not just this app's playback.
+        _ = percent;
     }
 
     public bool IsPlaying()

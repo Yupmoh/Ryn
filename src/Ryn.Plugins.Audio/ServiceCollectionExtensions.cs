@@ -7,7 +7,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddRynAudio(this IServiceCollection services)
     {
-        services.AddSingleton(sp => new AudioService());
+        services.AddSingleton(sp => new AudioService(sp.GetRequiredService<IMainThreadDispatcher>()));
         services.AddSingleton<AudioCommands>();
         services.AddSingleton<IRynPlugin, AudioPlugin>();
         services.AddAudioCommands();
