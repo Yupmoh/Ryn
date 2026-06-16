@@ -142,7 +142,7 @@ jobs:
             if [ -z "$EXPECTED" ]; then
               echo "FATAL: no pinned checksum for $ARCHIVE in build/native-checksums.txt (fail-closed supply-chain check)"; exit 1
             fi
-            ACTUAL=$(shasum -a 256 "/tmp/$ARCHIVE" | awk '{print $1}')
+            ACTUAL=$(if command -v sha256sum >/dev/null 2>&1; then sha256sum "/tmp/$ARCHIVE"; else shasum -a 256 "/tmp/$ARCHIVE"; fi | awk '{print $1}')
             if [ "$ACTUAL" != "$EXPECTED" ]; then
               echo "FATAL: CHECKSUM MISMATCH for $ARCHIVE — expected $EXPECTED but got $ACTUAL"; exit 1
             fi
