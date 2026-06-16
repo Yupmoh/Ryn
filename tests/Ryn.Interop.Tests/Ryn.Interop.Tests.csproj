@@ -4,6 +4,8 @@
     <IsTestProject>true</IsTestProject>
     <IsAotCompatible>false</IsAotCompatible>
     <IsTrimmable>false</IsTrimmable>
+    <!-- Utf8String marshalling tests dereference sbyte* pointers across the managed boundary. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,5 +17,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ryn.Interop\Ryn.Interop.csproj" />
+    <!--
+      Utf8String / NativeCallbackHelper (the pure-managed marshalling chokepoints these tests lock in,
+      including the INT-06 embedded-NUL rejection) live in Ryn.Core.Internal, surfaced here via
+      Ryn.Core's InternalsVisibleTo. Native-load coverage stays in Ryn.Integration.Tests.
+    -->
+    <ProjectReference Include="..\..\src\Ryn.Core\Ryn.Core.csproj" />
   </ItemGroup>
 </Project>

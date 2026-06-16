@@ -93,6 +93,35 @@ public sealed class NewCommandTests : IDisposable
         result.ExitCode.Should().Be(1, because: $"invalid name '{name}' should be rejected");
     }
 
+    // CLI-15: a project name is emitted verbatim as a `namespace`/`using`/`<RootNamespace>` (C# keywords)
+    // and as a directory/file name (Windows reserved device names), so both classes of name produce an
+    // unusable project and must be rejected up front with a name-validation message. The reserved-name
+    // check is case-insensitive ("nul" == "NUL"). Regression for names that previously scaffolded a
+    // project that could never compile / could not be created on Windows.
+    [Theory]
+    [InlineData("class", "keyword")]
+    [InlineData("public", "keyword")]
+    [InlineData("event", "keyword")]
+    [InlineData("CON", "reserved")]
+    [InlineData("nul", "reserved")]
+    public void New_KeywordOrReservedName_ReturnsErrorWithMessage(string name, string kind)
+    {
+        var result = RunCli("new", name);
+
+        result.ExitCode.Should().Be(1, because: $"'{name}' is a C# {kind} and cannot be a project name. stderr: {result.StdErr}");
+
+        // The validation message must name the rule that was violated so the failure is actionable.
+        var expectedReason = kind == "keyword"
+            ? "is a C# keyword"
+            : "is a reserved device name";
+        result.StdErr.Should().Contain("Invalid project name");
+        result.StdErr.Should().Contain(expectedReason);
+
+        // A rejected name must not leave a half-scaffolded project directory behind.
+        Directory.Exists(Path.Combine(_tempDir, name)).Should().BeFalse(
+            $"a rejected name must not create the '{name}' directory");
+    }
+
     [Fact]
     public void New_ExistingDirectory_ReturnsError()
     {
@@ -187,10 +216,84 @@ public sealed class NewCommandTests : IDisposable
         result.ExitCode.Should().Be(0, because: $"CLI should succeed. stderr: {result.StdErr}");
 
         var rynJson = File.ReadAllText(Path.Combine(_tempDir, projectName, "ryn.json"));
+
+        // The scaffold now grants only the demo "app" capability so a first-run project
+        // can invoke its own commands without being silently denied. The old plugin grants
+        // (fs/clipboard/notification) were removed because the template ships no such commands.
         rynJson.Should().Contain("capabilities");
-        rynJson.Should().Contain("fs");
-        rynJson.Should().Contain("clipboard");
-        rynJson.Should().Contain("notification");
+        rynJson.Should().Contain("app");
+        rynJson.Should().NotContain("fs");
+        rynJson.Should().NotContain("clipboard");
+        rynJson.Should().NotContain("notification");
+    }
+
+    [Fact]
+    public void New_ScaffoldedRynJson_AllowsDemoCommandsButDeniesUnprefixed()
+    {
+        // Regression for the first-run demo: a freshly scaffolded ryn.json must grant the
+        // demo commands (app.greet/app.add/app.getTime) so they work out of the box, while a
+        // bare, unprefixed command id is still denied. We resolve the capabilities through the
+        // same rules RynCapabilitiesLoader applies (plugin-prefixed grants, no-prefix => denied),
+        // exercised against the real scaffold output. The loader itself cannot be called directly
+        // here: Ryn.Cli.Tests has no reference to Ryn.Ipc (these tests drive the CLI out-of-process),
+        // and Load() reads ryn.json from AppContext.BaseDirectory rather than an arbitrary path.
+        var projectName = "DemoCapApp";
+        var result = RunCli("new", projectName);
+
+        result.ExitCode.Should().Be(0, because: $"CLI should succeed. stderr: {result.StdErr}");
+
+        var rynJson = File.ReadAllText(Path.Combine(_tempDir, projectName, "ryn.json"));
+        var caps = Capabilities.FromRynJson(rynJson);
+
+        // The first-run demo command is allowed because the scaffold grants the "app" plugin.
+        caps.IsAllowed("app.greet").Should().BeTrue("the scaffold grants the demo 'app' capability");
+        caps.IsAllowed("app.add").Should().BeTrue("the scaffold grants the demo 'app' capability");
+        caps.IsAllowed("app.getTime").Should().BeTrue("the scaffold grants the demo 'app' capability");
+
+        // A bare command id with no plugin prefix is denied (mirrors ThrowIfDenied's "no plugin prefix").
+        caps.IsAllowed("greet").Should().BeFalse("an unprefixed command has no granting plugin and is denied");
+    }
+
+    /// <summary>
+    /// Minimal capability evaluator that mirrors the contract enforced by
+    /// <c>Ryn.Ipc.RynCapabilitiesLoader</c>/<c>RynCapabilities.ThrowIfDenied</c>: a command is
+    /// <c>plugin.command</c>; a plugin granted <c>true</c> allows all of its commands; a command
+    /// without a plugin prefix is denied. Reimplemented here (rather than referenced) because this
+    /// test project does not link against Ryn.Ipc; see the note in the test above.
+    /// </summary>
+    private sealed class Capabilities
+    {
+        private readonly HashSet<string> _allowAllPlugins;
+
+        private Capabilities(HashSet<string> allowAllPlugins) => _allowAllPlugins = allowAllPlugins;
+
+        public static Capabilities FromRynJson(string json)
+        {
+            var allowAll = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            if (doc.RootElement.TryGetProperty("capabilities", out var caps)
+                && caps.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var plugin in caps.EnumerateObject())
+                {
+                    if (plugin.Value.ValueKind == System.Text.Json.JsonValueKind.True)
+                        allowAll.Add(plugin.Name);
+                }
+            }
+
+            return new Capabilities(allowAll);
+        }
+
+        public bool IsAllowed(string command)
+        {
+            var dot = command.IndexOf('.', StringComparison.Ordinal);
+            if (dot < 0)
+                return false; // no plugin prefix => denied, same as ThrowIfDenied
+
+            var prefix = command[..dot];
+            return _allowAllPlugins.Contains(prefix);
+        }
     }
 
     private CliResult RunCli(params string[] args)
