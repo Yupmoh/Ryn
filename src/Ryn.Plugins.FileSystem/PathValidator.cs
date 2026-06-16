@@ -55,7 +55,8 @@ public sealed class PathValidator
 
     /// <summary>
     /// Resolves <paramref name="path"/> to a canonical, symlink-free absolute path and verifies it is
-    /// contained within an allowed scope. Symlinks are followed at every path component — including
+    /// contained within an allowed scope. A leading <c>~</c> or <c>$HOME</c> is first expanded to the
+    /// user's home directory (see <see cref="ExpandHome"/>). Symlinks are followed at every path component — including
     /// parent directories and not-yet-existing write targets — so a link whose lexical path is in
     /// scope but whose real target escapes is rejected. Legitimate symlinks that resolve to an in-scope
     /// real target are *not* rejected (per the medium-risk register, blanket-rejecting in-scope links
@@ -77,14 +78,19 @@ public sealed class PathValidator
         if (_options.AccessDenied)
             throw new UnauthorizedAccessException("File system access is denied by capability policy");
 
+        // Expand a leading ~ / $HOME to the user's home directory before anything else. This is a pure
+        // textual convenience: the expanded path is still canonicalized and checked against AllowedPaths
+        // below, so it grants nothing that an absolute home-relative path would not already grant.
+        var expanded = ExpandHome(path);
+
         // Canonical real path (resolves '..' AND symlinks). This is the value we both authorize and
         // hand back, so authorization is performed on the post-symlink-resolution path, not the lexical
         // one. (A re-opened *string* cannot pin an inode, so a racing caller-side re-open is still a
         // residual TOCTOU — see the <remarks> above.)
         var canonical = Canonicalize(
-            Path.IsPathRooted(path)
-                ? path
-                : Path.Combine(AppContext.BaseDirectory, path));
+            Path.IsPathRooted(expanded)
+                ? expanded
+                : Path.Combine(AppContext.BaseDirectory, expanded));
 
         if (_options.AllowedPaths.Count == 0)
         {
@@ -108,6 +114,57 @@ public sealed class PathValidator
         }
 
         throw new UnauthorizedAccessException($"Access denied: path '{path}' is not within any allowed directory");
+    }
+
+    /// <summary>
+    /// Expands a LEADING <c>~</c> or <c>$HOME</c> reference to the user's home directory. Handles
+    /// <c>~</c>, <c>~/rest</c>, <c>$HOME</c>, <c>$HOME/rest</c>, and the braced <c>${HOME}</c> forms
+    /// (a Windows backslash separator counts too). Deliberately does NOT expand <c>~user</c> (another
+    /// user's home — unresolved and a privilege concern), <c>$HOMER</c> or any other variable, or a
+    /// <c>~</c>/<c>$HOME</c> that is not the first segment, since the tilde only carries home meaning at
+    /// the start of a path. The expanded result is still canonicalized and scope-checked by the caller,
+    /// so this is purely a convenience and never widens access. If no home directory can be determined
+    /// the token is left literal, which then simply fails the scope check.
+    /// </summary>
+    internal static string ExpandHome(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return path;
+
+        static bool IsSep(char c) => c == '/' || c == '\\';
+
+        var home = HomeDirectory();
+        if (string.IsNullOrEmpty(home))
+            return path;
+
+        // Leading ~ , but not ~username (which has no portable meaning here).
+        if (path[0] == '~' && (path.Length == 1 || IsSep(path[1])))
+            return home + path[1..];
+
+        // Leading ${HOME} or $HOME, delimited by end-of-string or a separator so $HOMER is left alone.
+        foreach (var token in HomeTokens)
+        {
+            if (path.StartsWith(token, StringComparison.Ordinal)
+                && (path.Length == token.Length || IsSep(path[token.Length])))
+                return home + path[token.Length..];
+        }
+
+        return path;
+    }
+
+    private static readonly string[] HomeTokens = ["${HOME}", "$HOME"];
+
+    /// <summary>
+    /// The user's home directory: the cross-platform user-profile folder (<c>$HOME</c> on Unix,
+    /// <c>%USERPROFILE%</c> on Windows), falling back to the <c>HOME</c> environment variable. Returns
+    /// an empty string when neither is available, in which case <see cref="ExpandHome"/> is a no-op.
+    /// </summary>
+    private static string HomeDirectory()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(home))
+            home = Environment.GetEnvironmentVariable("HOME") ?? string.Empty;
+        return home;
     }
 
     /// <summary>
