@@ -4,7 +4,14 @@
     <IsTestProject>true</IsTestProject>
     <IsAotCompatible>false</IsAotCompatible>
     <IsTrimmable>false</IsTrimmable>
-    <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- Several regression tests reach plugin security seams (private/internal statics, nested types) via
+         reflection to exercise the *real* implementation without loosening source visibility. This is a
+         non-shipping test project (IsAotCompatible/IsTrimmable already false), so the trim/AOT analyzer's
+         reflection warnings (IL2026/IL2070/IL2075/IL2080) do not apply; turn it off here rather than
+         scatter per-call suppressions. CA2007 (ConfigureAwait) and CA1062 (public-arg null-check, moot for
+         xUnit theory entry points) are likewise not meaningful in test code. -->
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <NoWarn>$(NoWarn);CA2007;CA1062;IL2026</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +28,7 @@
     <ProjectReference Include="..\..\src\Ryn.Plugins.Clipboard\Ryn.Plugins.Clipboard.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Shell\Ryn.Plugins.Shell.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Audio\Ryn.Plugins.Audio.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Updater\Ryn.Plugins.Updater.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
