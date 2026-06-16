@@ -155,6 +155,10 @@ internal static class PtyNativeWindows
     private const int WAIT_OBJECT_0 = 0;
     private const int INFINITE = -1;
 
+    private const string ConPtyUnavailableMessage =
+        "shell.pty requires ConPTY, which is available on Windows 10 1809 and later. " +
+        "PTY support is unavailable on this Windows build.";
+
     /// <summary>
     /// Holds all Windows handles for a ConPTY session.
     /// </summary>
@@ -230,7 +234,24 @@ internal static class PtyNativeWindows
 
         // Create the pseudo console
         var size = new COORD { X = (short)cols, Y = (short)rows };
-        var hr = CreatePseudoConsole(size, inputReadEnd, outputWriteEnd, 0, out var hPC);
+        int hr;
+        IntPtr hPC;
+        try
+        {
+            hr = CreatePseudoConsole(size, inputReadEnd, outputWriteEnd, 0, out hPC);
+        }
+        catch (EntryPointNotFoundException ex)
+        {
+            // CreatePseudoConsole was added in Windows 10 1809. On older builds the kernel32 entry point is
+            // absent and the P/Invoke throws — surface a clear, actionable error that mirrors the Unix
+            // missing-shim path (PtyNative.NativeShimMissingMessage) instead of leaking the raw exception.
+            CloseHandle(inputReadEnd);
+            CloseHandle(inputWriteEnd);
+            CloseHandle(outputReadEnd);
+            CloseHandle(outputWriteEnd);
+            throw new PlatformNotSupportedException(ConPtyUnavailableMessage, ex);
+        }
+
         if (hr != S_OK)
         {
             CloseHandle(inputReadEnd);
