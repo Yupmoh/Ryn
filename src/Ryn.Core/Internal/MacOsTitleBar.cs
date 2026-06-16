@@ -38,7 +38,7 @@ internal static partial class MacOsTitleBar
 
         // Get the window's content view frame to determine width
         var contentView = (void*)objc_msgSend_ret_nint(nsWindow, sel_registerName("contentView"));
-        var frame = objc_msgSend_rect(contentView, sel_registerName("frame"));
+        var frame = GetRect(contentView, sel_registerName("frame"));
 
         // Position: right of traffic lights (x=70), top of window, full remaining width, 28px tall
         var dragWidth = Math.Max(0, frame.Width - 70);
@@ -83,22 +83,24 @@ internal static partial class MacOsTitleBar
 
     [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     private static unsafe void OnMouseDown(nint self, nint sel, nint nsEvent)
-    {
-        var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
-        objc_msgSend_ptr((void*)window, sel_registerName("performWindowDragWithEvent:"), (void*)nsEvent);
-    }
+        => NativeGuard.Invoke("titlebar.mouseDown", () =>
+        {
+            var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
+            objc_msgSend_ptr((void*)window, sel_registerName("performWindowDragWithEvent:"), (void*)nsEvent);
+        });
 
     [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     private static unsafe void OnMouseUp(nint self, nint sel, nint nsEvent)
-    {
-        // Double-click title bar = zoom (maximize/restore)
-        var clickCount = objc_msgSend_ret_nint((void*)nsEvent, sel_registerName("clickCount"));
-        if (clickCount == 2)
+        => NativeGuard.Invoke("titlebar.mouseUp", () =>
         {
-            var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
-            objc_msgSend_ptr((void*)window, sel_registerName("zoom:"), null);
-        }
-    }
+            // Double-click title bar = zoom (maximize/restore)
+            var clickCount = objc_msgSend_ret_nint((void*)nsEvent, sel_registerName("clickCount"));
+            if (clickCount == 2)
+            {
+                var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
+                objc_msgSend_ptr((void*)window, sel_registerName("zoom:"), null);
+            }
+        });
 
     internal static unsafe (double Left, double Top) GetTrafficLightInsets(nint nsWindowPtr)
     {
@@ -111,13 +113,13 @@ internal static partial class MacOsTitleBar
         var zoomButton = (void*)objc_msgSend_nint_ret_nint(nsWindow, sel_registerName("standardWindowButton:"), 2);
         if ((nint)zoomButton == 0) return (70, 28);
 
-        var buttonFrame = objc_msgSend_rect(zoomButton, sel_registerName("frame"));
+        var buttonFrame = GetRect(zoomButton, sel_registerName("frame"));
 
         // The superview (title bar view) has the buttons positioned relative to it
         var superview = (void*)objc_msgSend_ret_nint(zoomButton, sel_registerName("superview"));
         if ((nint)superview == 0) return (70, 28);
 
-        var superFrame = objc_msgSend_rect(superview, sel_registerName("frame"));
+        var superFrame = GetRect(superview, sel_registerName("frame"));
 
         // Right edge of zoom button + padding
         var left = buttonFrame.X + buttonFrame.Width + 12;
@@ -169,10 +171,50 @@ internal static partial class MacOsTitleBar
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static unsafe partial nint objc_msgSend_nint_ret_nint(void* receiver, nint selector, nint arg);
 
+    // NSRect is 32 bytes (4 doubles), so its return ABI differs by architecture:
+    //  * arm64  — the Apple AAPCS64 returns the struct in floating-point registers (d0..d3) via the
+    //             ordinary objc_msgSend trampoline. There is NO objc_msgSend_stret on arm64; calling it
+    //             would crash. This is the only RID Ryn currently ships, and it is already correct.
+    //  * x86_64 — the System V ABI classifies a >16-byte aggregate as MEMORY, so it is returned through a
+    //             hidden pointer (sret) supplied by the caller. objc_msgSend assumes a register return and
+    //             reads garbage; the selector dispatch must instead use objc_msgSend_stret, which takes the
+    //             out-struct pointer as its first argument. Routed via GetRect below by OSArchitecture.
+    // Selecting the wrong trampoline reads uninitialized/garbage rectangles (drag-view sizing and traffic-
+    // light insets), which is the defect behind PAP-10 / INT-09 on Intel Macs.
     [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static unsafe partial NSRect objc_msgSend_rect(void* receiver, nint selector);
+    private static unsafe partial NSRect objc_msgSend_rect_arm64(void* receiver, nint selector);
 
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend_stret")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial void objc_msgSend_stret_x64(NSRect* outRect, void* receiver, nint selector);
+
+    /// <summary>
+    /// Sends a zero-argument, <see cref="NSRect"/>-returning Objective-C message, selecting the calling
+    /// convention for the running architecture. arm64 uses the ordinary <c>objc_msgSend</c> register-return
+    /// trampoline (no <c>_stret</c> variant exists); x86_64 uses <c>objc_msgSend_stret</c> with the hidden
+    /// struct-return pointer demanded by the System V "MEMORY" classification of a 32-byte aggregate.
+    /// </summary>
+    private static unsafe NSRect GetRect(void* receiver, nint selector)
+    {
+        // RuntimeInformation.OSArchitecture is the OS/runtime architecture; under Rosetta 2 a process runs
+        // as X64 and must use the x86_64 ABI, which this branch does correctly. Anything other than X64
+        // (Arm64, and any future arch) takes the register-return path, matching the shipped arm64 target.
+        if (RuntimeInformation.OSArchitecture == Architecture.X64)
+        {
+            NSRect rect;
+            objc_msgSend_stret_x64(&rect, receiver, selector);
+            return rect;
+        }
+
+        return objc_msgSend_rect_arm64(receiver, selector);
+    }
+
+    // initWithFrame: takes the NSRect by value and returns a pointer (id). The by-value 32-byte argument is
+    // marshalled by P/Invoke per the platform convention (registers on arm64; the System V "MEMORY" class,
+    // i.e. passed on the stack, on x86_64), and the pointer return is INTEGER-class in both ABIs — so the
+    // ordinary objc_msgSend trampoline is correct on every architecture here. Only struct *returns* need the
+    // _stret split above; a struct *argument* with a scalar return does not.
     [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static unsafe partial nint objc_msgSend_rect_ret_nint(void* receiver, nint selector, NSRect frame);
