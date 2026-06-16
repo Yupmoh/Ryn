@@ -36,6 +36,9 @@
 --include-directory
 ../../vendor/saucer-bindings/modules/loop/include/saucer
 
+--headerFile
+header.txt
+
 --output
 ../../src/Ryn.Interop/Generated/Saucer.cs
 
