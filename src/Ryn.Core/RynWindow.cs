@@ -67,15 +67,20 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// <inheritdoc />
     public AppTheme Theme => _themeDetector?.Current ?? SystemThemeDetector.Detect();
 
+    // Key under which this window's geometry is persisted (when PersistWindowState is enabled). The main window
+    // uses the application id (legacy key); secondary windows use a per-id key to avoid corrupting each other.
+    private readonly string _stateKey;
+
     /// <summary>Constructs a standalone window with no application host. Native operations are inert; used by
     /// tests that exercise the managed surface (events, accessor wiring) without a running event loop.</summary>
-    internal RynWindow(RynOptions options) : this(host: null, id: 0, options) { }
+    internal RynWindow(RynOptions options) : this(host: null, id: 0, options, options.ApplicationId) { }
 
-    internal RynWindow(NativeAppHost? host, int id, RynOptions options)
+    internal RynWindow(NativeAppHost? host, int id, RynOptions options, string stateKey)
     {
         _host = host;
         Id = id;
         _options = options;
+        _stateKey = stateKey;
         _cachedTitle = options.Title;
         _cachedWidth = options.Width;
         _cachedHeight = options.Height;
@@ -200,6 +205,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
     });
 
+    public void Move(int x, int y) => RunOnUi(() =>
+    {
+        if (_window == null) return;
+        Saucer.saucer_window_set_position(_window, x, y);
+        _cachedX = x; _cachedY = y;
+        if (Saucer.saucer_window_maximized(_window) == 0) { _normalX = x; _normalY = y; }
+    });
+
     public void StartDrag() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_drag(_window); });
 
     public void StartResize(WindowEdge edge) => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); });
@@ -299,6 +312,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _normalWidth = _cachedWidth;
         _normalHeight = _cachedHeight;
         _rynWebView = new RynWebView(_webview, app);
+        // Stamp the webview with its owning window so an IPC command dispatched from this window's page routes
+        // window.* operations back to THIS window (via the ambient CurrentWindow set in ExecuteCommandAsync).
+        _rynWebView.SetOwningWindow(this);
         // Tell the webview which schemes were registered with the engine above, so RegisterCustomScheme can
         // attach handlers for them (and reject "ryn"/undeclared schemes). Mirrors the pre-creation loop.
         _rynWebView.SetDeclaredSchemes(_options.CustomSchemes);
@@ -324,7 +340,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             // best-effort on Load/Save; this guard is belt-and-suspenders should that ever change.
             try
             {
-                _statePersistence = new WindowStatePersistence(_options.ApplicationId);
+                _statePersistence = new WindowStatePersistence(_stateKey);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
             {
@@ -403,6 +419,25 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         else if (_options.ContentDirectory != null) { _rynWebView.SetContentDirectory(_options.ContentDirectory); _rynWebView.NavigateToAppScheme(); }
         else if (_options.Html != null) { _rynWebView.SetHtmlContent(_options.Html); _rynWebView.NavigateToAppScheme(); }
         Saucer.saucer_window_show(_window);
+        // Re-fit the webview to its window on the NEXT loop tick. A webview created while the event loop is
+        // already running (a secondary window opened via OpenWindow) is added to a window whose content view is
+        // not yet at its final size, so the webview ends up at stale bounds and the window shows only its grey
+        // background. Re-fitting inline here is too early; deferring to the next tick — once the window has been
+        // realized and laid out — sets the correct bounds so the content fills the window. The main window is
+        // already laid out at startup, so this is a harmless no-op for it.
+        _host?.RunOnUi(RefitWebView);
+    }
+
+    /// <summary>
+    /// Re-fits the webview to fill its window's content view, posted to run after the window has been realized.
+    /// A webview created while the event loop is already running (a secondary window opened via OpenWindow) is
+    /// added before the window's content view is at its final size, so without this it can render at stale
+    /// bounds. The main window, laid out at startup, is unaffected.
+    /// </summary>
+    private void RefitWebView()
+    {
+        if (_disposed || _webview == null) return;
+        Saucer.saucer_webview_reset_bounds(_webview);
     }
 
     private void ApplyWindowOptions()

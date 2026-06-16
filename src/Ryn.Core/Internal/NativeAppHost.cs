@@ -46,7 +46,10 @@ internal sealed unsafe class NativeAppHost : IDisposable
     private readonly object _windowsGate = new();
     private readonly Dictionary<int, RynWindow> _windows = [];
     private int _nextWindowId;
-    private RynWindow? _mainWindow;
+    // Id of the first (main) window. Tracked by id rather than a reference so MainWindow naturally reports null
+    // once the main window has closed, and so this class holds no IDisposable window field of its own (the
+    // registry owns the windows and disposes them).
+    private int _mainWindowId;
 
     // Schemes already registered with the engine. saucer_webview_register_scheme is process-global and must
     // run once, before the first webview is created; a double-register is a silent no-op but we guard anyway.
@@ -60,10 +63,10 @@ internal sealed unsafe class NativeAppHost : IDisposable
     /// <summary>True while the native application exists and the host has not begun teardown.</summary>
     internal bool IsRunning => _app != null && !_disposed;
 
-    /// <summary>The first (main) window, once created in OnReady. Null before then.</summary>
+    /// <summary>The first (main) window, once created in OnReady. Null before it exists or after it closes.</summary>
     internal RynWindow? MainWindow
     {
-        get { lock (_windowsGate) return _mainWindow; }
+        get { lock (_windowsGate) return _windows.TryGetValue(_mainWindowId, out var window) ? window : null; }
     }
 
     /// <summary>A point-in-time snapshot of the live windows.</summary>
@@ -84,6 +87,11 @@ internal sealed unsafe class NativeAppHost : IDisposable
     internal void Run(CancellationToken cancellationToken)
     {
         NativeLibraryResolver.Register();
+        // Opt out of macOS App Nap so posted UI work (e.g. opening a window from a background thread) and
+        // webview rendering keep running when the app is not the foreground app, instead of stalling until it
+        // is reactivated.
+        if (OperatingSystem.IsMacOS())
+            MacOsAppNap.Disable();
         Span<byte> idBuf = stackalloc byte[256];
         var appIdStr = Utf8String.Create(_mainWindowOptions.ApplicationId, idBuf);
         var appOpts = Saucer.saucer_application_options_new(appIdStr.Pointer);
@@ -139,7 +147,7 @@ internal sealed unsafe class NativeAppHost : IDisposable
     {
         NativeReady?.Invoke((nint)_app);
 
-        var main = CreateWindowCore(_mainWindowOptions);
+        var main = CreateWindowCore(_mainWindowOptions, isMain: true);
         if (CommandHandler is not null) main.SetCommandHandler(CommandHandler);
         main.InitializeNative();
 
@@ -160,15 +168,64 @@ internal sealed unsafe class NativeAppHost : IDisposable
         NativeGuard.Invoke("NativeAppHost.OnFinish", () => self.CompleteAllCloseSignals());
     }
 
+    /// <summary>
+    /// Opens a new window, blocking until it is created on the UI thread. Short-circuits to an inline create
+    /// when already on the UI thread (re-entrancy from a window-event handler), otherwise marshals the create
+    /// and waits for the result. Safe to call from any thread while the loop is running.
+    /// </summary>
+    internal IRynWindow OpenWindow(RynWindowOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!IsRunning)
+            throw new InvalidOperationException("Cannot open a window before the application loop is running.");
+        if (IsOnUiThread)
+            return OpenWindowOnUiThread(options);
+
+        IRynWindow? result = null;
+        InvokeOnUiAsync(() => result = OpenWindowOnUiThread(options)).GetAwaiter().GetResult();
+        return result!;
+    }
+
+    /// <summary>Opens a new window without blocking, completing once it has been created on the UI thread.</summary>
+    internal Task<IRynWindow> OpenWindowAsync(RynWindowOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!IsRunning)
+            throw new InvalidOperationException("Cannot open a window before the application loop is running.");
+        if (IsOnUiThread)
+            return Task.FromResult<IRynWindow>(OpenWindowOnUiThread(options));
+
+        var tcs = new TaskCompletionSource<IRynWindow>(TaskCreationOptions.RunContinuationsAsynchronously);
+        PostToUi(() =>
+        {
+            try { tcs.TrySetResult(OpenWindowOnUiThread(options)); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { tcs.TrySetException(ex); }
+        });
+        return tcs.Task;
+    }
+
+    private RynWindow OpenWindowOnUiThread(RynWindowOptions options)
+    {
+        var window = CreateWindowCore(options.ToRynOptions(), isMain: false);
+        if (CommandHandler is not null) window.SetCommandHandler(CommandHandler);
+        window.InitializeNative();
+        return window;
+    }
+
     /// <summary>Constructs and registers a window (managed only; native creation is the caller's next step).</summary>
-    private RynWindow CreateWindowCore(RynOptions options)
+    private RynWindow CreateWindowCore(RynOptions options, bool isMain)
     {
         lock (_windowsGate)
         {
             var id = ++_nextWindowId;
-            var window = new RynWindow(this, id, options);
+            // The main window keeps the legacy state key (the application id) so existing state files still load;
+            // a secondary window gets a per-id key so two windows can't corrupt each other's persisted geometry.
+            var stateKey = isMain
+                ? _mainWindowOptions.ApplicationId
+                : $"{_mainWindowOptions.ApplicationId}.window{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var window = new RynWindow(this, id, options, stateKey);
             _windows[id] = window;
-            _mainWindow ??= window;
+            if (isMain) _mainWindowId = id;
             return window;
         }
     }
@@ -186,8 +243,18 @@ internal sealed unsafe class NativeAppHost : IDisposable
             _windows.Remove(window.Id);
             empty = _windows.Count == 0;
         }
-        if (empty && _app != null)
-            Saucer.saucer_application_quit(_app);
+        if (empty)
+        {
+            // Last window closed: quit the loop. Its native handles are freed by DisposeNative after Run returns.
+            if (_app != null) Saucer.saucer_application_quit(_app);
+        }
+        else
+        {
+            // A secondary window closed while others remain: free its native handles so they don't leak for the
+            // life of the app. Defer to the next UI-thread tick so the free happens after saucer's CLOSED
+            // callback (currently on the stack for this window) has returned.
+            RunOnUi(window.DisposeNative);
+        }
     }
 
     private void CompleteAllCloseSignals()
@@ -372,7 +439,6 @@ internal sealed unsafe class NativeAppHost : IDisposable
         lock (_windowsGate)
         {
             _windows.Clear();
-            _mainWindow = null;
         }
 
         // Reclaim any GCHandles saucer never drained — RunPostedAppAction is what normally frees them, so

@@ -213,6 +213,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     private CommandDispatchHandler? _commandHandler;
 
+    // The window that owns this webview, stamped onto each IPC dispatch as the ambient "current window" so
+    // window.* commands act on the originating window rather than always on the main window. Null for a webview
+    // not attached to a window (defensive; production always sets it in RynWindow.InitializeNative).
+    private IRynWindow? _owningWindow;
+
     /// <inheritdoc />
     public event EventHandler<FileDropEventArgs>? FileDrop;
 
@@ -250,6 +255,9 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
+
+    /// <summary>Records the window that owns this webview, so IPC commands from its page can be routed back to it.</summary>
+    internal void SetOwningWindow(IRynWindow window) => _owningWindow = window;
 
     Task<(bool Ok, string Data)> Internal.ILocalServerHost.DispatchCommandFromServerAsync(string command, string body)
         => ExecuteCommandAsync(command, Encoding.UTF8.GetBytes(body));
@@ -599,16 +607,19 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             return;
         }
 
-        // IPC endpoints (cmd/eval) are privileged: enforce the per-launch token, require POST, and treat a
-        // missing Origin as denied (IPC-01). The bridge always sends the token + POST, so legitimate calls
-        // are unaffected; a no-Origin GET (e.g. an <img>/iframe probe) and any wrong/absent token are
-        // rejected instead of being mapped onto the app origin. The token check is constant-time.
+        // IPC endpoints (cmd/eval) are privileged: enforce the per-launch token and require POST. The token is
+        // the real security boundary — only the bridge injected into the app's own same-origin page receives
+        // it (IPC-01). WebKit sends NO Origin header for same-origin custom-scheme (ryn://) requests, so the
+        // legitimate in-page bridge call arrives with no Origin; requiring one would deny every same-origin IPC
+        // call. So a MISSING Origin is allowed (the token gates it), while a PRESENT Origin must be on the
+        // allowlist — a genuinely cross-origin caller (which also lacks the token) is still rejected. The token
+        // check is constant-time.
         if (isIpc)
         {
             var presentedToken = ParseHeaderValue(headers, IpcProtocol.TokenHeader);
+            var originAllowed = requestOrigin is null || matchedOrigin is not null;
             var authorized =
-                requestOrigin is not null              // null Origin is denied for /ipc/
-                && matchedOrigin is not null           // origin must be on the allowlist
+                originAllowed
                 && string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
                 && TokenMatches(presentedToken);
             if (!authorized)
@@ -758,6 +769,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
         if (_commandHandler is null)
             return (true, "null");
+
+        // Publish the originating window into the ambient slot BEFORE the Task.Run hop, so it flows into the
+        // dispatched command via the captured ExecutionContext and window.* commands act on THIS window. Each
+        // call has its own async slot, so concurrent dispatches from different windows never collide.
+        Internal.CurrentWindow.Value = _owningWindow;
 
         try
         {
@@ -1084,15 +1100,21 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         return value;
     }
 
-    /// <summary>Reads a single header value out of saucer's newline-separated <c>Name: value</c> header blob.</summary>
+    // saucer concatenates request headers as NUL-separated "Name: value" pairs ("\0"); some transports use
+    // CRLF/LF instead. Split on all of them so a single header value is found regardless of the engine's
+    // delimiter — splitting only on '\n' (the old assumption) collapsed the whole blob into one line and
+    // never matched anything but the first header, silently failing the IPC token/origin checks.
+    private static readonly char[] HeaderSeparators = ['\0', '\n', '\r'];
+
+    /// <summary>Reads a single header value out of saucer's NUL/newline-separated <c>Name: value</c> header blob.</summary>
     private static string? ParseHeaderValue(string headers, string name)
     {
-        foreach (var line in headers.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in headers.Split(HeaderSeparators, StringSplitOptions.RemoveEmptyEntries))
         {
             var colon = line.IndexOf(':', StringComparison.Ordinal);
             if (colon <= 0) continue;
             if (line.AsSpan(0, colon).Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
-                return line[(colon + 1)..].Trim().TrimEnd('\r');
+                return line[(colon + 1)..].Trim();
         }
         return null;
     }
