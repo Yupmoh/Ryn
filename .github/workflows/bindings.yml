@@ -52,7 +52,9 @@ jobs:
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-21 main"
           sudo apt-get update
-          sudo apt-get install -y libclang-21-dev
+          # clang-21 provides the clang binary (for -print-resource-dir) and pulls in the builtin
+          # headers (libclang-common-21-dev → stddef.h); libclang-21-dev provides libclang itself.
+          sudo apt-get install -y libclang-21-dev clang-21
 
       - name: Install ClangSharp
         run: dotnet tool install --global ClangSharpPInvokeGenerator

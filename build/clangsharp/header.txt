@@ -2,4 +2,3 @@
 // saucer is Copyright (c) 2023 Saucer and licensed under the MIT License.
 // These files are a derivative work of those headers; see THIRD-PARTY-NOTICES.md
 // at the repository root for the full license text. Ryn itself is MIT-licensed.
-

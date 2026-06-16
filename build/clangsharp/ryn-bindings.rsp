@@ -62,8 +62,3 @@ generate-callconv-member-function
 c++
 --std
 c++17
-
---additional
--isystem
---additional
-/opt/homebrew/Cellar/llvm@21/21.1.8/lib/clang/21/include
