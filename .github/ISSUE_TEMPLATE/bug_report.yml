@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a problem or unexpected behavior in Ryn
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please search the
+        [existing issues](https://github.com/Yupmoh/Ryn/issues?q=is%3Aissue)
+        first to avoid duplicates.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      description: Which platform did you observe the bug on?
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      description: e.g. macOS 15.4, Windows 11 23H2, Ubuntu 24.04
+    validations:
+      required: false
+  - type: input
+    id: ryn-version
+    attributes:
+      label: Ryn version
+      description: The Ryn package or CLI version (e.g. 0.1.0). Run `ryn --version` if applicable.
+    validations:
+      required: true
+  - type: input
+    id: dotnet-version
+    attributes:
+      label: .NET version
+      description: Output of `dotnet --version` (e.g. 10.0.300).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Steps that reliably reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Run '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      description: Relevant log output, stack traces, or console messages. This is automatically formatted as code, so no backticks are needed.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help, such as a minimal reproduction repo, screenshots, or related issues.
+    validations:
+      required: false

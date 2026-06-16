@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/Yupmoh/Ryn#documentation
+    about: Read the README and docs before opening an issue. They cover install, getting started, architecture, and plugin authoring.
+  - name: Security report
+    url: https://github.com/Yupmoh/Ryn/security/advisories/new
+    about: Report security vulnerabilities privately. Do not open a public issue for security problems.
