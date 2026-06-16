@@ -36,8 +36,8 @@
           SkipUnchangedFiles="false" />
 
     <WriteLinesToFile
-        File="$(RynTemplateStageDir)/RynApp.csproj"
-        Lines="$([System.IO.File]::ReadAllText('$(RynTemplateStageDir)/RynApp.csproj').Replace('RYN_PACKAGE_VERSION','$(Version)'))"
+        File="$(RynTemplateStageDir)/RynApp1.csproj"
+        Lines="$([System.IO.File]::ReadAllText('$(RynTemplateStageDir)/RynApp1.csproj').Replace('RYN_PACKAGE_VERSION','$(Version)'))"
         Overwrite="true" />
 
     <ItemGroup>
