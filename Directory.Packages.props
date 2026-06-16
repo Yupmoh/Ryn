@@ -31,7 +31,7 @@
          suite in commercial contexts. 7.2.0 keeps the same FluentAssertions namespace and API, so
          no test code changes are needed. See CONTRIBUTING.md ("Test dependencies"). -->
     <PackageVersion Include="FluentAssertions" Version="7.2.0" />
-    <PackageVersion Include="Verify.Xunit" Version="28.14.1" />
+    <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
   </ItemGroup>
 
   <ItemGroup Label="Benchmarks">
