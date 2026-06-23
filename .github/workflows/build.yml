@@ -202,6 +202,36 @@ jobs:
         if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
         run: dotnet test tests/Ryn.PackageTests/Ryn.PackageTests.csproj -c ${{ matrix.configuration }} --filter "Category=Package" --logger "trx;LogFileName=package-results.trx"
 
+      # Pack guard: `dotnet pack` runs only at release time (release.yml), so packaging regressions slip past
+      # this matrix and fail the release TAG instead. Two release-only failure modes this reproduces on a PR:
+      # a content-only package with no dependencies fails pack outright with NU5017, and a no-assembly package
+      # (content or metapackage) packs a non-error EMPTY .snupkg that NuGet's symbol server then rejects on push
+      # with "400 ... does not contain any symbol (.pdb) files". This packs the whole solution (NU5017 fails the
+      # job here) and asserts every symbol package contains a .pdb. One leg (macOS/Release) is enough — the
+      # package graph is platform-independent. No --no-build: the Ryn bundle resolves project references during
+      # pack (NETSDK1085 under --no-build).
+      - name: Pack guard (solution packs, every snupkg non-empty)
+        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        shell: bash
+        run: |
+          rm -rf ./pack-guard-out
+          dotnet pack Ryn.slnx -c ${{ matrix.configuration }} -o ./pack-guard-out
+          shopt -s nullglob
+          snupkgs=(./pack-guard-out/*.snupkg)
+          if [ ${#snupkgs[@]} -eq 0 ]; then
+            echo "::error::No .snupkg files were produced; the library packages should each emit a symbol package."
+            exit 1
+          fi
+          fail=0
+          for s in "${snupkgs[@]}"; do
+            if ! unzip -Z1 "$s" | grep -q '\.pdb$'; then
+              echo "::error::$(basename "$s") contains no .pdb. NuGet's symbol server rejects empty symbol packages on push (400). Set <IncludeSymbols>false</IncludeSymbols> on the no-assembly project."
+              fail=1
+            fi
+          done
+          if [ "$fail" -eq 0 ]; then echo "Solution packed; all ${#snupkgs[@]} symbol packages contain symbols."; fi
+          exit $fail
+
       # TST-14: capture EVERY .trx, not just results.trx. The integration step logs
       # integration-results.trx and the package step package-results.trx, which the old basename glob
       # "**/results.trx" silently dropped — exactly the logs needed when a platform-specific native
