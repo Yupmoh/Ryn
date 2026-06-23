@@ -11,6 +11,8 @@
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <PackageReadmeFile></PackageReadmeFile>
+    <!-- Content-only template package: no assembly, so no symbols package (avoids an empty .snupkg -> NU5017). -->
+    <IncludeSymbols>false</IncludeSymbols>
   </PropertyGroup>
 
   <!--
