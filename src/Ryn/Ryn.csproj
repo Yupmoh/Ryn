@@ -11,6 +11,10 @@
          the assemblies would have to embed its own copy of the generator, which then collides with
          Ryn.Ipc's copy when a plugin is also referenced — two generators, duplicate code.) -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- No assembly of its own, so there are no symbols: skip the symbols package. An empty .snupkg packs
+         without error here (the metapackage has dependencies) but NuGet's symbol server rejects it on push
+         with "does not contain any symbol (.pdb) files". -->
+    <IncludeSymbols>false</IncludeSymbols>
     <IsAotCompatible>false</IsAotCompatible>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
     <!-- NU5128: a metapackage legitimately has dependencies but no lib/ assemblies. -->
