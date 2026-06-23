@@ -17,20 +17,17 @@ Status legend:
 
 ## Near-term
 
-### Multi-window support
+### Multi-window support — **delivered**
 
-The public API today exposes a single window: `RynApplication` owns exactly one
-`RynWindow`, and closing it quits the app. Real desktop apps routinely need a
-settings window, a detached panel, or a multi-document interface, so a single
-window is a hard ceiling on what can be built on Ryn. The plan is a window manager
-that can open and track multiple `RynWindow` instances, each with its own webview
-and IPC routing, plus per-window identity in events. This touches `RynApplication`,
-`RynWindow`/`IRynWindow`, the `window.*` commands, and the IPC origin model; the
-already-bound saucer setters (fullscreen, always-on-top, min/max size, position,
-center) would be wrapped at the same time. Because retrofitting this later would
-be a breaking change, the 1.0 API surface should either land it or be shaped (for
-example `app.MainWindow`) so it can be added non-breakingly. Status: **Planned**.
-(tracks CMP-01, ARC-13)
+`RynApplication` is now a window manager: it owns one native event loop and tracks
+multiple `RynWindow` instances, each with its own webview and per-window IPC
+routing, exposed via `MainWindow`, `Windows`, `OpenWindow`/`OpenWindowAsync`, the
+`IRynWindowManager` service, and the `window.open`/`list`/`current`/`close`/… JS
+commands. Closing the last window (not the main one) quits the app. See
+[multi-window.md](multi-window.md). One open item remains: on macOS a window opened
+after launch may paint only its background (a WebKit/`saucer` first-paint limitation
+documented in that doc); the API surface is complete and unaffected. (tracks
+CMP-01, ARC-13)
 
 ### Application menu bar and global shortcuts
 
