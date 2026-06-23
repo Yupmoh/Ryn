@@ -223,7 +223,7 @@ internal sealed unsafe class NativeAppHost : IDisposable
             var stateKey = isMain
                 ? _mainWindowOptions.ApplicationId
                 : $"{_mainWindowOptions.ApplicationId}.window{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-            var window = new RynWindow(this, id, options, stateKey);
+            var window = new RynWindow(this, id, options, stateKey, isMain);
             _windows[id] = window;
             if (isMain) _mainWindowId = id;
             return window;

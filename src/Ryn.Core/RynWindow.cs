@@ -73,14 +73,20 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
 
     /// <summary>Constructs a standalone window with no application host. Native operations are inert; used by
     /// tests that exercise the managed surface (events, accessor wiring) without a running event loop.</summary>
-    internal RynWindow(RynOptions options) : this(host: null, id: 0, options, options.ApplicationId) { }
+    internal RynWindow(RynOptions options) : this(host: null, id: 0, options, options.ApplicationId, isMain: true) { }
 
-    internal RynWindow(NativeAppHost? host, int id, RynOptions options, string stateKey)
+    // Whether this is the first (main) window. The main window is created during saucer's launch (OnReady) and
+    // loads its content before being shown; a secondary window is created after the loop is running and is shown
+    // before its content loads (see InitializeNative). Also gates the per-window PersistWindowState key.
+    private readonly bool _isMain;
+
+    internal RynWindow(NativeAppHost? host, int id, RynOptions options, string stateKey, bool isMain)
     {
         _host = host;
         Id = id;
         _options = options;
         _stateKey = stateKey;
+        _isMain = isMain;
         _cachedTitle = options.Title;
         _cachedWidth = options.Width;
         _cachedHeight = options.Height;
@@ -372,6 +378,40 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
 
         SubscribeWindowEvents();
+        // The main window is created during AppKit's launch display cycle and loads before it is shown. A
+        // secondary window is created after the loop is already running: show it FIRST, then load on the next
+        // tick so the window is on screen when its content navigates. NOTE: on macOS a WKWebView created after
+        // launch may still not composite its content — a WebKit limitation with windows opened off the launch
+        // cycle (see docs/multi-window.md). Showing-then-loading at least paints the page's themed background
+        // instead of a blank white view.
+        if (_isMain)
+        {
+            LoadContent();
+            Saucer.saucer_window_show(_window);
+            _host?.RunOnUi(RefitWebView);
+        }
+        else
+        {
+            Saucer.saucer_window_show(_window);
+            _host?.RunOnUi(() =>
+            {
+                if (_disposed || _webview == null) return;
+                RefitWebView();
+                LoadContent();
+            });
+        }
+    }
+
+    /// <summary>
+    /// Navigates the webview to the window's configured content: an external dev/remote URL, a local-server
+    /// origin, a content directory, or inline HTML (over the ryn:// app scheme where applicable). Split out of
+    /// <see cref="InitializeNative"/> so a secondary window can defer the load until after it is shown.
+    /// </summary>
+    private void LoadContent()
+    {
+        if (_rynWebView == null || _webview == null)
+            return;
+
         if (_options.Url != null)
         {
             var url = _options.Url;
@@ -418,26 +458,23 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
         else if (_options.ContentDirectory != null) { _rynWebView.SetContentDirectory(_options.ContentDirectory); _rynWebView.NavigateToAppScheme(); }
         else if (_options.Html != null) { _rynWebView.SetHtmlContent(_options.Html); _rynWebView.NavigateToAppScheme(); }
-        Saucer.saucer_window_show(_window);
-        // Re-fit the webview to its window on the NEXT loop tick. A webview created while the event loop is
-        // already running (a secondary window opened via OpenWindow) is added to a window whose content view is
-        // not yet at its final size, so the webview ends up at stale bounds and the window shows only its grey
-        // background. Re-fitting inline here is too early; deferring to the next tick — once the window has been
-        // realized and laid out — sets the correct bounds so the content fills the window. The main window is
-        // already laid out at startup, so this is a harmless no-op for it.
-        _host?.RunOnUi(RefitWebView);
     }
 
     /// <summary>
-    /// Re-fits the webview to fill its window's content view, posted to run after the window has been realized.
-    /// A webview created while the event loop is already running (a secondary window opened via OpenWindow) is
-    /// added before the window's content view is at its final size, so without this it can render at stale
-    /// bounds. The main window, laid out at startup, is unaffected.
+    /// Posted to run after a window has been realized: re-fits the webview to fill the window's content view,
+    /// makes a newly opened window key, and — on macOS — foregrounds the app. A webview created while the event
+    /// loop is already running (a secondary window opened via OpenWindow) is added before the content view is at
+    /// its final size, so without the re-fit it can render at stale bounds.
     /// </summary>
     private void RefitWebView()
     {
         if (_disposed || _webview == null) return;
         Saucer.saucer_webview_reset_bounds(_webview);
+        // A newly opened window should be key/front; for the main window this just reasserts the focus it holds.
+        if (_window != null) Saucer.saucer_window_focus(_window);
+        // Foreground the app: saucer orders the window front but does not activate the process, and a
+        // terminal-launched (non-bundled) binary does not activate itself, so it would otherwise stay inactive.
+        if (OperatingSystem.IsMacOS()) MacOsAppActivation.Activate();
     }
 
     private void ApplyWindowOptions()
