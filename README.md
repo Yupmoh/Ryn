@@ -49,11 +49,13 @@ How Ryn compares on the axes that matter for a small, native, web-UI desktop app
 | IPC source generator | yes | n/a | no | no | n/a |
 | Scaffold/dev/bundle CLI | yes | yes | no | partial | dotnet |
 | Signed auto-updater | yes | yes | no | no | no |
-| Multi-window | no (planned) | yes | yes | yes | limited |
+| Multi-window | yes² | yes | yes | yes | limited |
 | Native app menus | no (planned) | yes | partial | yes | yes |
 | Mobile | no (desktop-only) | yes | no | no | yes |
 
 ¹ Photino is a thin wrapper; the deployed size depends on your own .NET app and runtime. The point of the row is the relative weight of the webview layer, not a head-to-head app size.
+
+² Multi-window: the API (open/track/close, per-window IPC) is complete on all platforms. On macOS a window opened after launch may currently paint only its background — a WebKit/saucer first-paint limitation; see [docs/multi-window.md](docs/multi-window.md).
 
 These numbers are for orientation, not a benchmark claim; they vary by platform, runtime mode (self-contained vs framework-dependent), and trimming. Ryn's ~5 MB figure is a NativeAOT hello-world on macOS arm64 (a full app pulling in every plugin is ~5.6 MB).
 
