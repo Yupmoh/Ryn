@@ -12,11 +12,15 @@ const activeTab = ref<Tab>('System')
 
 <template>
   <div class="app">
-    <header>
+    <!-- data-webview-drag makes this strip a window-drag handle natively (saucer hit-tests it and starts the
+         OS drag inside the mousedown — zero IPC, no desync). It works on every backend, unlike the CSS
+         -webkit-app-region, which only Chromium/WebView2 honors. See docs/custom-title-bars.md. -->
+    <header data-webview-drag>
       <div class="logo">
         <span class="accent">Ryn</span> + Vue
       </div>
-      <nav>
+      <!-- data-webview-ignore keeps the buttons clickable instead of dragging the window. -->
+      <nav data-webview-ignore>
         <button
           v-for="tab in tabs"
           :key="tab"
@@ -62,7 +66,6 @@ header {
   height: 56px;
   background: #111118;
   border-bottom: 1px solid #1e1e2e;
-  -webkit-app-region: drag;
 }
 
 .logo {
@@ -78,7 +81,6 @@ header {
 nav {
   display: flex;
   gap: 4px;
-  -webkit-app-region: no-drag;
 }
 
 nav button {

@@ -51,7 +51,12 @@ public interface IRynWindow
     public void ToggleMaximize();
     /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
     public void Move(int x, int y);
-    /// <summary>Initiates a window drag operation (for frameless windows).</summary>
+    /// <summary>
+    /// Initiates a window drag operation (for frameless windows). For dragging a title bar from HTML, prefer
+    /// the <c>data-webview-drag</c> attribute instead: it starts the OS drag synchronously inside the mousedown
+    /// with no IPC, whereas this command's round-trip makes the window lag the cursor on macOS. See
+    /// docs/custom-title-bars.md.
+    /// </summary>
     public void StartDrag();
     /// <summary>Initiates a window resize operation from the specified edge.</summary>
     public void StartResize(WindowEdge edge);

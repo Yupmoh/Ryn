@@ -335,6 +335,8 @@ docs/
   capabilities.md      Canonical ryn.json capability schema reference
   plugin-authoring.md  Guide for writing Ryn plugins
   vite-integration.md  Using Vite and TypeScript with Ryn
+  custom-title-bars.md Frameless title bars: data-webview-drag and window controls
+  multi-window.md      Opening and managing multiple windows
   accessibility-and-i18n.md  Current a11y / i18n stance
   ROADMAP.md           Planned work beyond the current alpha
 ```
@@ -347,6 +349,8 @@ docs/
 - [Capabilities Reference](docs/capabilities.md): the canonical `ryn.json` schema
 - [Plugin Authoring](docs/plugin-authoring.md): writing Ryn plugins with commands, options, DI, and events
 - [Vite Integration](docs/vite-integration.md): using Vite and TypeScript with Ryn
+- [Custom Title Bars](docs/custom-title-bars.md): frameless title bars, `data-webview-drag`, and window controls
+- [Multi-window](docs/multi-window.md): opening and managing multiple windows
 - [Accessibility & Internationalization](docs/accessibility-and-i18n.md): the current a11y / i18n stance
 - [Roadmap](docs/ROADMAP.md): planned capabilities beyond the current alpha
 - [Third-Party Notices](THIRD-PARTY-NOTICES.md): licenses for the native libraries Ryn redistributes
