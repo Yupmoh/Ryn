@@ -457,6 +457,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             urlStr.Dispose();
         }
         else if (_options.ContentDirectory != null) { _rynWebView.SetContentDirectory(_options.ContentDirectory); _rynWebView.NavigateToAppScheme(); }
+        else if (_options.EmbeddedContent != null) { _rynWebView.SetEmbeddedContent(_options.EmbeddedContent); _rynWebView.NavigateToAppScheme(); }
         else if (_options.Html != null) { _rynWebView.SetHtmlContent(_options.Html); _rynWebView.NavigateToAppScheme(); }
     }
 

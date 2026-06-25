@@ -224,6 +224,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     // HTML content to serve from ryn://app/
     private string? _htmlContent;
     private string? _contentDirectory;
+    private EmbeddedContentStore? _embeddedContent;
     private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { IpcProtocol.AppOrigin };
 
     /// <summary>
@@ -301,6 +302,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     internal void SetHtmlContent(string html) => _htmlContent = html;
 
     internal void SetContentDirectory(string path) => _contentDirectory = Path.GetFullPath(path);
+
+    internal void SetEmbeddedContent(EmbeddedContentStore store) => _embeddedContent = store;
 
     internal unsafe void NavigateToAppScheme()
     {
@@ -669,6 +672,17 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             return;
         }
 
+        // Serve from in-memory embedded content (single-exe distribution; no on-disk extraction).
+        if (_embeddedContent is not null)
+        {
+            var embeddedRelative = (path is "/" or "") ? "index.html" : path.TrimStart('/');
+            if (_embeddedContent.Get(embeddedRelative) is { } embeddedBytes)
+            {
+                ServeBytes(executor, embeddedBytes, GetMimeType(Path.GetExtension(embeddedRelative)));
+                return;
+            }
+        }
+
         // Serve static files from content directory
         if (_contentDirectory is not null)
         {
@@ -713,14 +727,16 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     // work. Move to the copied-executor async pattern used for commands (saucer_scheme_executor_copy + async
     // accept, refcounted via TryBeginNativeResponse/EndNativeResponse) and add Range handling. Deferred: it is
     // gated on the INT-03 executor-lifetime work landing first. Tracked in PLAN.md's performance backlog.
-    private static unsafe void ServeFile(saucer_scheme_executor* executor, string filePath)
-    {
-        var fileBytes = File.ReadAllBytes(filePath);
-        var mimeType = GetMimeType(Path.GetExtension(filePath));
+    private static unsafe void ServeFile(saucer_scheme_executor* executor, string filePath) =>
+        ServeBytes(executor, File.ReadAllBytes(filePath), GetMimeType(Path.GetExtension(filePath)));
 
-        fixed (byte* ptr = fileBytes)
+    /// <summary>Serves a response body from memory over the app scheme — shared by the on-disk file path and the
+    /// in-memory embedded-content path.</summary>
+    private static unsafe void ServeBytes(saucer_scheme_executor* executor, byte[] bytes, string mimeType)
+    {
+        fixed (byte* ptr = bytes)
         {
-            var stash = Saucer.saucer_stash_new_from(ptr, (nuint)fileBytes.Length);
+            var stash = Saucer.saucer_stash_new_from(ptr, (nuint)bytes.Length);
             Span<byte> mimeBuf = stackalloc byte[128];
             var mime = Utf8String.Create(mimeType, mimeBuf);
             var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);

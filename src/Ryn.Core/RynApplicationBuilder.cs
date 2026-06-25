@@ -125,11 +125,9 @@ public sealed class RynApplicationBuilder
                 ConsoleLoggerProvider.Configure(logging, configuration.GetSection("Logging"));
         });
 
-        if (options.UseEmbeddedContent && options.ContentDirectory is null)
+        if (options.UseEmbeddedContent && options.ContentDirectory is null && options.EmbeddedContent is null)
         {
-            var extractedDir = Internal.EmbeddedContentExtractor.TryExtract();
-            if (extractedDir is not null)
-                options.ContentDirectory = extractedDir;
+            options.EmbeddedContent = Internal.EmbeddedContentStore.TryLoad();
         }
 
         _services.AddSingleton(options);

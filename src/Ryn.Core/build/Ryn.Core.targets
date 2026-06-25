@@ -4,7 +4,7 @@
     build/ and buildTransitive/, see the Pack items in Ryn.Core.csproj). When the CLI embed flag is
     used (ryn build with embed) the CLI stages a ryn_embedded_content.zip next to the consumer
     .csproj and passes -p:RynEmbedContent=true; this target then embeds that zip as a manifest
-    resource so EmbeddedContentExtractor can find it at runtime.
+    resource so EmbeddedContentStore can load it into memory at runtime.
 
     Both the property check AND Exists() gate the item, so ordinary builds that never set
     RynEmbedContent and never stage the zip are completely unaffected.

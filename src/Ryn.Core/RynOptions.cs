@@ -104,10 +104,15 @@ public sealed class RynOptions
     public bool DevTools { get => _devTools; set => Set(ref _devTools, value); }
 
     /// <summary>
-    /// Whether to extract and serve embedded content resources. When left unset, the bundler-stamped
-    /// assembly metadata (<c>Ryn.UseEmbeddedContent</c>) decides; setting it explicitly always wins.
+    /// Whether to serve the web content the bundler embedded into the binary. When left unset, the
+    /// bundler-stamped assembly metadata (<c>Ryn.UseEmbeddedContent</c>) decides; setting it explicitly always
+    /// wins. The content is served from memory by the ryn:// scheme handler — no on-disk extraction.
     /// </summary>
     public bool UseEmbeddedContent { get => _useEmbeddedContent; set => Set(ref _useEmbeddedContent, value); }
+
+    /// <summary>The embedded content loaded into memory by the builder when <see cref="UseEmbeddedContent"/> is
+    /// on and no <see cref="ContentDirectory"/> is set. Not a configurable option — populated by the host.</summary>
+    internal Internal.EmbeddedContentStore? EmbeddedContent { get; set; }
 
     /// <summary>Whether to automatically save and restore window position and size.</summary>
     public bool PersistWindowState { get => _persistWindowState; set => Set(ref _persistWindowState, value); }
