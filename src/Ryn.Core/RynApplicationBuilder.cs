@@ -211,6 +211,18 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.Height)] is { } height && int.TryParse(height, CultureInfo.InvariantCulture, out var h))
             options.Height = h;
 
+        if (section[nameof(RynOptions.MinWidth)] is { } minWidth && int.TryParse(minWidth, CultureInfo.InvariantCulture, out var minW))
+            options.MinWidth = minW;
+
+        if (section[nameof(RynOptions.MinHeight)] is { } minHeight && int.TryParse(minHeight, CultureInfo.InvariantCulture, out var minH))
+            options.MinHeight = minH;
+
+        if (section[nameof(RynOptions.MaxWidth)] is { } maxWidth && int.TryParse(maxWidth, CultureInfo.InvariantCulture, out var maxW))
+            options.MaxWidth = maxW;
+
+        if (section[nameof(RynOptions.MaxHeight)] is { } maxHeight && int.TryParse(maxHeight, CultureInfo.InvariantCulture, out var maxH))
+            options.MaxHeight = maxH;
+
         if (section[nameof(RynOptions.Resizable)] is { } resizable && bool.TryParse(resizable, out var r))
             options.Resizable = r;
 
@@ -236,6 +248,10 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.Title), static (t, s) => t.Title = s.Title);
         CopyIfSet(target, source, nameof(RynOptions.Width), static (t, s) => t.Width = s.Width);
         CopyIfSet(target, source, nameof(RynOptions.Height), static (t, s) => t.Height = s.Height);
+        CopyIfSet(target, source, nameof(RynOptions.MinWidth), static (t, s) => t.MinWidth = s.MinWidth);
+        CopyIfSet(target, source, nameof(RynOptions.MinHeight), static (t, s) => t.MinHeight = s.MinHeight);
+        CopyIfSet(target, source, nameof(RynOptions.MaxWidth), static (t, s) => t.MaxWidth = s.MaxWidth);
+        CopyIfSet(target, source, nameof(RynOptions.MaxHeight), static (t, s) => t.MaxHeight = s.MaxHeight);
         CopyIfSet(target, source, nameof(RynOptions.Resizable), static (t, s) => t.Resizable = s.Resizable);
         CopyIfSet(target, source, nameof(RynOptions.TitleBarStyle), static (t, s) => t.TitleBarStyle = s.TitleBarStyle);
         CopyIfSet(target, source, nameof(RynOptions.Transparent), static (t, s) => t.Transparent = s.Transparent);

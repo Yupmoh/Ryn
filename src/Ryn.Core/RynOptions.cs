@@ -18,6 +18,10 @@ public sealed class RynOptions
     private string _title = "Ryn Application";
     private int _width = 800;
     private int _height = 600;
+    private int _minWidth;
+    private int _minHeight;
+    private int _maxWidth;
+    private int _maxHeight;
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
     private bool _transparent;
@@ -45,6 +49,19 @@ public sealed class RynOptions
 
     /// <summary>Initial window height in pixels.</summary>
     public int Height { get => _height; set => Set(ref _height, value); }
+
+    /// <summary>Minimum width in pixels the user can resize the window to (0 = no minimum). Enforced natively by
+    /// the OS, so the window simply can't be dragged smaller.</summary>
+    public int MinWidth { get => _minWidth; set => Set(ref _minWidth, value); }
+
+    /// <summary>Minimum height in pixels the user can resize the window to (0 = no minimum). Enforced natively.</summary>
+    public int MinHeight { get => _minHeight; set => Set(ref _minHeight, value); }
+
+    /// <summary>Maximum width in pixels the user can resize the window to (0 = no maximum). Enforced natively.</summary>
+    public int MaxWidth { get => _maxWidth; set => Set(ref _maxWidth, value); }
+
+    /// <summary>Maximum height in pixels the user can resize the window to (0 = no maximum). Enforced natively.</summary>
+    public int MaxHeight { get => _maxHeight; set => Set(ref _maxHeight, value); }
 
     /// <summary>Whether the window can be resized by the user.</summary>
     public bool Resizable { get => _resizable; set => Set(ref _resizable, value); }

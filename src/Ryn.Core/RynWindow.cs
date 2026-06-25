@@ -488,6 +488,12 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         titleStr.Dispose();
         Saucer.saucer_window_set_size(_window, _cachedWidth, _cachedHeight);
         Saucer.saucer_window_set_resizable(_window, (byte)(_cachedResizable ? 1 : 0));
+        // Native min/max size constraints: the OS clamps user resizing, so the window can't be dragged past them
+        // (no Resized-event workaround needed). 0 means unconstrained; only set a bound when one was requested.
+        if (_options.MinWidth > 0 || _options.MinHeight > 0)
+            Saucer.saucer_window_set_min_size(_window, _options.MinWidth, _options.MinHeight);
+        if (_options.MaxWidth > 0 || _options.MaxHeight > 0)
+            Saucer.saucer_window_set_max_size(_window, _options.MaxWidth, _options.MaxHeight);
         if (_options.Transparent)
         {
             // Fully transparent window + webview backgrounds so the page's own (semi-)transparent content

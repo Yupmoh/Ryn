@@ -17,6 +17,18 @@ public sealed class RynWindowOptions
     /// <summary>Initial window height in pixels.</summary>
     public int Height { get; set; } = 600;
 
+    /// <summary>Minimum width in pixels the user can resize to (0 = no minimum). Enforced natively.</summary>
+    public int MinWidth { get; set; }
+
+    /// <summary>Minimum height in pixels the user can resize to (0 = no minimum). Enforced natively.</summary>
+    public int MinHeight { get; set; }
+
+    /// <summary>Maximum width in pixels the user can resize to (0 = no maximum). Enforced natively.</summary>
+    public int MaxWidth { get; set; }
+
+    /// <summary>Maximum height in pixels the user can resize to (0 = no maximum). Enforced natively.</summary>
+    public int MaxHeight { get; set; }
+
     /// <summary>Whether the window can be resized by the user.</summary>
     public bool Resizable { get; set; } = true;
 
@@ -70,6 +82,10 @@ public sealed class RynWindowOptions
             Title = Title,
             Width = Width,
             Height = Height,
+            MinWidth = MinWidth,
+            MinHeight = MinHeight,
+            MaxWidth = MaxWidth,
+            MaxHeight = MaxHeight,
             Resizable = Resizable,
             TitleBarStyle = TitleBarStyle,
             Transparent = Transparent,

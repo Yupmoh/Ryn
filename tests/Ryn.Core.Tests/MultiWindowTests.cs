@@ -39,6 +39,10 @@ public sealed class MultiWindowTests
             Title = "Second",
             Width = 321,
             Height = 222,
+            MinWidth = 200,
+            MinHeight = 150,
+            MaxWidth = 1920,
+            MaxHeight = 1080,
             Resizable = false,
             TitleBarStyle = TitleBarStyle.Hidden,
             Transparent = true,
@@ -57,6 +61,10 @@ public sealed class MultiWindowTests
         projected.Title.Should().Be("Second");
         projected.Width.Should().Be(321);
         projected.Height.Should().Be(222);
+        projected.MinWidth.Should().Be(200);
+        projected.MinHeight.Should().Be(150);
+        projected.MaxWidth.Should().Be(1920);
+        projected.MaxHeight.Should().Be(1080);
         projected.Resizable.Should().BeFalse();
         projected.TitleBarStyle.Should().Be(TitleBarStyle.Hidden);
         projected.Transparent.Should().BeTrue();
