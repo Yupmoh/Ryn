@@ -305,6 +305,20 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                 _host.RegisterScheme(customScheme);
         }
         var webviewOpts = Saucer.saucer_webview_options_new(_window);
+        // GPU acceleration and engine flags must be set on the options before the webview is created — they
+        // configure how the render process is spun up, so there is no after-the-fact equivalent on a live webview.
+        Saucer.saucer_webview_options_set_hardware_acceleration(webviewOpts, _options.HardwareAcceleration ? (byte)1 : (byte)0);
+        if (_options.BrowserFlags.Count > 0)
+        {
+            Span<byte> flagBuf = stackalloc byte[256];
+            foreach (var flag in _options.BrowserFlags)
+            {
+                if (string.IsNullOrEmpty(flag)) continue;
+                var flagStr = Utf8String.Create(flag, flagBuf);
+                Saucer.saucer_webview_options_append_browser_flag(webviewOpts, flagStr.Pointer);
+                flagStr.Dispose();
+            }
+        }
         _webview = Saucer.saucer_webview_new(webviewOpts, &error);
         Saucer.saucer_webview_options_free(webviewOpts);
         if (_webview == null) throw new InvalidOperationException($"Failed to create saucer webview (error code: {error})");

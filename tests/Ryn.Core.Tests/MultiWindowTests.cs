@@ -52,9 +52,11 @@ public sealed class MultiWindowTests
             IconPath = "/tmp/icon.png",
             DevTools = true,
             PersistWindowState = true,
+            HardwareAcceleration = false,
         };
         options.AllowedOrigins.Add("https://allowed.test");
         options.CustomSchemes.Add("custom");
+        options.BrowserFlags.Add("--enable-unsafe-webgpu");
 
         var projected = options.ToRynOptions();
 
@@ -74,8 +76,10 @@ public sealed class MultiWindowTests
         projected.IconPath.Should().Be("/tmp/icon.png");
         projected.DevTools.Should().BeTrue();
         projected.PersistWindowState.Should().BeTrue();
+        projected.HardwareAcceleration.Should().BeFalse();
         projected.AllowedOrigins.Should().ContainSingle().Which.Should().Be("https://allowed.test");
         projected.CustomSchemes.Should().ContainSingle().Which.Should().Be("custom");
+        projected.BrowserFlags.Should().ContainSingle().Which.Should().Be("--enable-unsafe-webgpu");
     }
 
     [Fact]

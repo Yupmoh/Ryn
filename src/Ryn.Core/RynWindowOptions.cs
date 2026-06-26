@@ -38,6 +38,16 @@ public sealed class RynWindowOptions
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get; set; }
 
+    /// <summary>Whether the webview renders with GPU hardware acceleration (default true). Set false only as a
+    /// compatibility escape hatch for flaky GPU drivers or headless/virtualized environments — it makes canvas,
+    /// WebGL and WebGPU much slower. Applied once, before the webview is created.</summary>
+    public bool HardwareAcceleration { get; set; } = true;
+
+    /// <summary>Engine-specific webview flags applied before creation — the lever for experimental rendering
+    /// features (e.g. <c>--enable-unsafe-webgpu</c> on Windows/Chromium). Syntax is not portable across
+    /// platforms; see <see cref="RynOptions.BrowserFlags"/> for the per-engine format.</summary>
+    public IList<string> BrowserFlags { get; } = new List<string>();
+
     /// <summary>URL to navigate to on open. Mutually exclusive with <see cref="Html"/> and <see cref="ContentDirectory"/>.</summary>
     public Uri? Url { get; set; }
 
@@ -89,6 +99,7 @@ public sealed class RynWindowOptions
             Resizable = Resizable,
             TitleBarStyle = TitleBarStyle,
             Transparent = Transparent,
+            HardwareAcceleration = HardwareAcceleration,
             Url = Url,
             Html = Html,
             ContentDirectory = ContentDirectory,
@@ -100,6 +111,7 @@ public sealed class RynWindowOptions
         };
         foreach (var origin in AllowedOrigins) options.AllowedOrigins.Add(origin);
         foreach (var scheme in CustomSchemes) options.CustomSchemes.Add(scheme);
+        foreach (var flag in BrowserFlags) options.BrowserFlags.Add(flag);
         return options;
     }
 }

@@ -25,6 +25,7 @@ public sealed class RynOptions
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
     private bool _transparent;
+    private bool _hardwareAcceleration = true;
     private Uri? _url;
     private string? _html;
     private string? _contentDirectory;
@@ -71,6 +72,15 @@ public sealed class RynOptions
 
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get => _transparent; set => Set(ref _transparent, value); }
+
+    /// <summary>
+    /// Whether the webview renders with GPU hardware acceleration. Default true (the engine's own default).
+    /// Set false to force software rendering — a compatibility escape hatch for flaky GPU drivers (notably some
+    /// Linux/WebKitGTK setups) or virtualized/headless environments. Leaving it on is what you want for canvas,
+    /// WebGL and WebGPU workloads; turning it off makes those much slower. Applied once, before the webview is
+    /// created, so it cannot change for a live window.
+    /// </summary>
+    public bool HardwareAcceleration { get => _hardwareAcceleration; set => Set(ref _hardwareAcceleration, value); }
 
     /// <summary>URL to navigate to on startup. Mutually exclusive with <see cref="Html"/> and <see cref="ContentDirectory"/>.</summary>
     public Uri? Url { get => _url; set => Set(ref _url, value); }
@@ -146,6 +156,22 @@ public sealed class RynOptions
     /// the engine before the webview exists.
     /// </summary>
     public IList<string> CustomSchemes { get; } = new List<string>();
+
+    /// <summary>
+    /// Engine-specific flags passed to the underlying webview before it is created — the lever for opting into
+    /// experimental rendering features. The syntax is <b>not portable</b> across platforms, because each OS uses
+    /// a different engine:
+    /// <list type="bullet">
+    /// <item>Windows (WebView2/Chromium): Chromium command-line switches, e.g. <c>--enable-unsafe-webgpu</c>,
+    /// <c>--ignore-gpu-blocklist</c>, <c>--enable-features=Vulkan</c>.</item>
+    /// <item>Linux (WebKitGTK): WebKit feature/setting flags.</item>
+    /// <item>macOS (WKWebView): <c>key=value</c> pairs applied to <c>WKWebViewConfiguration</c> (value parsed as
+    /// JSON); a flag with no <c>=</c> is ignored.</item>
+    /// </list>
+    /// Guard platform-specific flags behind an OS check so a Chromium switch isn't handed to WebKit. Empty by
+    /// default. Applied once, before webview creation.
+    /// </summary>
+    public IList<string> BrowserFlags { get; } = new List<string>();
 
     /// <summary>True when <paramref name="propertyName"/> was explicitly assigned on this instance.</summary>
     internal bool IsSet(string propertyName) => _setProperties.Contains(propertyName);

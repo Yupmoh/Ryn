@@ -236,6 +236,9 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.DevTools)] is { } devTools && bool.TryParse(devTools, out var d))
             options.DevTools = d;
 
+        if (section[nameof(RynOptions.HardwareAcceleration)] is { } hwAccel && bool.TryParse(hwAccel, out var hw))
+            options.HardwareAcceleration = hw;
+
         // Url intentionally excluded — Uri binding needs TypeConverter reflection, keep code-only
     }
 
@@ -256,6 +259,7 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.Resizable), static (t, s) => t.Resizable = s.Resizable);
         CopyIfSet(target, source, nameof(RynOptions.TitleBarStyle), static (t, s) => t.TitleBarStyle = s.TitleBarStyle);
         CopyIfSet(target, source, nameof(RynOptions.Transparent), static (t, s) => t.Transparent = s.Transparent);
+        CopyIfSet(target, source, nameof(RynOptions.HardwareAcceleration), static (t, s) => t.HardwareAcceleration = s.HardwareAcceleration);
         CopyIfSet(target, source, nameof(RynOptions.Url), static (t, s) => t.Url = s.Url);
         CopyIfSet(target, source, nameof(RynOptions.Html), static (t, s) => t.Html = s.Html);
         CopyIfSet(target, source, nameof(RynOptions.ContentDirectory), static (t, s) => t.ContentDirectory = s.ContentDirectory);
@@ -287,6 +291,12 @@ public sealed class RynApplicationBuilder
         {
             target.CustomSchemes.Clear();
             foreach (var scheme in source.CustomSchemes) target.CustomSchemes.Add(scheme);
+        }
+
+        if (source.BrowserFlags.Count > 0)
+        {
+            target.BrowserFlags.Clear();
+            foreach (var flag in source.BrowserFlags) target.BrowserFlags.Add(flag);
         }
     }
 
