@@ -24,6 +24,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
     private const long MaxBodyBytes = 32L * 1024 * 1024;   // matches the previous body cap
 
     private readonly string? _contentDirectory;
+    private EmbeddedContentStore? _embeddedContent;
     private readonly string? _allowedCorsOrigin;
     private readonly int _preferredPort;
     private ILocalServerHost? _webView;
@@ -48,6 +49,10 @@ internal sealed class LocalWebServer : IAsyncDisposable
     }
 
     internal void SetWebView(ILocalServerHost webView) => _webView = webView;
+
+    /// <summary>Serve static requests from this in-memory embedded content first (bundled builds), falling back
+    /// to the on-disk content directory for anything not embedded (dev mode).</summary>
+    internal void SetEmbeddedContent(EmbeddedContentStore store) => _embeddedContent = store;
 
     internal Task StartAsync()
     {
@@ -482,44 +487,62 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     private async Task ServeStaticAsync(NetworkStream stream, HttpRequest request, bool keepAlive, CancellationToken ct)
     {
-        if (_contentDirectory is null)
-        {
-            await WriteTextAsync(stream, 404, "Not Found", "not found", keepAlive, ct).ConfigureAwait(false);
-            return;
-        }
-
-        var rawPath = request.Path;
-        var relative = Uri.UnescapeDataString(rawPath.TrimStart('/'));
+        var relative = Uri.UnescapeDataString(request.Path.TrimStart('/'));
         if (string.IsNullOrEmpty(relative))
             relative = "index.html";
-
-        var filePath = ResolveWithinContent(relative);
-
-        // SPA fallback: an unmatched route serves index.html (mirrors the previous MapFallback behavior).
-        if (filePath is null || !File.Exists(filePath))
-            filePath = ResolveWithinContent("index.html");
-
-        if (filePath is null || !File.Exists(filePath))
-        {
-            await WriteTextAsync(stream, 404, "Not Found", "not found", keepAlive, ct).ConfigureAwait(false);
-            return;
-        }
-
-        byte[] content;
-        try { content = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false); }
-        catch (IOException)
-        {
-            await WriteTextAsync(stream, 500, "Internal Server Error", "read error", keepAlive, ct).ConfigureAwait(false);
-            return;
-        }
 
         var headers = new List<(string, string)>
         {
             ("Cache-Control", "no-cache, no-store, must-revalidate"),
             ("X-Content-Type-Options", "nosniff"),
         };
-        var body = request.Method == "HEAD" ? [] : content;
-        await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(filePath)), body, headers, keepAlive, ct).ConfigureAwait(false);
+
+        // Embedded content (bundled): serve from the in-memory map, SPA-falling back to index.html. This is what
+        // lets UseLocalServer compose with embedded content — a bundled single binary served over http://localhost
+        // (some scripts, e.g. Cloudflare Turnstile, reject the ryn:// origin).
+        if (_embeddedContent is not null)
+        {
+            var servedPath = relative;
+            var embeddedBytes = _embeddedContent.Get(relative);
+            if (embeddedBytes is null)
+            {
+                embeddedBytes = _embeddedContent.Get("index.html");
+                servedPath = "index.html";
+            }
+            if (embeddedBytes is not null)
+            {
+                var embeddedBody = request.Method == "HEAD" ? [] : embeddedBytes;
+                await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(servedPath)), embeddedBody, headers, keepAlive, ct).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        // On-disk content directory (dev mode, or an explicit ContentDirectory not covered by embedded content).
+        if (_contentDirectory is not null)
+        {
+            var filePath = ResolveWithinContent(relative);
+
+            // SPA fallback: an unmatched route serves index.html (mirrors the previous MapFallback behavior).
+            if (filePath is null || !File.Exists(filePath))
+                filePath = ResolveWithinContent("index.html");
+
+            if (filePath is not null && File.Exists(filePath))
+            {
+                byte[] content;
+                try { content = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false); }
+                catch (IOException)
+                {
+                    await WriteTextAsync(stream, 500, "Internal Server Error", "read error", keepAlive, ct).ConfigureAwait(false);
+                    return;
+                }
+
+                var body = request.Method == "HEAD" ? [] : content;
+                await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(filePath)), body, headers, keepAlive, ct).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        await WriteTextAsync(stream, 404, "Not Found", "not found", keepAlive, ct).ConfigureAwait(false);
     }
 
     /// <summary>Resolves a request-relative path under the content root, rejecting directory traversal.</summary>

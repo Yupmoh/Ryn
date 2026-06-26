@@ -444,9 +444,13 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             Saucer.saucer_webview_set_url_str(_webview, urlStr.Pointer);
             urlStr.Dispose();
         }
-        else if (_options.UseLocalServer && _options.ContentDirectory != null)
+        else if (_options.UseLocalServer && (_options.ContentDirectory != null || _options.EmbeddedContent != null))
         {
+            // Local HTTP server: a real http://localhost origin (some scripts — e.g. Cloudflare Turnstile —
+            // reject the ryn:// origin). Composes both content sources: it serves embedded content from memory
+            // when bundled and falls back to the content directory on disk in dev.
             _localServer = new LocalWebServer(_options.ContentDirectory, _options.LocalServerPort);
+            if (_options.EmbeddedContent != null) _localServer.SetEmbeddedContent(_options.EmbeddedContent);
             _localServer.StartAsync().GetAwaiter().GetResult();
             _localServer.SetWebView(_rynWebView);
             var serverUrl = _localServer.Url;
@@ -456,8 +460,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             Saucer.saucer_webview_set_url_str(_webview, urlStr.Pointer);
             urlStr.Dispose();
         }
-        else if (_options.ContentDirectory != null) { _rynWebView.SetContentDirectory(_options.ContentDirectory); _rynWebView.NavigateToAppScheme(); }
-        else if (_options.EmbeddedContent != null) { _rynWebView.SetEmbeddedContent(_options.EmbeddedContent); _rynWebView.NavigateToAppScheme(); }
+        else if (_options.ContentDirectory != null || _options.EmbeddedContent != null)
+        {
+            // ryn:// scheme. Set both sources when present; the handler serves embedded content from memory first
+            // and falls back to the on-disk content directory (dev mode).
+            if (_options.ContentDirectory != null) _rynWebView.SetContentDirectory(_options.ContentDirectory);
+            if (_options.EmbeddedContent != null) _rynWebView.SetEmbeddedContent(_options.EmbeddedContent);
+            _rynWebView.NavigateToAppScheme();
+        }
         else if (_options.Html != null) { _rynWebView.SetHtmlContent(_options.Html); _rynWebView.NavigateToAppScheme(); }
     }
 

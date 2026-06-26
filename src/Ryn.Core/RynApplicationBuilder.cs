@@ -125,7 +125,10 @@ public sealed class RynApplicationBuilder
                 ConsoleLoggerProvider.Configure(logging, configuration.GetSection("Logging"));
         });
 
-        if (options.UseEmbeddedContent && options.ContentDirectory is null && options.EmbeddedContent is null)
+        // Load the embedded content into memory whenever embedding is on (even if a ContentDirectory is also set
+        // — in a bundled build the loose directory isn't shipped, and the scheme/local-server handlers serve
+        // embedded-first with the directory as a dev fallback). TryLoad returns null in dev (no embedded resource).
+        if (options.UseEmbeddedContent && options.EmbeddedContent is null)
         {
             options.EmbeddedContent = Internal.EmbeddedContentStore.TryLoad();
         }
