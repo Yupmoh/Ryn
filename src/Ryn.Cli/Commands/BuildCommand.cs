@@ -52,13 +52,15 @@ internal static class BuildCommand
         if (embedContent)
             arguments += " -p:RynEmbedContent=true";
 
-        var process = Process.Start(new ProcessStartInfo
+        var psi = new ProcessStartInfo
         {
             FileName = dotnet,
             Arguments = arguments,
             WorkingDirectory = projectDir,
             UseShellExecute = false,
-        });
+        };
+        NativeAotToolchain.Configure(psi, useAot);
+        var process = Process.Start(psi);
 
         process?.WaitForExit();
 

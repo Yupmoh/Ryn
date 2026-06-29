@@ -22,4 +22,21 @@
   <ItemGroup Condition="'$(RynEmbedContent)' == 'true' AND Exists('ryn_embedded_content.zip')">
     <AssemblyMetadata Include="Ryn.UseEmbeddedContent" Value="true" />
   </ItemGroup>
+
+  <!--
+    When content is embedded, the loose wwwroot copy in the build/publish output is redundant —
+    EmbeddedContentStore serves it from memory — and ships duplicate files next to the binary (and,
+    for `ryn bundle`, inside the .app/AppDir/MSI staging). Drop the wwwroot Content/None items before
+    AssignTargetPaths gives them output paths, so neither `dotnet build` nor `dotnet publish` copies
+    them. Gated on RynEmbedContent only (no zip needed), so a normal Debug build keeps wwwroot on disk
+    for hot reload and only an embed-flagged `ryn build` / `ryn bundle` strips it.
+  -->
+  <Target Name="RynStripLooseContentWhenEmbedded"
+          Condition="'$(RynEmbedContent)' == 'true'"
+          BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <Content Remove="wwwroot/**" />
+      <None Remove="wwwroot/**" />
+    </ItemGroup>
+  </Target>
 </Project>

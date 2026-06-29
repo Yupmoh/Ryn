@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Text.Json;
@@ -32,27 +33,57 @@ internal static class BundleCommand
         if (dotnet is null)
             return 1;
 
+        var useAot = args.Contains("--aot");
+        var embedContent = args.Contains("--embed");
+        var zipPath = Path.Combine(projectDir, "ryn_embedded_content.zip");
+
+        // Stage the embedded-content zip next to the .csproj so Ryn.Core.targets bakes it into the
+        // assembly as a manifest resource (and stamps the UseEmbeddedContent metadata). Without this the
+        // -p:RynEmbedContent=true flag is a no-op: the published binary has no embedded resource, the app
+        // falls back to disk, finds no wwwroot, and shows "not found".
+        if (embedContent)
+        {
+            var wwwroot = Path.Combine(projectDir, "wwwroot");
+            if (!Directory.Exists(wwwroot))
+            {
+                Console.Error.WriteLine("  --embed specified but no wwwroot/ directory found.");
+                return 1;
+            }
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            ZipFile.CreateFromDirectory(wwwroot, zipPath);
+            Console.WriteLine("  Embedded wwwroot content into zip");
+        }
+
         // The exact same publish arguments are reused both for the build and for the deterministic
         // PublishDir query below, so the directory we bundle from is the one this publish produced.
         var publishArgs = BuildPublishArgs(args);
 
         Console.WriteLine($"Building {projectName} for release...");
-        var buildProcess = Process.Start(new ProcessStartInfo
+        var buildPsi = new ProcessStartInfo
         {
             FileName = dotnet,
             Arguments = publishArgs,
             WorkingDirectory = projectDir,
             UseShellExecute = false,
-        });
+        };
+        NativeAotToolchain.Configure(buildPsi, useAot);
+        var buildProcess = Process.Start(buildPsi);
         buildProcess?.WaitForExit();
 
         if (buildProcess?.ExitCode != 0)
         {
+            DeleteStagedZip(embedContent, zipPath);
             Console.Error.WriteLine("  Build failed.");
             return 1;
         }
 
         var publishDir = ResolvePublishDir(dotnet, projectDir, publishArgs);
+
+        // Only now remove the staged zip. ResolvePublishDir re-runs publish with the same args
+        // (--getProperty:PublishDir), which re-evaluates the project; if the zip were already gone that
+        // evaluation would rebuild App.dll without the embedded resource, silently undoing the embed. The
+        // zip is a transient build input baked into the assembly by this point, so it is never committed.
+        DeleteStagedZip(embedContent, zipPath);
         if (publishDir is null)
         {
             Console.Error.WriteLine("  Could not locate the publish output directory.");
@@ -64,10 +95,10 @@ internal static class BundleCommand
             return CreateMacAppBundle(projectDir, projectName, publishDir, args);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return CreateWindowsBundle(projectDir, projectName, publishDir, args);
+            return CreateWindowsBundle(projectDir, projectName, publishDir, args, embedContent);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return CreateLinuxBundle(projectDir, projectName, publishDir, args);
+            return CreateLinuxBundle(projectDir, projectName, publishDir, args, embedContent);
 
         Console.WriteLine();
         Console.WriteLine($"  Bundle ready: {publishDir}");
@@ -387,6 +418,20 @@ internal static class BundleCommand
         return schemes;
     }
 
+    /// <summary>
+    /// Removes the transient <c>ryn_embedded_content.zip</c> staged next to the project for an embed build.
+    /// Best-effort: a leftover zip is harmless, so IO failures are swallowed. No-op when not embedding.
+    /// </summary>
+    private static void DeleteStagedZip(bool embedContent, string zipPath)
+    {
+        if (!embedContent || !File.Exists(zipPath))
+            return;
+
+        try { File.Delete(zipPath); }
+        catch (IOException) { /* best-effort cleanup; a leftover zip is harmless */ }
+        catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+    }
+
     private static string XmlEscape(string value) => SecurityElement.Escape(value) ?? value;
 
     private static string? GetArgValue(ReadOnlySpan<string> args, string flag)
@@ -529,7 +574,7 @@ internal static class BundleCommand
         catch (UnauthorizedAccessException) { return null; }
     }
 
-    private static int CreateWindowsBundle(string projectDir, string projectName, string publishDir, ReadOnlySpan<string> args)
+    private static int CreateWindowsBundle(string projectDir, string projectName, string publishDir, ReadOnlySpan<string> args, bool embedContent)
     {
         var bundleDir = Path.Combine(projectDir, "bin", "bundle", projectName);
 
@@ -580,9 +625,10 @@ internal static class BundleCommand
             File.Copy(file, destPath, overwrite: true);
         }
 
-        // Copy wwwroot if present
+        // Copy wwwroot if present. Skipped when embedding: the content is baked into the binary and served
+        // from memory, so a loose wwwroot beside the .exe would be redundant duplicate files.
         var wwwrootDir = Path.Combine(projectDir, "wwwroot");
-        if (Directory.Exists(wwwrootDir))
+        if (!embedContent && Directory.Exists(wwwrootDir))
         {
             var destWwwroot = Path.Combine(bundleDir, "wwwroot");
             foreach (var file in Directory.GetFiles(wwwrootDir, "*", SearchOption.AllDirectories))
@@ -791,7 +837,7 @@ internal static class BundleCommand
         return new Guid(guidBytes).ToString("D");
     }
 
-    private static int CreateLinuxBundle(string projectDir, string projectName, string publishDir, ReadOnlySpan<string> args)
+    private static int CreateLinuxBundle(string projectDir, string projectName, string publishDir, ReadOnlySpan<string> args, bool embedContent)
     {
         var bundleDir = Path.Combine(projectDir, "bin", "bundle", projectName + ".AppDir");
 
@@ -854,9 +900,10 @@ internal static class BundleCommand
             File.Copy(file, destPath, overwrite: true);
         }
 
-        // Copy wwwroot if present
+        // Copy wwwroot if present. Skipped when embedding: the content lives in the binary and is served
+        // from memory, so a loose wwwroot in usr/bin would be redundant duplicate files.
         var wwwrootDir = Path.Combine(projectDir, "wwwroot");
-        if (Directory.Exists(wwwrootDir))
+        if (!embedContent && Directory.Exists(wwwrootDir))
         {
             var destWwwroot = Path.Combine(usrBin, "wwwroot");
             foreach (var file in Directory.GetFiles(wwwrootDir, "*", SearchOption.AllDirectories))
@@ -1068,6 +1115,10 @@ internal static class BundleCommand
             else if (args[i] == "--self-contained")
             {
                 sb.Append(" --self-contained");
+            }
+            else if (args[i] == "--embed")
+            {
+                sb.Append(" -p:RynEmbedContent=true");
             }
         }
 
