@@ -254,7 +254,7 @@ internal static class Program
 
         internal static readonly CommandSpec Bundle = new(
             "bundle",
-            BooleanFlags: ["--aot", "--self-contained", "--notarize", "--dmg"],
+            BooleanFlags: ["--aot", "--self-contained", "--embed", "--notarize", "--dmg"],
             ValueFlags: ["--project", "-p", "--rid", "--version", "--icon", "--sign",
                 "--entitlements", "--notary-profile", "--deep-link-scheme"],
             Usage: """
@@ -277,6 +277,8 @@ internal static class Program
                   --deep-link-scheme <name>  Register a custom URL scheme (repeatable)
                   --aot                      Publish with NativeAOT
                   --self-contained           Publish self-contained
+                  --embed                    Embed wwwroot/ into the binary (served from memory;
+                                             no loose wwwroot is staged in the bundle)
                   -h, --help                 Show this help
                 """);
 

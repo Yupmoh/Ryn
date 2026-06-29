@@ -104,6 +104,87 @@ public sealed class CliCommandTests
     }
 
     [Fact]
+    public async Task Bundle_Help_ListsEmbedOption()
+    {
+        var result = await RunCliAsync("bundle", null, "--help");
+        result.ExitCode.Should().Be(0);
+        result.Stdout.Should().Contain("--embed", because: "bundle must document the embed option like build does");
+    }
+
+    [Fact]
+    public async Task Bundle_Embed_NoWwwroot_ReturnsErrorWithoutPublishing()
+    {
+        // --embed must be a recognized flag (not exit 2 "Unknown option") and must fail fast with a clear
+        // message when there's nothing to embed — before any dotnet publish is attempted.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"ryn-embed-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        WriteMinimalCsproj(Path.Combine(tempDir, "App.csproj"));
+        try
+        {
+            var result = await RunCliAsync("bundle", tempDir, "--embed");
+
+            result.ExitCode.Should().Be(1, because: $"--embed with no wwwroot is an error. stderr: {result.Stderr}");
+            result.Stderr.Should().Contain("wwwroot", because: "the error must name the missing wwwroot directory");
+            result.Stderr.Should().NotContain("Unknown option", because: "--embed must be a recognized bundle flag");
+            result.Stdout.Should().NotContain("Building", because: "the missing-wwwroot check must run before publish");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Bundle_Embed_BakesContentIntoBinaryAndStripsLooseWwwroot()
+    {
+        // Full chain: `ryn bundle --embed` must stage the zip, pass -p:RynEmbedContent=true, let the targets
+        // bake it into the assembly as a manifest resource, strip the loose wwwroot, and clean the zip up.
+        // Regression guard for the subtle bug where ResolvePublishDir's second `--getProperty:PublishDir`
+        // evaluation rebuilt the assembly without the (already-deleted) zip and silently undid the embed.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"ryn-embed-int-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tempDir, "wwwroot"));
+        try
+        {
+            var targets = Path.Combine(RepoRoot(), "src", "Ryn.Core", "build", "Ryn.Core.targets");
+#pragma warning disable CA1849
+            File.WriteAllText(Path.Combine(tempDir, "wwwroot", "index.html"), "<html>EMBED-ME</html>");
+            File.WriteAllText(Path.Combine(tempDir, "App.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\">"
+                + "<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup>"
+                + "<ItemGroup><Content Include=\"wwwroot/**\" CopyToOutputDirectory=\"PreserveNewest\" /></ItemGroup>"
+                + $"<Import Project=\"{targets}\" /></Project>");
+            File.WriteAllText(Path.Combine(tempDir, "Program.cs"), "class P{static void Main(){}}");
+#pragma warning restore CA1849
+
+            var result = await RunCliAsync("bundle", tempDir, "--project", Path.Combine(tempDir, "App.csproj"), "--embed");
+
+            result.ExitCode.Should().Be(0, because: $"the bundle must succeed. stdout:\n{result.Stdout}\nstderr:\n{result.Stderr}");
+
+            // The transient staging zip must not survive the build.
+            File.Exists(Path.Combine(tempDir, "ryn_embedded_content.zip")).Should().BeFalse("the staged zip is cleaned up");
+
+            // The published assembly must carry the embedded resource (and the loose content must be gone).
+            var publishedDll = Directory
+                .EnumerateFiles(Path.Combine(tempDir, "bin"), "App.dll", SearchOption.AllDirectories)
+                .FirstOrDefault(p => p.Contains("publish", StringComparison.Ordinal));
+            publishedDll.Should().NotBeNull("publish must have produced App.dll");
+#pragma warning disable CA1849
+            var dllBytes = File.ReadAllBytes(publishedDll!);
+#pragma warning restore CA1849
+            ContainsAscii(dllBytes, "ryn_embedded_content.zip")
+                .Should().BeTrue("the embedded zip resource must be baked into the assembly");
+
+            var publishDir = Path.GetDirectoryName(publishedDll)!;
+            File.Exists(Path.Combine(publishDir, "index.html"))
+                .Should().BeFalse("the loose wwwroot content must be stripped from the publish output when embedding");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Dev_NoCsproj_ReturnsError()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"ryn-dev-{Guid.NewGuid():N}");
@@ -372,6 +453,36 @@ public sealed class CliCommandTests
             dir = Path.GetDirectoryName(dir);
         }
         throw new InvalidOperationException("Cannot find Ryn.Cli.csproj");
+    }
+
+    /// <summary>Walks up from the test assembly to the repository root (the directory that contains <c>src/</c>).</summary>
+    private static string RepoRoot()
+    {
+        var dir = Path.GetDirectoryName(typeof(CliCommandTests).Assembly.Location)!;
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir, "src", "Ryn.Core", "build")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        throw new InvalidOperationException("Cannot find the repository root");
+    }
+
+    /// <summary>True if <paramref name="haystack"/> contains <paramref name="needle"/> as a contiguous ASCII run
+    /// (managed manifest-resource names live in the metadata #Strings heap as UTF-8, so they appear verbatim).</summary>
+    private static bool ContainsAscii(byte[] haystack, string needle)
+    {
+        var pattern = System.Text.Encoding.ASCII.GetBytes(needle);
+        for (var i = 0; i <= haystack.Length - pattern.Length; i++)
+        {
+            var match = true;
+            for (var j = 0; j < pattern.Length; j++)
+            {
+                if (haystack[i + j] != pattern[j]) { match = false; break; }
+            }
+            if (match) return true;
+        }
+        return false;
     }
 
     private sealed record CliResult(int ExitCode, string Stdout, string Stderr);
