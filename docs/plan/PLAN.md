@@ -1,5 +1,9 @@
 # Ryn — Project Plan
 
+> **SUPERSEDED / HISTORICAL (2026-06-30):** this is the original phased plan. Many "not yet / SKIPPED"
+> notes are stale (Windows/Linux builds, MSI, AppImage, tray, updater all shipped; complex IPC types work).
+> For current status see `docs/ROADMAP.md`; delivered features are documented under `docs/`.
+
 **Rich Yet Native** — A cross-platform, lightweight .NET framework for building desktop applications with web UIs.
 
 ---
