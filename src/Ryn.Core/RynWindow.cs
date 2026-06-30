@@ -211,13 +211,28 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
     });
 
-    public void Move(int x, int y) => RunOnUi(() =>
+    public void Move(int x, int y) => RunOnUi(() => { if (_window != null) ApplyPosition(x, y); });
+
+    public void SetFullscreen(bool fullscreen) =>
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_fullscreen(_window, (byte)(fullscreen ? 1 : 0)); });
+
+    public void SetAlwaysOnTop(bool alwaysOnTop) =>
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_always_on_top(_window, (byte)(alwaysOnTop ? 1 : 0)); });
+
+    public void Center() => RunOnUi(() =>
     {
         if (_window == null) return;
+        if (TryComputeCenter(out var x, out var y)) ApplyPosition(x, y);
+    });
+
+    /// <summary>Applies a new top-left and updates the cached/normal-position bookkeeping (so a later restore from
+    /// maximized returns here). Caller must hold the UI thread and have checked <c>_window != null</c>.</summary>
+    private void ApplyPosition(int x, int y)
+    {
         Saucer.saucer_window_set_position(_window, x, y);
         _cachedX = x; _cachedY = y;
         if (Saucer.saucer_window_maximized(_window) == 0) { _normalX = x; _normalY = y; }
-    });
+    }
 
     public void StartDrag() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_drag(_window); });
 
@@ -811,6 +826,25 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var maxX = sx + Math.Max(0, sw - width);
         var maxY = sy + Math.Max(0, sh - height);
         return (Math.Clamp(x, sx, maxX), Math.Clamp(y, sy, maxY));
+    }
+
+    /// <summary>Computes the top-left that centers the window on its current screen. Returns false (leaving the
+    /// window put) if the screen bounds can't be read. Mirrors <see cref="ClampToScreen"/>'s native reads; must
+    /// run on the UI thread.</summary>
+    private bool TryComputeCenter(out int x, out int y)
+    {
+        x = 0; y = 0;
+        var screen = Saucer.saucer_window_screen(_window);
+        if (screen == null) return false;
+        int sx, sy, sw, sh, w, h;
+        Saucer.saucer_screen_position(screen, &sx, &sy);
+        Saucer.saucer_screen_size(screen, &sw, &sh);
+        Saucer.saucer_screen_free(screen);
+        if (sw <= 0 || sh <= 0) return false;
+        Saucer.saucer_window_size(_window, &w, &h);
+        x = sx + Math.Max(0, (sw - w) / 2);
+        y = sy + Math.Max(0, (sh - h) / 2);
+        return true;
     }
 
     /// <summary>
