@@ -43,6 +43,18 @@ internal sealed class WindowCommands
         _windows.Current.Height = height;
     }
 
+    [RynCommand("window.setPosition")]
+    public void SetPosition(int x, int y) => _windows.Current.Move(x, y);
+
+    [RynCommand("window.setFullscreen")]
+    public void SetFullscreen(bool fullscreen) => _windows.Current.SetFullscreen(fullscreen);
+
+    [RynCommand("window.setAlwaysOnTop")]
+    public void SetAlwaysOnTop(bool alwaysOnTop) => _windows.Current.SetAlwaysOnTop(alwaysOnTop);
+
+    [RynCommand("window.center")]
+    public void Center() => _windows.Current.Center();
+
     /// <summary>Returns the id of the window whose page invoked this command.</summary>
     [RynCommand("window.current")]
     public int Current() => _windows.Current.Id;

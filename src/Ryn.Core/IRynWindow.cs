@@ -51,6 +51,12 @@ public interface IRynWindow
     public void ToggleMaximize();
     /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
     public void Move(int x, int y);
+    /// <summary>Enters or leaves fullscreen mode.</summary>
+    public void SetFullscreen(bool fullscreen);
+    /// <summary>Sets whether the window stays above other windows.</summary>
+    public void SetAlwaysOnTop(bool alwaysOnTop);
+    /// <summary>Centers the window on its current screen.</summary>
+    public void Center();
     /// <summary>
     /// Initiates a window drag operation (for frameless windows). For dragging a title bar from HTML, prefer
     /// the <c>data-webview-drag</c> attribute instead: it starts the OS drag synchronously inside the mousedown
