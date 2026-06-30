@@ -426,6 +426,10 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_rynWebView == null || _webview == null)
             return;
 
+        // Cross-origin isolation (COOP/COEP/CORP) applies to ryn:// scheme content; the local-server path passes
+        // it through its constructor below. Harmless on the dev-server/remote paths (they don't serve via ryn://).
+        _rynWebView.SetCrossOriginIsolation(_options.CrossOriginIsolation);
+
         if (_options.Url != null)
         {
             var url = _options.Url;
@@ -463,7 +467,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             // Local HTTP server: a real http://localhost origin (some scripts — e.g. Cloudflare Turnstile —
             // reject the ryn:// origin). Composes both content sources: it serves embedded content from memory
             // when bundled and falls back to the content directory on disk in dev.
-            _localServer = new LocalWebServer(_options.ContentDirectory, _options.LocalServerPort);
+            _localServer = new LocalWebServer(_options.ContentDirectory, _options.LocalServerPort, crossOriginIsolation: _options.CrossOriginIsolation);
             if (_options.EmbeddedContent != null) _localServer.SetEmbeddedContent(_options.EmbeddedContent);
             _localServer.StartAsync().GetAwaiter().GetResult();
             _localServer.SetWebView(_rynWebView);

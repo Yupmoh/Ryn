@@ -181,6 +181,39 @@ public sealed class LocalWebServerTests : IAsyncLifetime
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task StaticResponse_OmitsCrossOriginIsolationHeaders_ByDefault()
+    {
+        var resp = await _client.GetAsync("/");
+
+        resp.Headers.Contains("Cross-Origin-Opener-Policy").Should().BeFalse();
+        resp.Headers.Contains("Cross-Origin-Embedder-Policy").Should().BeFalse();
+        resp.Headers.Contains("Cross-Origin-Resource-Policy").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task StaticResponse_SendsCoopCoepCorp_WhenCrossOriginIsolationEnabled()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"ryn-coi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        await File.WriteAllTextAsync(Path.Combine(dir, "index.html"), "<html>COI</html>");
+
+        var host = new FakeHost();
+        await using var server = new LocalWebServer(dir, preferredPort: 28930, crossOriginIsolation: true);
+        server.SetWebView(host);
+        await server.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(server.Url) };
+
+        var resp = await client.GetAsync("/");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        resp.Headers.GetValues("Cross-Origin-Opener-Policy").Should().ContainSingle().Which.Should().Be("same-origin");
+        resp.Headers.GetValues("Cross-Origin-Embedder-Policy").Should().ContainSingle().Which.Should().Be("require-corp");
+        resp.Headers.GetValues("Cross-Origin-Resource-Policy").Should().ContainSingle().Which.Should().Be("same-origin");
+
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
+
     private sealed class FakeHost : ILocalServerHost
     {
         public string IpcToken { get; } = Guid.NewGuid().ToString("N");

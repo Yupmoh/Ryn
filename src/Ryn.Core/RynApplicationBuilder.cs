@@ -239,6 +239,9 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.HardwareAcceleration)] is { } hwAccel && bool.TryParse(hwAccel, out var hw))
             options.HardwareAcceleration = hw;
 
+        if (section[nameof(RynOptions.CrossOriginIsolation)] is { } coi && bool.TryParse(coi, out var ci))
+            options.CrossOriginIsolation = ci;
+
         // Url intentionally excluded — Uri binding needs TypeConverter reflection, keep code-only
     }
 
@@ -272,6 +275,7 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.PersistWindowState), static (t, s) => t.PersistWindowState = s.PersistWindowState);
         CopyIfSet(target, source, nameof(RynOptions.CaptureUnhandledExceptions), static (t, s) => t.CaptureUnhandledExceptions = s.CaptureUnhandledExceptions);
         CopyIfSet(target, source, nameof(RynOptions.DisableDefaultLogging), static (t, s) => t.DisableDefaultLogging = s.DisableDefaultLogging);
+        CopyIfSet(target, source, nameof(RynOptions.CrossOriginIsolation), static (t, s) => t.CrossOriginIsolation = s.CrossOriginIsolation);
 
         // Get-only collections aren't config-bound, so a non-empty programmatic collection simply replaces
         // the (empty) target. An empty programmatic collection is treated as "not configured" and left alone.

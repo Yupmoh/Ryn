@@ -26,6 +26,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
     private readonly string? _contentDirectory;
     private EmbeddedContentStore? _embeddedContent;
     private readonly string? _allowedCorsOrigin;
+    private readonly bool _crossOriginIsolation;
     private readonly int _preferredPort;
     private ILocalServerHost? _webView;
     private TcpListener? _listener;
@@ -41,11 +42,13 @@ internal sealed class LocalWebServer : IAsyncDisposable
     /// <param name="contentDirectory">Static content root, or null for an IPC-only server (e.g. backing a Vite dev server).</param>
     /// <param name="preferredPort">Fixed loopback port to try first.</param>
     /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS.</param>
-    internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null)
+    /// <param name="crossOriginIsolation">When true, static responses send COOP/COEP/CORP so the page is crossOriginIsolated (SharedArrayBuffer).</param>
+    internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false)
     {
         _contentDirectory = contentDirectory is null ? null : Path.GetFullPath(contentDirectory);
         _preferredPort = preferredPort > 0 ? preferredPort : DefaultPort;
         _allowedCorsOrigin = allowedCorsOrigin?.TrimEnd('/');
+        _crossOriginIsolation = crossOriginIsolation;
     }
 
     internal void SetWebView(ILocalServerHost webView) => _webView = webView;
@@ -496,6 +499,15 @@ internal sealed class LocalWebServer : IAsyncDisposable
             ("Cache-Control", "no-cache, no-store, must-revalidate"),
             ("X-Content-Type-Options", "nosniff"),
         };
+
+        // Cross-origin isolation: COOP+COEP on the document make the page crossOriginIsolated (enabling
+        // SharedArrayBuffer / threaded WASM); CORP lets same-origin subresources load under COEP require-corp.
+        if (_crossOriginIsolation)
+        {
+            headers.Add(("Cross-Origin-Opener-Policy", "same-origin"));
+            headers.Add(("Cross-Origin-Embedder-Policy", "require-corp"));
+            headers.Add(("Cross-Origin-Resource-Policy", "same-origin"));
+        }
 
         // Embedded content (bundled): serve from the in-memory map, SPA-falling back to index.html. This is what
         // lets UseLocalServer compose with embedded content — a bundled single binary served over http://localhost

@@ -38,6 +38,7 @@ public sealed class RynOptions
     private bool _persistWindowState;
     private bool _captureUnhandledExceptions;
     private bool _disableDefaultLogging;
+    private bool _crossOriginIsolation;
 
     /// <summary>Reverse-DNS application identifier (e.g. "com.example.myapp").</summary>
     public string ApplicationId { get => _applicationId; set => Set(ref _applicationId, value); }
@@ -141,6 +142,23 @@ public sealed class RynOptions
     /// messages — e.g. a plugin that failed to initialize — are visible out of the box).
     /// </summary>
     public bool DisableDefaultLogging { get => _disableDefaultLogging; set => Set(ref _disableDefaultLogging, value); }
+
+    /// <summary>
+    /// When true, static-content responses (the ryn:// scheme handler and the local HTTP server) send
+    /// <c>Cross-Origin-Opener-Policy: same-origin</c>, <c>Cross-Origin-Embedder-Policy: require-corp</c> and
+    /// <c>Cross-Origin-Resource-Policy: same-origin</c>. That makes the page <c>crossOriginIsolated</c> and
+    /// enables <c>SharedArrayBuffer</c> — required by multithreaded WebAssembly (threaded Emscripten/Godot-web
+    /// builds, Rust/WASM threads) and multithreaded Blazor WASM. Default false. Plain WebGL/WebGPU/canvas and
+    /// OffscreenCanvas+Worker rendering do NOT need it. Caveat: with isolation on, cross-origin subresources
+    /// (e.g. a CDN) must send their own CORP/CORS headers or the browser blocks them. Applied per response, so
+    /// it takes effect on the next content load.
+    /// <para><b>Secure-context requirement:</b> <c>crossOriginIsolated</c> also requires a secure context. The
+    /// local HTTP server path (<see cref="UseLocalServer"/>, <c>http://localhost</c>) qualifies; the default
+    /// <c>ryn://</c> custom scheme may not be treated as a secure context on some engines (notably WebKit on
+    /// macOS/Linux), in which case the headers are correct but <c>crossOriginIsolated</c> stays false. If you
+    /// need <c>SharedArrayBuffer</c>, pair this with <see cref="UseLocalServer"/>.</para>
+    /// </summary>
+    public bool CrossOriginIsolation { get => _crossOriginIsolation; set => Set(ref _crossOriginIsolation, value); }
 
     /// <summary>Custom URL schemes to register for deep linking (e.g., "myapp").</summary>
     public IList<string> DeepLinkSchemes { get; } = new List<string>();

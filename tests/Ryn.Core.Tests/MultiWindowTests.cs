@@ -53,6 +53,7 @@ public sealed class MultiWindowTests
             DevTools = true,
             PersistWindowState = true,
             HardwareAcceleration = false,
+            CrossOriginIsolation = true,
         };
         options.AllowedOrigins.Add("https://allowed.test");
         options.CustomSchemes.Add("custom");
@@ -77,6 +78,7 @@ public sealed class MultiWindowTests
         projected.DevTools.Should().BeTrue();
         projected.PersistWindowState.Should().BeTrue();
         projected.HardwareAcceleration.Should().BeFalse();
+        projected.CrossOriginIsolation.Should().BeTrue();
         projected.AllowedOrigins.Should().ContainSingle().Which.Should().Be("https://allowed.test");
         projected.CustomSchemes.Should().ContainSingle().Which.Should().Be("custom");
         projected.BrowserFlags.Should().ContainSingle().Which.Should().Be("--enable-unsafe-webgpu");

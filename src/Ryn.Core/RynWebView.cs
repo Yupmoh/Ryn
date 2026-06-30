@@ -224,6 +224,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     // HTML content to serve from ryn://app/
     private string? _htmlContent;
     private string? _contentDirectory;
+    private bool _crossOriginIsolation;
     private EmbeddedContentStore? _embeddedContent;
     private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { IpcProtocol.AppOrigin };
 
@@ -302,6 +303,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     internal void SetHtmlContent(string html) => _htmlContent = html;
 
     internal void SetContentDirectory(string path) => _contentDirectory = Path.GetFullPath(path);
+
+    internal void SetCrossOriginIsolation(bool enabled) => _crossOriginIsolation = enabled;
 
     internal void SetEmbeddedContent(EmbeddedContentStore store) => _embeddedContent = store;
 
@@ -709,6 +712,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
                 Span<byte> mimeBuf = stackalloc byte[16];
                 var mime = Utf8String.Create("text/html", mimeBuf);
                 var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
+                AppendCrossOriginIsolationHeaders(response);
                 Saucer.saucer_scheme_executor_accept(executor, response);
                 // accept() copies the response; we still own (and must free) both native objects.
                 Saucer.saucer_scheme_response_free(response);
@@ -727,12 +731,12 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     // work. Move to the copied-executor async pattern used for commands (saucer_scheme_executor_copy + async
     // accept, refcounted via TryBeginNativeResponse/EndNativeResponse) and add Range handling. Deferred: it is
     // gated on the INT-03 executor-lifetime work landing first. Tracked in PLAN.md's performance backlog.
-    private static unsafe void ServeFile(saucer_scheme_executor* executor, string filePath) =>
+    private unsafe void ServeFile(saucer_scheme_executor* executor, string filePath) =>
         ServeBytes(executor, File.ReadAllBytes(filePath), GetMimeType(Path.GetExtension(filePath)));
 
     /// <summary>Serves a response body from memory over the app scheme — shared by the on-disk file path and the
     /// in-memory embedded-content path.</summary>
-    private static unsafe void ServeBytes(saucer_scheme_executor* executor, byte[] bytes, string mimeType)
+    private unsafe void ServeBytes(saucer_scheme_executor* executor, byte[] bytes, string mimeType)
     {
         fixed (byte* ptr = bytes)
         {
@@ -740,6 +744,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             Span<byte> mimeBuf = stackalloc byte[128];
             var mime = Utf8String.Create(mimeType, mimeBuf);
             var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
+            AppendCrossOriginIsolationHeaders(response);
             Saucer.saucer_scheme_executor_accept(executor, response);
             Saucer.saucer_scheme_response_free(response);
             Saucer.saucer_stash_free(stash);
@@ -1169,6 +1174,16 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         Saucer.saucer_scheme_response_append_header(response, hdr.Pointer, val.Pointer);
         hdr.Dispose();
         val.Dispose();
+    }
+
+    /// <summary>Appends COOP/COEP/CORP to a static-content response when cross-origin isolation is enabled, so the
+    /// page is <c>crossOriginIsolated</c> (SharedArrayBuffer / threaded WASM). No-op otherwise.</summary>
+    private unsafe void AppendCrossOriginIsolationHeaders(saucer_scheme_response* response)
+    {
+        if (!_crossOriginIsolation) return;
+        AppendHeader(response, "Cross-Origin-Opener-Policy", "same-origin");
+        AppendHeader(response, "Cross-Origin-Embedder-Policy", "require-corp");
+        AppendHeader(response, "Cross-Origin-Resource-Policy", "same-origin");
     }
 
     private static unsafe string ReadRequestBody(saucer_scheme_request* request)

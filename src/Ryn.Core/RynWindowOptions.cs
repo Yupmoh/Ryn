@@ -48,6 +48,11 @@ public sealed class RynWindowOptions
     /// platforms; see <see cref="RynOptions.BrowserFlags"/> for the per-engine format.</summary>
     public IList<string> BrowserFlags { get; } = new List<string>();
 
+    /// <summary>When true, static-content responses send COOP/COEP/CORP headers so the page is
+    /// <c>crossOriginIsolated</c> and <c>SharedArrayBuffer</c> works — required by multithreaded WASM / Blazor.
+    /// Default false. See <see cref="RynOptions.CrossOriginIsolation"/> for the full contract.</summary>
+    public bool CrossOriginIsolation { get; set; }
+
     /// <summary>URL to navigate to on open. Mutually exclusive with <see cref="Html"/> and <see cref="ContentDirectory"/>.</summary>
     public Uri? Url { get; set; }
 
@@ -100,6 +105,7 @@ public sealed class RynWindowOptions
             TitleBarStyle = TitleBarStyle,
             Transparent = Transparent,
             HardwareAcceleration = HardwareAcceleration,
+            CrossOriginIsolation = CrossOriginIsolation,
             Url = Url,
             Html = Html,
             ContentDirectory = ContentDirectory,
