@@ -144,7 +144,8 @@ internal static class NewCommand
     /// <summary>
     /// C# reserved keywords (and contextual keywords that are unsafe as a namespace/identifier). The
     /// project name is emitted verbatim as a <c>namespace</c>, a <c>using</c>, and a
-    /// <c>&lt;RootNamespace&gt;</c>, so a keyword here produces code that does not compile. We carry an
+    /// <c>&lt;RootNamespace&gt;</c> (split on '.'), so a keyword in any dot-separated segment (e.g.
+    /// <c>Cove.class</c>) produces code that does not compile — the check runs per segment. We carry an
     /// explicit set rather than depend on Roslyn's <c>SyntaxFacts</c>: the CLI is NativeAOT-published and
     /// must not pull in Microsoft.CodeAnalysis just to validate a name.
     /// </summary>
@@ -161,9 +162,10 @@ internal static class NewCommand
     };
 
     /// <summary>
-    /// Windows reserved device names. The project name is also used as a directory and file name
-    /// (<c>{name}.csproj</c>), and these names cannot be created as files/directories on Windows, so a
-    /// scaffolded project would be unusable there. Rejected on every OS for portability.
+    /// Windows reserved device names. The first '.'-separated segment governs the folder name and the
+    /// leading component of <c>{name}.csproj</c>; Windows reserves these device names even with an
+    /// extension (e.g. <c>CON.Gui</c>), and they cannot be created as files/directories there — so the
+    /// check is applied to the first segment. Rejected on every OS for portability.
     /// </summary>
     private static readonly HashSet<string> WindowsReservedNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -174,28 +176,42 @@ internal static class NewCommand
 
     /// <summary>
     /// Validates a project name for use as a C# namespace/identifier, a directory name, and a file
-    /// name. Returns <c>null</c> when the name is acceptable, or a clear, actionable error message
-    /// explaining the specific rule that was violated.
+    /// name. The name may be dotted (e.g. <c>Cove.Gui</c>); each '.'-separated segment is validated as
+    /// its own identifier. Returns <c>null</c> when the name is acceptable, or a clear, actionable
+    /// error message explaining the specific rule that was violated.
     /// </summary>
     private static string? ValidateProjectName(string name)
     {
         if (name.Length == 0)
             return "Invalid project name: name is empty.";
 
-        if (!(char.IsLetter(name[0]) || name[0] == '_'))
-            return $"Invalid project name: '{name}'. A name must start with a letter or underscore.";
-
-        foreach (var c in name)
+        // A dotted name (e.g. "Cove.Gui") maps to a dotted namespace, folder, and file name — standard
+        // .NET, and exactly what `dotnet new -n Cove.Gui` produces. Validate each '.'-separated segment
+        // as its own identifier; empty segments (a leading/trailing '.' or "..") are not allowed.
+        var segments = name.Split('.');
+        foreach (var segment in segments)
         {
-            if (!(char.IsLetterOrDigit(c) || c == '_'))
-                return $"Invalid project name: '{name}'. Use only letters, digits, and underscores.";
+            if (segment.Length == 0)
+                return $"Invalid project name: '{name}'. A '.'-separated segment is empty — a name must not begin or end with '.' or contain '..'.";
+
+            if (!(char.IsLetter(segment[0]) || segment[0] == '_'))
+                return $"Invalid project name: '{name}'. A name must start with a letter or underscore.";
+
+            foreach (var c in segment)
+            {
+                if (!(char.IsLetterOrDigit(c) || c == '_'))
+                    return $"Invalid project name: '{name}'. Use only letters, digits, and underscores.";
+            }
+
+            // Each segment becomes a namespace component; a C# keyword there does not compile.
+            if (CSharpKeywords.Contains(segment))
+                return $"Invalid project name: '{segment}' is a C# keyword and cannot be used as a namespace. Pick a different name (e.g. '{segment}App').";
         }
 
-        if (CSharpKeywords.Contains(name))
-            return $"Invalid project name: '{name}' is a C# keyword and cannot be used as a namespace. Pick a different name (e.g. '{name}App').";
-
-        if (WindowsReservedNames.Contains(name))
-            return $"Invalid project name: '{name}' is a reserved device name and cannot be used as a folder. Pick a different name (e.g. '{name}App').";
+        // The first segment governs the folder name and the leading component of `{name}.csproj`, and
+        // Windows reserves these device names even with an extension (e.g. "CON.Gui").
+        if (WindowsReservedNames.Contains(segments[0]))
+            return $"Invalid project name: '{segments[0]}' is a reserved device name and cannot be used as a folder. Pick a different name (e.g. '{segments[0]}App').";
 
         return null;
     }

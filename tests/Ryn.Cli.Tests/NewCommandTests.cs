@@ -81,7 +81,6 @@ public sealed class NewCommandTests : IDisposable
     [InlineData("")]
     [InlineData("123invalid")]
     [InlineData("my-app")]
-    [InlineData("app.name")]
     public void New_InvalidName_ReturnsError(string name)
     {
         var args = string.IsNullOrEmpty(name)
@@ -118,6 +117,50 @@ public sealed class NewCommandTests : IDisposable
         result.StdErr.Should().Contain(expectedReason);
 
         // A rejected name must not leave a half-scaffolded project directory behind.
+        Directory.Exists(Path.Combine(_tempDir, name)).Should().BeFalse(
+            $"a rejected name must not create the '{name}' directory");
+    }
+
+    // A project name may be dotted (e.g. "Cove.Gui"): standard .NET, and what `dotnet new -n Cove.Gui`
+    // produces. Each '.'-separated segment is validated as its own identifier, so a dotted name that is
+    // otherwise valid must scaffold just like a single-identifier name.
+    [Theory]
+    [InlineData("Cove.Gui")]
+    [InlineData("A.B.C")]
+    [InlineData("_x.y2")]
+    public void New_DottedName_IsAccepted(string name)
+    {
+        var result = RunCli("new", name);
+
+        result.ExitCode.Should().Be(0, because: $"'{name}' is a valid dotted project name. stderr: {result.StdErr}");
+        result.StdErr.Should().NotContain("Invalid project name");
+        Directory.Exists(Path.Combine(_tempDir, name)).Should().BeTrue(
+            $"directory for '{name}' should exist");
+    }
+
+    // Dotted names tighten, not loosen, validation: every single-segment protection still applies, now
+    // per '.'-separated segment. Empty segments (leading/trailing '.' or ".."), a segment that is a C#
+    // keyword, a segment with a bad start/char, and a first segment that is a Windows reserved device
+    // name are all rejected. The single-segment cases (CON, class, 9abc, my-app) are regressions: they
+    // must behave exactly as before dotted-name support was added.
+    [Theory]
+    [InlineData(".Gui")]       // leading dot -> empty first segment
+    [InlineData("Cove.")]      // trailing dot -> empty last segment
+    [InlineData("Cove..Gui")]  // consecutive dots -> empty middle segment
+    [InlineData("Cove.class")] // a segment is a C# keyword -> not a valid namespace component
+    [InlineData("9abc.Gui")]   // a segment must start with a letter or underscore
+    [InlineData("Cove.G-ui")]  // a segment may only contain letters, digits, and underscores
+    [InlineData("CON.Gui")]    // first segment is a Windows reserved device name (CON.Gui is reserved)
+    [InlineData("CON")]        // whole name is a reserved device name (single-segment regression)
+    [InlineData("class")]      // whole name is a C# keyword (single-segment regression)
+    [InlineData("9abc")]       // single segment starting with a digit (single-segment regression)
+    [InlineData("my-app")]     // single segment with an invalid char (single-segment regression)
+    public void New_InvalidSegmentedName_ReturnsError(string name)
+    {
+        var result = RunCli("new", name);
+
+        result.ExitCode.Should().Be(1, because: $"'{name}' is not a valid project name. stderr: {result.StdErr}");
+        result.StdErr.Should().Contain("Invalid project name");
         Directory.Exists(Path.Combine(_tempDir, name)).Should().BeFalse(
             $"a rejected name must not create the '{name}' directory");
     }
