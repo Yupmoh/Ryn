@@ -52,6 +52,12 @@ internal sealed class WindowCommands
     [RynCommand("window.setAlwaysOnTop")]
     public void SetAlwaysOnTop(bool alwaysOnTop) => _windows.Current.SetAlwaysOnTop(alwaysOnTop);
 
+    /// <summary>Makes the calling window ignore mouse input (clicks fall through to what's beneath). The page
+    /// keeps running and can still invoke commands — it just gets no mouse events — so re-enabling input needs
+    /// a non-mouse trigger (a timer or event in this page, C#, or another window).</summary>
+    [RynCommand("window.setClickThrough")]
+    public void SetClickThrough(bool clickThrough) => _windows.Current.SetClickThrough(clickThrough);
+
     [RynCommand("window.center")]
     public void Center() => _windows.Current.Center();
 

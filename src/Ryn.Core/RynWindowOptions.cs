@@ -38,6 +38,11 @@ public sealed class RynWindowOptions
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get; set; }
 
+    /// <summary>Whether the window ignores mouse input, letting clicks fall through to whatever is beneath it.
+    /// Combine with <see cref="Transparent"/>, a frameless <see cref="TitleBarStyle"/> and always-on-top for
+    /// overlay/HUD-style windows. Changeable at runtime via <see cref="IRynWindow.SetClickThrough"/>.</summary>
+    public bool ClickThrough { get; set; }
+
     /// <summary>Whether the webview renders with GPU hardware acceleration (default true). Set false only as a
     /// compatibility escape hatch for flaky GPU drivers or headless/virtualized environments — it makes canvas,
     /// WebGL and WebGPU much slower. Applied once, before the webview is created.</summary>
@@ -104,6 +109,7 @@ public sealed class RynWindowOptions
             Resizable = Resizable,
             TitleBarStyle = TitleBarStyle,
             Transparent = Transparent,
+            ClickThrough = ClickThrough,
             HardwareAcceleration = HardwareAcceleration,
             CrossOriginIsolation = CrossOriginIsolation,
             Url = Url,

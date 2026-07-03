@@ -55,6 +55,10 @@ public interface IRynWindow
     public void SetFullscreen(bool fullscreen);
     /// <summary>Sets whether the window stays above other windows.</summary>
     public void SetAlwaysOnTop(bool alwaysOnTop);
+    /// <summary>Sets whether the window ignores mouse input, letting clicks fall through to whatever is
+    /// beneath it (for overlay/HUD-style windows). The page keeps running — timers, IPC and script still
+    /// work — it just receives no mouse events, so re-enabling input needs a non-mouse trigger.</summary>
+    public void SetClickThrough(bool clickThrough);
     /// <summary>Centers the window on its current screen.</summary>
     public void Center();
     /// <summary>

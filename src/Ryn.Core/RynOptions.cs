@@ -25,6 +25,7 @@ public sealed class RynOptions
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
     private bool _transparent;
+    private bool _clickThrough;
     private bool _hardwareAcceleration = true;
     private Uri? _url;
     private string? _html;
@@ -73,6 +74,11 @@ public sealed class RynOptions
 
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get => _transparent; set => Set(ref _transparent, value); }
+
+    /// <summary>Whether the window ignores mouse input, letting clicks fall through to whatever is beneath it.
+    /// Combine with <see cref="Transparent"/>, a frameless <see cref="TitleBarStyle"/> and always-on-top for
+    /// overlay/HUD-style windows. Changeable at runtime via <see cref="IRynWindow.SetClickThrough"/>.</summary>
+    public bool ClickThrough { get => _clickThrough; set => Set(ref _clickThrough, value); }
 
     /// <summary>
     /// Whether the webview renders with GPU hardware acceleration. Default true (the engine's own default).

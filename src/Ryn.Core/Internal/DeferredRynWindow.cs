@@ -61,6 +61,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public void Move(int x, int y) => Live.Move(x, y);
     public void SetFullscreen(bool fullscreen) => Live.SetFullscreen(fullscreen);
     public void SetAlwaysOnTop(bool alwaysOnTop) => Live.SetAlwaysOnTop(alwaysOnTop);
+    public void SetClickThrough(bool clickThrough) => Live.SetClickThrough(clickThrough);
     public void Center() => Live.Center();
     public void StartDrag() => Live.StartDrag();
     public void StartResize(WindowEdge edge) => Live.StartResize(edge);
