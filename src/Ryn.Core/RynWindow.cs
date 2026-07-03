@@ -219,6 +219,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public void SetAlwaysOnTop(bool alwaysOnTop) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_always_on_top(_window, (byte)(alwaysOnTop ? 1 : 0)); });
 
+    public void SetClickThrough(bool clickThrough) =>
+        RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_click_through(_window, (byte)(clickThrough ? 1 : 0)); });
+
     public void Center() => RunOnUi(() =>
     {
         if (_window == null) return;
@@ -545,6 +548,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             Saucer.saucer_window_set_background(_window, 0, 0, 0, 0);
             Saucer.saucer_webview_set_background(_webview, 0, 0, 0, 0);
         }
+        if (_options.ClickThrough)
+            Saucer.saucer_window_set_click_through(_window, 1);
         switch (_options.TitleBarStyle)
         {
             case TitleBarStyle.Hidden:

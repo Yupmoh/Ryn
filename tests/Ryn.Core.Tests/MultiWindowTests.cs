@@ -46,6 +46,7 @@ public sealed class MultiWindowTests
             Resizable = false,
             TitleBarStyle = TitleBarStyle.Hidden,
             Transparent = true,
+            ClickThrough = true,
             Url = new Uri("https://example.test/app"),
             UseLocalServer = true,
             LocalServerPort = 9001,
@@ -71,6 +72,7 @@ public sealed class MultiWindowTests
         projected.Resizable.Should().BeFalse();
         projected.TitleBarStyle.Should().Be(TitleBarStyle.Hidden);
         projected.Transparent.Should().BeTrue();
+        projected.ClickThrough.Should().BeTrue();
         projected.Url.Should().Be(new Uri("https://example.test/app"));
         projected.UseLocalServer.Should().BeTrue();
         projected.LocalServerPort.Should().Be(9001);

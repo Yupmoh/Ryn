@@ -41,6 +41,18 @@ public sealed class WindowCommandsTests
     }
 
     [Fact]
+    public async Task SetClickThrough_ForwardsToCurrentWindow()
+    {
+        var (dispatcher, window) = BuildWindowDispatcher();
+
+        CurrentWindow.Value = window;
+        try { await dispatcher.DispatchAsync("window.setClickThrough", JsonArgs("{\"clickThrough\":true}")); }
+        finally { CurrentWindow.Value = null; }
+
+        window.Received(1).SetClickThrough(true);
+    }
+
+    [Fact]
     public async Task Center_ForwardsToCurrentWindow()
     {
         var (dispatcher, window) = BuildWindowDispatcher();

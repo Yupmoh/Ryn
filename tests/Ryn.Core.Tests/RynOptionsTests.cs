@@ -17,6 +17,7 @@ public sealed class RynOptionsTests
         options.Resizable.Should().BeTrue();
         options.TitleBarStyle.Should().Be(TitleBarStyle.Native);
         options.Transparent.Should().BeFalse();
+        options.ClickThrough.Should().BeFalse();
         options.Url.Should().BeNull();
         options.DevTools.Should().BeFalse();
     }
