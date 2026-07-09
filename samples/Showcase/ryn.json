@@ -8,6 +8,7 @@
     "shell": {
       "allow": ["execute", "open"]
     },
-    "notification": true
+    "notification": true,
+    "menubar": true
   }
 }

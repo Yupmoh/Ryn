@@ -2,6 +2,7 @@ using Ryn.Core;
 using Ryn.Ipc;
 using Ryn.Plugins.Clipboard;
 using Ryn.Plugins.FileSystem;
+using Ryn.Plugins.MenuBar;
 using Ryn.Plugins.Notification;
 using Ryn.Plugins.Shell;
 using Showcase;
@@ -257,6 +258,14 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
         </div>
         <button class="btn btn-primary" onclick="doNotify()">Send Notification</button>
       </div>
+      <div class="card">
+        <h3><span class="icon">🍔</span> Menu Bar</h3>
+        <div class="row mb">
+          <button class="btn btn-primary btn-sm" onclick="doSetMenu()">Set Custom Menu</button>
+          <button class="btn btn-outline btn-sm" onclick="doResetMenu()">Reset</button>
+        </div>
+        <div class="output" id="menuOutput" style="min-height:24px">Set a custom menu, then click its items (macOS menu bar / Windows window menu)</div>
+      </div>
       <div class="card full">
         <h3><span class="icon">🐚</span> Shell</h3>
         <div class="row mb">
@@ -449,6 +458,32 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     toast('Notification sent!');
   }
 
+  // Menu bar
+  async function doSetMenu() {
+    await invoke('menubar.setMenu', { items: [
+      { role: 'appMenu' },
+      { label: 'Showcase', items: [
+        { id: 'say-hello', label: 'Say Hello', accelerator: 'CmdOrCtrl+Shift+H' },
+        { separator: true },
+        { label: 'More', items: [ { id: 'nested-item', label: 'Nested Item' } ] }
+      ]},
+      { role: 'editMenu' },
+      { role: 'windowMenu' }
+    ]});
+    toast('Custom menu applied!');
+  }
+
+  async function doResetMenu() {
+    await invoke('menubar.reset');
+    toast('Menu reset to default');
+  }
+
+  window.__ryn.on('menubar.itemClicked', function(id) {
+    var el = document.getElementById('menuOutput');
+    el.textContent = 'Menu item clicked: ' + id;
+    el.className = 'output success';
+  });
+
   // Shell
   async function doShell() {
     try {
@@ -489,6 +524,7 @@ var app = RynApplication.CreateBuilder()
         services.AddRynClipboard();
         services.AddRynShell(shell => shell.AllowedCommands.AddRange(["echo", "date", "whoami", "uname", "ls"]));
         services.AddRynNotification();
+        services.AddRynMenuBar(menu => menu.AppName = "Ryn Showcase");
     })
     .Build();
 

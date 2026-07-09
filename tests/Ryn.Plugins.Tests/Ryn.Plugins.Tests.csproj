@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\Ryn.Plugins.Dialog\Ryn.Plugins.Dialog.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Clipboard\Ryn.Plugins.Clipboard.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Shell\Ryn.Plugins.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.MenuBar\Ryn.Plugins.MenuBar.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Audio\Ryn.Plugins.Audio.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Updater\Ryn.Plugins.Updater.csproj" />
