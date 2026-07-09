@@ -51,6 +51,11 @@ await window.__ryn.invoke('webviewPane.setDevTools', { id, enabled: true });
 await window.__ryn.invoke('webviewPane.setUserAgent', { id, userAgent: 'MyApp/1.0' });
 await window.__ryn.invoke('webviewPane.execute',     { id, code: "window.scrollTo(0, 0)" }); // fire-and-forget
 const result = await window.__ryn.invoke('webviewPane.eval', { id, code: "document.title" }); // JSON result
+
+// Find in page — all three return { matches, activeIndex } (activeIndex is 0-based, -1 = none)
+const hit = await window.__ryn.invoke('webviewPane.find',     { id, text: 'saucer', matchCase: false });
+await window.__ryn.invoke('webviewPane.findNext', { id, forward: true });   // wraps at the ends
+await window.__ryn.invoke('webviewPane.findStop', { id, clearHighlights: true });
 const url    = await window.__ryn.invoke('webviewPane.url',  { id });
 const ids    = await window.__ryn.invoke('webviewPane.list');
 await window.__ryn.invoke('webviewPane.close', { id });
@@ -102,6 +107,16 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
 
+## Find in page
+
+`find` starts a session and scrolls the first match into view; `findNext` cycles (wrapping);
+`findStop` clears. The engine is injected JavaScript shared by all three platforms: matches are
+counted per text node and painted with the **CSS Custom Highlight API** (no DOM mutation). On
+engines without `CSS.highlights` (WebKit before Safari 17.2) counting, cycling, and scrolling
+still work — only the visual highlight is missing. Sessions are page-scoped: a navigation clears
+them, and matches spanning element boundaries (`ab<b>cd</b>`) are not found. Searching an empty
+string returns `{ matches: 0, activeIndex: -1 }` without error.
+
 ## Permission prompts
 
 When a page in a pane asks for a sensitive capability (getUserMedia, geolocation, …) the
@@ -128,8 +143,8 @@ should share a session. Omitting it uses the engine's default (shared) session.
 
 `WebViewPaneService` (singleton, resolvable from DI) exposes the same surface:
 `OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
-`Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `Execute`, `EvalAsync`, `GetUrl`,
-`List`, `CloseAll`.
+`Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `FindAsync`, `FindNextAsync`,
+`FindStopAsync`, `ResolvePermissionAsync`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
 
 ## Platform notes
 

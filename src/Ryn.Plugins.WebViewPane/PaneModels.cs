@@ -54,6 +54,9 @@ internal sealed record PaneClosedEvent(int Id);
 /// </summary>
 internal sealed record PanePermissionEvent(int Id, long RequestId, string[] Kinds, string Url);
 
+/// <summary>ActiveIndex is 0-based; -1 when there are no matches (or the session was stopped).</summary>
+public sealed record PaneFindResult(int Matches, int ActiveIndex);
+
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(PaneOpenRequest))]
 [JsonSerializable(typeof(PaneNavigatedEvent))]
@@ -63,5 +66,6 @@ internal sealed record PanePermissionEvent(int Id, long RequestId, string[] Kind
 [JsonSerializable(typeof(PaneFaviconEvent))]
 [JsonSerializable(typeof(PaneClosedEvent))]
 [JsonSerializable(typeof(PanePermissionEvent))]
+[JsonSerializable(typeof(PaneFindResult))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class WebViewPaneJsonContext : JsonSerializerContext { }
