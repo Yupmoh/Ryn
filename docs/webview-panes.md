@@ -65,6 +65,12 @@ window.__ryn.on('webviewPane.loadStateChanged', e => { /* { id, state: 'started'
 window.__ryn.on('webviewPane.domReady',         e => { /* { id } */ });
 window.__ryn.on('webviewPane.faviconChanged',   e => { /* { id, dataUrl } — base64 data: URL for <img src> */ });
 window.__ryn.on('webviewPane.closed',           e => { /* { id } */ });
+window.__ryn.on('webviewPane.permissionRequested', async e => {
+  // { id, requestId, kinds, url } — kinds ⊂ ['microphone','camera','screenShare','mouseLock',
+  //                                          'deviceInfo','geolocation','clipboard','notifications','unknown']
+  const grant = await myPermissionPrompt(e.kinds, e.url);
+  await window.__ryn.invoke('webviewPane.resolvePermission', { requestId: e.requestId, grant });
+});
 ```
 
 Everything a browser pane's chrome needs — URL bar, back/forward, spinner, tab title,
@@ -95,6 +101,16 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 `setZoom` is native page zoom on macOS (`WKWebView.pageZoom` — crisp, survives
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
+
+## Permission prompts
+
+When a page in a pane asks for a sensitive capability (getUserMedia, geolocation, …) the
+request surfaces as `webviewPane.permissionRequested` instead of a native prompt. Resolve
+it with `webviewPane.resolvePermission` — your HTML UI is the prompt. Unresolved requests
+are **denied automatically after 30 seconds** (and when their pane closes); resolving an
+expired request returns `false`. A camera+microphone getUserMedia call arrives as one
+request with both kinds. Which kinds actually surface varies by engine (macOS reports
+media capture; WebView2 and WebKitGTK cover the wider set).
 
 ## Per-pane user agent
 
