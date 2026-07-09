@@ -79,6 +79,15 @@ window.__ryn.on('webviewPane.closed',           e => { /* { id } */ });
 window.__ryn.on('webviewPane.processTerminated', e => {
   // { id, reason } — the pane's web process died (crash/OOM). Recover with reloadFromCrash.
 });
+window.__ryn.on('webviewPane.downloadRequested', async e => {
+  // { id, downloadId, url, suggestedName } — the app is the "save as" dialog
+  const path = await pickSavePath(e.suggestedName);
+  await window.__ryn.invoke('webviewPane.resolveDownload',
+    { downloadId: e.downloadId, action: path ? 'allow' : 'deny', path });
+});
+window.__ryn.on('webviewPane.downloadProgress',  e => { /* { id, downloadId, receivedBytes, totalBytes } */ });
+window.__ryn.on('webviewPane.downloadCompleted', e => { /* { id, downloadId, path } */ });
+window.__ryn.on('webviewPane.downloadFailed',    e => { /* { id, downloadId, error } */ });
 window.__ryn.on('webviewPane.permissionRequested', async e => {
   // { id, requestId, kinds, url } — kinds ⊂ ['microphone','camera','screenShare','mouseLock',
   //                                          'deviceInfo','geolocation','clipboard','notifications','unknown']
@@ -115,6 +124,17 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 `setZoom` is native page zoom on macOS (`WKWebView.pageZoom` — crisp, survives
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
+
+## Downloads
+
+A download in a pane raises `webviewPane.downloadRequested { id, downloadId, url, suggestedName }`
+instead of a native save dialog — your UI decides where it goes. Answer with
+`webviewPane.resolveDownload { downloadId, action: 'allow' | 'deny', path? }`; `allow` writes to
+`path`, `deny` cancels. Completion arrives as `downloadCompleted { downloadId, path }` or
+`downloadFailed { downloadId, error }`. **Progress** (`downloadProgress`) is real on Windows
+(WebView2 reports received/total bytes); macOS and Linux emit request and completion only, so drive
+your progress UI off those two on those platforms. On macOS a download is any navigation the engine
+cannot render inline (attachments, unknown MIME types).
 
 ## Crash recovery & suspension
 
@@ -175,8 +195,8 @@ should share a session. Omitting it uses the engine's default (shared) session.
 `WebViewPaneService` (singleton, resolvable from DI) exposes the same surface:
 `OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
 `Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `ScreenshotAsync`, `FindAsync`,
-`FindNextAsync`, `FindStopAsync`, `ResolvePermissionAsync`, `Execute`, `EvalAsync`, `GetUrl`,
-`List`, `CloseAll`.
+`FindNextAsync`, `FindStopAsync`, `ResolvePermissionAsync`, `ResolveDownloadAsync`,
+`SetSuspendedAsync`, `ReloadFromCrash`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
 
 ## Platform notes
 
