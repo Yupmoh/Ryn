@@ -1,5 +1,6 @@
 using Ryn.Core;
 using Ryn.Ipc;
+using Ryn.Plugins.Badge;
 using Ryn.Plugins.Clipboard;
 using Ryn.Plugins.FileSystem;
 using Ryn.Plugins.MenuBar;
@@ -266,6 +267,15 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
         </div>
         <div class="output" id="menuOutput" style="min-height:24px">Set a custom menu, then click its items (macOS menu bar / Windows window menu)</div>
       </div>
+      <div class="card">
+        <h3><span class="icon">🔴</span> App Badge</h3>
+        <div class="row mb">
+          <input id="badgeCount" type="number" value="3" style="width:80px" />
+          <button class="btn btn-primary btn-sm" onclick="doSetBadge()">Set Count</button>
+          <button class="btn btn-outline btn-sm" onclick="doClearBadge()">Clear</button>
+        </div>
+        <div class="output" id="badgeOutput" style="min-height:24px">Sets the Dock badge (macOS) / taskbar overlay (Windows)</div>
+      </div>
       <div class="card full">
         <h3><span class="icon">🐚</span> Shell</h3>
         <div class="row mb">
@@ -484,6 +494,20 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     el.className = 'output success';
   });
 
+  // Badge
+  async function doSetBadge() {
+    var count = parseInt(document.getElementById('badgeCount').value, 10) || 0;
+    await invoke('badge.setCount', { count: count });
+    document.getElementById('badgeOutput').textContent = 'Badge set to ' + count;
+    document.getElementById('badgeOutput').className = 'output success';
+  }
+
+  async function doClearBadge() {
+    await invoke('badge.clear');
+    document.getElementById('badgeOutput').textContent = 'Badge cleared';
+    document.getElementById('badgeOutput').className = 'output';
+  }
+
   // Shell
   async function doShell() {
     try {
@@ -525,6 +549,7 @@ var app = RynApplication.CreateBuilder()
         services.AddRynShell(shell => shell.AllowedCommands.AddRange(["echo", "date", "whoami", "uname", "ls"]));
         services.AddRynNotification();
         services.AddRynMenuBar(menu => menu.AppName = "Ryn Showcase");
+        services.AddRynBadge();
     })
     .Build();
 

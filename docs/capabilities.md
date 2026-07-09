@@ -37,7 +37,7 @@ The file has two independent top-level objects:
 
 Keys are **plugin prefixes** (the part before the dot in a command name). `app` is the
 prefix for your own `[RynCommand("app.*")]` methods; each plugin owns its own prefix
-(`fs`, `shell`, `clipboard`, `dialog`, `notification`, `audio`, `tray`, `menubar`, `updater`).
+(`fs`, `shell`, `clipboard`, `dialog`, `notification`, `audio`, `tray`, `menubar`, `badge`, `updater`).
 
 Each value is one of three forms:
 
