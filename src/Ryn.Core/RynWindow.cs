@@ -674,6 +674,27 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         fixed (byte* ptr = buf) { Saucer.saucer_window_native(_window, 0, ptr, &size); var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf); if (nsWindow != 0) MacOsTitleBar.Apply(nsWindow, overlay); }
     }
 
+    /// <summary>
+    /// Returns the platform window handle behind this window (NSWindow* on macOS, HWND on Windows, the
+    /// toolkit window on Linux — saucer's stable native index 0), or 0 when the native window is gone or
+    /// saucer reports an unexpected size. For plugin backends that must attach to the real window.
+    /// </summary>
+    internal nint GetNativeWindowHandle()
+    {
+        if (_disposed || _window == null) return 0;
+        nuint size; System.Runtime.CompilerServices.Unsafe.SkipInit(out size);
+        Saucer.saucer_window_native(_window, 0, null, &size);
+        // Require at least sizeof(nint) so MemoryMarshal.Read<nint> can't over-read the stack buffer if saucer
+        // ever reports a smaller size; saucer returns 8 (a pointer) today, so this never trips in practice (INT-11).
+        if (size < (nuint)sizeof(nint) || size > 64) return 0;
+        Span<byte> buf = stackalloc byte[(int)size];
+        fixed (byte* ptr = buf)
+        {
+            Saucer.saucer_window_native(_window, 0, ptr, &size);
+            return System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf);
+        }
+    }
+
     private void SubscribeWindowEvents()
     {
         Saucer.saucer_window_on(_window, saucer_window_event.SAUCER_WINDOW_EVENT_CLOSE, (void*)(delegate* unmanaged[Cdecl]<saucer_window*, void*, saucer_policy>)&OnWindowClose, 1, _selfHandle);
