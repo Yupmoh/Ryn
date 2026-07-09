@@ -28,6 +28,7 @@
     <Project Path="src/Ryn.Plugins.Clipboard/Ryn.Plugins.Clipboard.csproj" />
     <Project Path="src/Ryn.Plugins.Dialog/Ryn.Plugins.Dialog.csproj" />
     <Project Path="src/Ryn.Plugins.FileSystem/Ryn.Plugins.FileSystem.csproj" />
+    <Project Path="src/Ryn.Plugins.GlobalShortcut/Ryn.Plugins.GlobalShortcut.csproj" />
     <Project Path="src/Ryn.Plugins.MenuBar/Ryn.Plugins.MenuBar.csproj" />
     <Project Path="src/Ryn.Plugins.Notification/Ryn.Plugins.Notification.csproj" />
     <Project Path="src/Ryn.Plugins.Shell/Ryn.Plugins.Shell.csproj" />

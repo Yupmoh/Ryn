@@ -10,6 +10,7 @@
     },
     "notification": true,
     "menubar": true,
-    "badge": true
+    "badge": true,
+    "globalShortcut": true
   }
 }
