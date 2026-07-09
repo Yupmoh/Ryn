@@ -17,7 +17,7 @@ Ryn gives .NET developers the Tauri experience without leaving C#. You write the
 - **Lightweight:** uses the native OS webview (WebView2, WKWebView, WebKitGTK) instead of bundling Chromium.
 - **NativeAOT:** small, self-contained binaries (~5 MB) with no runtime dependency.
 - **Cross-platform:** Windows, macOS, and Linux.
-- **Plugin system:** FileSystem, Dialog (native pickers), Clipboard, Shell (spawn/PTY streaming), Notification, Audio, Tray, MenuBar (native menus + roles), Badge (dock/taskbar), and a signed Auto-updater.
+- **Plugin system:** FileSystem, Dialog (native pickers), Clipboard, Shell (spawn/PTY streaming), Notification, Audio, Tray, MenuBar (native menus + roles), Badge (dock/taskbar), GlobalShortcut (system-wide hotkeys), and a signed Auto-updater.
 - **Security model:** `ryn.json` capability scopes, deny-by-default.
 - **Branded by default:** every window and bundled `.app`/installer ships with the Ryn icon, overridable per app.
 
@@ -91,6 +91,7 @@ Legend: ✅ verified on a real app · 🟡 implemented, not yet GUI-verified · 
 | Tray icon | ✅ | ✅ | 🟡 (menu-only; no icon-click event) |
 | Menu bar | ✅ | ✅ (accelerators display-only) | ❌ (header bars are the GTK norm) |
 | App badge | ✅ (Dock) | ✅ (taskbar overlay) | ❌ (no portable badge surface) |
+| Global shortcuts | ✅ | ✅ | ❌ (Wayland needs the portal API) |
 | Auto-updater (signed) | ✅ | ✅ | 🟡 |
 | NativeAOT publish | ✅ | ✅ | 🟡 |
 
@@ -122,6 +123,7 @@ dotnet add package Ryn.Plugins.Audio
 dotnet add package Ryn.Plugins.Tray
 dotnet add package Ryn.Plugins.MenuBar
 dotnet add package Ryn.Plugins.Badge
+dotnet add package Ryn.Plugins.GlobalShortcut
 dotnet add package Ryn.Plugins.Updater
 ```
 
@@ -327,7 +329,7 @@ src/
   Ryn.Core             Window management, app lifecycle, configuration, events
   Ryn.Interop          Auto-generated saucer C bindings via ClangSharp
   Ryn.Ipc              JS <> C# IPC bridge, source generator, capabilities, observability
-  Ryn.Plugins.*        FileSystem, Dialog, Clipboard, Shell, Notification, Audio, Tray, MenuBar, Badge, Updater
+  Ryn.Plugins.*        FileSystem, Dialog, Clipboard, Shell, Notification, Audio, Tray, MenuBar, Badge, GlobalShortcut, Updater
   Ryn.Cli              CLI: new, dev, build, bundle, doctor
 samples/               8 example applications
 templates/             dotnet new template pack

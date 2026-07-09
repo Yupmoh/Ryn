@@ -3,6 +3,7 @@ using Ryn.Ipc;
 using Ryn.Plugins.Badge;
 using Ryn.Plugins.Clipboard;
 using Ryn.Plugins.FileSystem;
+using Ryn.Plugins.GlobalShortcut;
 using Ryn.Plugins.MenuBar;
 using Ryn.Plugins.Notification;
 using Ryn.Plugins.Shell;
@@ -277,6 +278,15 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
         <div class="output" id="badgeOutput" style="min-height:24px">Sets the Dock badge (macOS) / taskbar overlay (Windows)</div>
       </div>
       <div class="card full">
+        <h3><span class="icon">⌨️</span> Global Shortcut</h3>
+        <div class="row mb">
+          <input id="shortcutAccel" placeholder="Accelerator" value="CmdOrCtrl+Shift+G" style="width:200px" />
+          <button class="btn btn-primary btn-sm" onclick="doRegisterShortcut()">Register</button>
+          <button class="btn btn-outline btn-sm" onclick="doUnregisterShortcut()">Unregister</button>
+        </div>
+        <div class="output" id="shortcutOutput" style="min-height:24px">Register a system-wide hotkey, then press it — even while another app is focused</div>
+      </div>
+      <div class="card full">
         <h3><span class="icon">🐚</span> Shell</h3>
         <div class="row mb">
           <input id="shellCmd" placeholder="Command" value="echo" style="width:120px" />
@@ -508,6 +518,29 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     document.getElementById('badgeOutput').className = 'output';
   }
 
+  // Global shortcut
+  async function doRegisterShortcut() {
+    var accel = document.getElementById('shortcutAccel').value;
+    var ok = await invoke('globalShortcut.register', { accelerator: accel });
+    var el = document.getElementById('shortcutOutput');
+    el.textContent = ok ? 'Registered ' + accel + ' — press it anywhere' : 'Could not register ' + accel + ' (invalid, or owned by another app)';
+    el.className = ok ? 'output success' : 'output error';
+  }
+
+  async function doUnregisterShortcut() {
+    var accel = document.getElementById('shortcutAccel').value;
+    var ok = await invoke('globalShortcut.unregister', { accelerator: accel });
+    var el = document.getElementById('shortcutOutput');
+    el.textContent = ok ? 'Unregistered ' + accel : accel + ' was not registered';
+    el.className = 'output';
+  }
+
+  window.__ryn.on('globalShortcut.activated', function(accelerator) {
+    var el = document.getElementById('shortcutOutput');
+    el.textContent = 'Hotkey fired: ' + accelerator + ' (' + new Date().toLocaleTimeString() + ')';
+    el.className = 'output success';
+  });
+
   // Shell
   async function doShell() {
     try {
@@ -550,6 +583,7 @@ var app = RynApplication.CreateBuilder()
         services.AddRynNotification();
         services.AddRynMenuBar(menu => menu.AppName = "Ryn Showcase");
         services.AddRynBadge();
+        services.AddRynGlobalShortcut();
     })
     .Build();
 
