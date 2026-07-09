@@ -675,6 +675,13 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     /// <summary>
+    /// The underlying saucer window handle (a <c>saucer_window*</c>), or 0 after disposal. For plugin
+    /// backends that create additional native objects against this window — e.g. secondary webview panes
+    /// via <c>saucer_webview_options_new</c>. Only meaningful on the UI thread while the window is live.
+    /// </summary>
+    internal nint SaucerWindowHandle => _disposed ? 0 : (nint)_window;
+
+    /// <summary>
     /// Returns the platform window handle behind this window (NSWindow* on macOS, HWND on Windows, the
     /// toolkit window on Linux — saucer's stable native index 0), or 0 when the native window is gone or
     /// saucer reports an unexpected size. For plugin backends that must attach to the real window.

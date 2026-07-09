@@ -18,6 +18,7 @@
     <InternalsVisibleTo Include="Ryn.Plugins.MenuBar" />
     <InternalsVisibleTo Include="Ryn.Plugins.Badge" />
     <InternalsVisibleTo Include="Ryn.Plugins.GlobalShortcut" />
+    <InternalsVisibleTo Include="Ryn.Plugins.WebViewPane" />
     <InternalsVisibleTo Include="Ryn.Plugins.Audio" />
     <InternalsVisibleTo Include="Ryn.Benchmarks" />
   </ItemGroup>

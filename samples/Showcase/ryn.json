@@ -11,6 +11,7 @@
     "notification": true,
     "menubar": true,
     "badge": true,
-    "globalShortcut": true
+    "globalShortcut": true,
+    "webviewPane": true
   }
 }

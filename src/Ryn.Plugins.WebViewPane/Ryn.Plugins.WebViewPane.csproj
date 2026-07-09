@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Ryn.Plugins.WebViewPane</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Embedded browser panes for Ryn — secondary native webviews (WKWebView/WebView2/WebKitGTK) positioned inside a window, with navigation, zoom, DevTools, eval, and per-pane sessions</Description>
+    <PackageTags>ryn;webview;browser;pane;embedded-browser;plugin</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ryn.Plugins.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
