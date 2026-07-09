@@ -59,7 +59,7 @@ public sealed class WebViewPaneRequestTests
     public void PaneOpenRequest_DeserializesCamelCase_WithDefaults()
     {
         var request = JsonSerializer.Deserialize(
-            """{"x":10,"y":20,"width":640,"height":480,"url":"https://example.com","storagePath":"/tmp/pane","devTools":true,"zoom":1.5}""",
+            """{"x":10,"y":20,"width":640,"height":480,"url":"https://example.com","storagePath":"/tmp/pane","devTools":true,"zoom":1.5,"userAgent":"CoveBot/2.0"}""",
             WebViewPaneJsonContext.Default.PaneOpenRequest)!;
 
         request.X.Should().Be(10);
@@ -70,6 +70,7 @@ public sealed class WebViewPaneRequestTests
         request.StoragePath.Should().Be("/tmp/pane");
         request.DevTools.Should().BeTrue();
         request.Zoom.Should().Be(1.5);
+        request.UserAgent.Should().Be("CoveBot/2.0");
 
         var defaults = JsonSerializer.Deserialize("{}", WebViewPaneJsonContext.Default.PaneOpenRequest)!;
         defaults.Width.Should().Be(400);
@@ -77,6 +78,7 @@ public sealed class WebViewPaneRequestTests
         defaults.Zoom.Should().Be(1.0);
         defaults.Url.Should().BeNull();
         defaults.DevTools.Should().BeFalse();
+        defaults.UserAgent.Should().BeNull();
     }
 
     [Fact]
@@ -124,6 +126,8 @@ public sealed class WebViewPaneDependencyInjectionTests
         service.Invoking(s => s.CloseAll()).Should().NotThrow();
         (await service.CloseAsync(99)).Should().BeFalse();
         await service.Awaiting(s => s.EvalAsync(99, "1+1")).Should().ThrowAsync<ArgumentException>();
+        await service.Awaiting(s => s.SetUserAgentAsync(99, "UA/1.0")).Should().ThrowAsync<ArgumentException>();
+        await service.Awaiting(s => s.SetUserAgentAsync(1, "")).Should().ThrowAsync<ArgumentException>();
     }
 
     private sealed class NoopDispatcher : IMainThreadDispatcher

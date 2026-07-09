@@ -37,7 +37,8 @@ const id = await window.__ryn.invoke('webviewPane.open', { options: {
   url: 'https://github.com',
   storagePath: '/path/to/session',   // per-pane cookie/storage dir (panes sharing a path share a session)
   devTools: false,
-  zoom: 1.0                          // 0.25–5.0
+  zoom: 1.0,                         // 0.25–5.0
+  userAgent: 'MyApp/1.0'             // custom UA for this pane (omit for the engine default)
 }});
 
 await window.__ryn.invoke('webviewPane.navigate',    { id, url: 'https://example.com' });
@@ -47,6 +48,7 @@ await window.__ryn.invoke('webviewPane.reload',      { id });
 await window.__ryn.invoke('webviewPane.setBounds',   { id, x: 0, y: 0, width: 800, height: 400 });
 await window.__ryn.invoke('webviewPane.setZoom',     { id, factor: 1.5 });
 await window.__ryn.invoke('webviewPane.setDevTools', { id, enabled: true });
+await window.__ryn.invoke('webviewPane.setUserAgent', { id, userAgent: 'MyApp/1.0' });
 await window.__ryn.invoke('webviewPane.execute',     { id, code: "window.scrollTo(0, 0)" }); // fire-and-forget
 const result = await window.__ryn.invoke('webviewPane.eval', { id, code: "document.title" }); // JSON result
 const url    = await window.__ryn.invoke('webviewPane.url',  { id });
@@ -94,6 +96,12 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
 
+## Per-pane user agent
+
+`userAgent` at open time applies before the first navigation (`navigator.userAgent` in the
+pane reports it immediately). `setUserAgent` at runtime applies to subsequent navigations —
+immediately on macOS/Linux, on the next navigation on Windows — so reload after changing it.
+
 ## Per-pane sessions
 
 `storagePath` gives a pane its own cookie jar and storage, persisted across runs. Use one
@@ -104,7 +112,8 @@ should share a session. Omitting it uses the engine's default (shared) session.
 
 `WebViewPaneService` (singleton, resolvable from DI) exposes the same surface:
 `OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
-`Reload`, `SetZoom`, `SetDevTools`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
+`Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `Execute`, `EvalAsync`, `GetUrl`,
+`List`, `CloseAll`.
 
 ## Platform notes
 

@@ -94,6 +94,11 @@ public sealed partial class WebViewPaneService : IDisposable
         if (windowHandle == 0) return -1;
 
         var opts = Saucer.saucer_webview_options_new((saucer_window*)windowHandle);
+        if (!string.IsNullOrEmpty(request.UserAgent))
+        {
+            fixed (byte* p = Utf8z(request.UserAgent))
+                Saucer.saucer_webview_options_set_user_agent(opts, (sbyte*)p);
+        }
         if (!string.IsNullOrEmpty(request.StoragePath))
         {
             Directory.CreateDirectory(request.StoragePath);
@@ -234,6 +239,41 @@ public sealed partial class WebViewPaneService : IDisposable
             ApplyZoomOnUi(state);
         });
     }
+
+    /// <summary>
+    /// Overrides the pane's user agent for subsequent navigations. Applies immediately on macOS/Linux;
+    /// WebView2 picks it up on the next navigation (reload to see it take effect).
+    /// </summary>
+    public async Task SetUserAgentAsync(int id, string userAgent)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(userAgent);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        PaneState? state;
+        lock (_lock)
+        {
+            _panes.TryGetValue(id, out state);
+        }
+        if (state is null) throw new ArgumentException($"Unknown pane id {id}.", nameof(id));
+
+        Exception? failure = null;
+        await _mainThread.InvokeAsync(() =>
+        {
+            try
+            {
+                if (state.Webview != 0)
+                    SetUserAgentOnUi(state.Webview, userAgent);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failure = ex;
+            }
+        }).ConfigureAwait(false);
+        if (failure is not null) throw failure;
+    }
+
+    private static unsafe void SetUserAgentOnUi(nint webview, string userAgent) =>
+        PaneEngineInterop.SetUserAgent((saucer_webview*)webview, userAgent);
 
     /// <summary>Runs JavaScript in the pane, fire-and-forget.</summary>
     public void Execute(int id, string code)
