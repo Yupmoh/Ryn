@@ -25,6 +25,11 @@ public sealed class PaneOpenRequest
     /// <summary>Enable the engine's DevTools for this pane.</summary>
     public bool DevTools { get; set; }
 
+    /// <summary>
+    /// Custom user agent for this pane, applied before the first navigation. Omit for the engine default.
+    /// </summary>
+    public string? UserAgent { get; set; }
+
     /// <summary>Initial zoom factor (1.0 = 100%). Clamped to 0.25–5.0.</summary>
     public double Zoom { get; set; } = 1.0;
 }
