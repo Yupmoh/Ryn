@@ -222,6 +222,22 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public void SetClickThrough(bool clickThrough) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_click_through(_window, (byte)(clickThrough ? 1 : 0)); });
 
+    private BackdropMaterial _effectiveBackdrop = BackdropMaterial.None;
+
+    public void SetBackdrop(BackdropMaterial material) => RunOnUi(() =>
+    {
+        if (_window == null) return;
+        if (material != BackdropMaterial.None)
+        {
+            // The material renders behind a transparent webview background, so clear it (and restore on None).
+            Saucer.saucer_window_set_background(_window, 0, 0, 0, 0);
+            Saucer.saucer_webview_set_background(_webview, 0, 0, 0, 0);
+        }
+        _effectiveBackdrop = WindowBackdrop.Apply(GetNativeWindowHandle(), material);
+    });
+
+    public BackdropMaterial GetBackdrop() => _effectiveBackdrop;
+
     public void Center() => RunOnUi(() =>
     {
         if (_window == null) return;
@@ -541,13 +557,15 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             Saucer.saucer_window_set_min_size(_window, _options.MinWidth, _options.MinHeight);
         if (_options.MaxWidth > 0 || _options.MaxHeight > 0)
             Saucer.saucer_window_set_max_size(_window, _options.MaxWidth, _options.MaxHeight);
-        if (_options.Transparent)
+        if (_options.Transparent || _options.Backdrop != BackdropMaterial.None)
         {
             // Fully transparent window + webview backgrounds so the page's own (semi-)transparent content
-            // shows through, instead of the opaque default chrome (ARC-04).
+            // — or the backdrop material behind it — shows through instead of the opaque default chrome (ARC-04).
             Saucer.saucer_window_set_background(_window, 0, 0, 0, 0);
             Saucer.saucer_webview_set_background(_webview, 0, 0, 0, 0);
         }
+        if (_options.Backdrop != BackdropMaterial.None)
+            _effectiveBackdrop = WindowBackdrop.Apply(GetNativeWindowHandle(), _options.Backdrop);
         if (_options.ClickThrough)
             Saucer.saucer_window_set_click_through(_window, 1);
         switch (_options.TitleBarStyle)

@@ -17,8 +17,21 @@ public sealed class RynOptionsTests
         options.Resizable.Should().BeTrue();
         options.TitleBarStyle.Should().Be(TitleBarStyle.Native);
         options.Transparent.Should().BeFalse();
+        options.Backdrop.Should().Be(BackdropMaterial.None);
         options.ClickThrough.Should().BeFalse();
         options.Url.Should().BeNull();
         options.DevTools.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Backdrop_IsTrackedAsExplicitlySet()
+    {
+        var options = new RynOptions();
+        options.IsSet(nameof(RynOptions.Backdrop)).Should().BeFalse();
+
+        options.Backdrop = BackdropMaterial.Mica;
+
+        options.Backdrop.Should().Be(BackdropMaterial.Mica);
+        options.IsSet(nameof(RynOptions.Backdrop)).Should().BeTrue();
     }
 }
