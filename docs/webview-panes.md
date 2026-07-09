@@ -52,6 +52,10 @@ await window.__ryn.invoke('webviewPane.setUserAgent', { id, userAgent: 'MyApp/1.
 await window.__ryn.invoke('webviewPane.execute',     { id, code: "window.scrollTo(0, 0)" }); // fire-and-forget
 const result = await window.__ryn.invoke('webviewPane.eval', { id, code: "document.title" }); // JSON result
 
+// Screenshot — base64 PNG of the visible pane rect at device-pixel scale
+const b64 = await window.__ryn.invoke('webviewPane.screenshot', { id });
+// e.g. img.src = 'data:image/png;base64,' + b64;
+
 // Find in page — all three return { matches, activeIndex } (activeIndex is 0-based, -1 = none)
 const hit = await window.__ryn.invoke('webviewPane.find',     { id, text: 'saucer', matchCase: false });
 await window.__ryn.invoke('webviewPane.findNext', { id, forward: true });   // wraps at the ends
@@ -107,6 +111,14 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
 
+## Screenshots
+
+`screenshot` captures the pane's **visible viewport** as a PNG via the engine's native
+snapshot API (`WKWebView.takeSnapshot`, `CapturePreview`, `webkit_web_view_get_snapshot`)
+at device-pixel scale, returned as a base64 string. It works while the pane is partially
+occluded by sibling panes, and errors (rather than hangs) on a crashed pane — the call
+also times out after 15 seconds as a backstop.
+
 ## Find in page
 
 `find` starts a session and scrolls the first match into view; `findNext` cycles (wrapping);
@@ -143,8 +155,9 @@ should share a session. Omitting it uses the engine's default (shared) session.
 
 `WebViewPaneService` (singleton, resolvable from DI) exposes the same surface:
 `OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
-`Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `FindAsync`, `FindNextAsync`,
-`FindStopAsync`, `ResolvePermissionAsync`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
+`Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `ScreenshotAsync`, `FindAsync`,
+`FindNextAsync`, `FindStopAsync`, `ResolvePermissionAsync`, `Execute`, `EvalAsync`, `GetUrl`,
+`List`, `CloseAll`.
 
 ## Platform notes
 

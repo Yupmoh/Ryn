@@ -196,6 +196,7 @@ public sealed class WebViewPaneDependencyInjectionTests
         await service.Awaiting(s => s.SetUserAgentAsync(99, "UA/1.0")).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.SetUserAgentAsync(1, "")).Should().ThrowAsync<ArgumentException>();
         (await service.ResolvePermissionAsync(12345, grant: true)).Should().BeFalse();
+        await service.Awaiting(s => s.ScreenshotAsync(99)).Should().ThrowAsync<ArgumentException>();
     }
 
     private sealed class NoopDispatcher : IMainThreadDispatcher

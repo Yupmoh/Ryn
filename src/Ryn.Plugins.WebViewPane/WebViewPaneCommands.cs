@@ -45,6 +45,9 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.screenshot")]
+    public Task<string> ScreenshotAsync(int id) => _service.ScreenshotAsync(id);
+
     [RynCommand("webviewPane.find")]
     public Task<PaneFindResult> FindAsync(int id, string text, bool? forward, bool? matchCase) =>
         _service.FindAsync(id, text, forward ?? true, matchCase ?? false);

@@ -201,8 +201,11 @@ public sealed partial class WebViewPaneService : IDisposable
         var webview = (saucer_webview*)state.Webview;
         if (webview != null)
         {
-            foreach (var evt in Enum.GetValues<saucer_webview_event>())
-                Saucer.saucer_webview_off_all(webview, evt);
+            // Do NOT saucer_webview_off_all before free: on macOS clearing the navigated/favicon
+            // listeners tears down saucer's KVO observers, and free then removes them again —
+            // NSRangeException ("not registered as an observer") and the app dies. free owns the
+            // full teardown; the GCHandle freed below is only read by callbacks, which cannot fire
+            // once the webview is gone.
             Saucer.saucer_webview_free(webview);
             state.Webview = 0;
         }
@@ -377,6 +380,57 @@ public sealed partial class WebViewPaneService : IDisposable
         return JsonSerializer.Deserialize(payload, WebViewPaneJsonContext.Default.PaneFindResult)
                ?? new PaneFindResult(0, -1);
     }
+
+    /// <summary>
+    /// Captures the pane's visible viewport as a PNG (device-pixel scale) and returns it base64-encoded.
+    /// Uses the engine's native snapshot API; throws on unknown panes, engine errors, and a 15s timeout
+    /// (a crashed pane errors rather than hangs).
+    /// </summary>
+    public async Task<string> ScreenshotAsync(int id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        PaneState? state;
+        lock (_lock)
+        {
+            _panes.TryGetValue(id, out state);
+        }
+        if (state is null) throw new ArgumentException($"Unknown pane id {id}.", nameof(id));
+
+        var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _mainThread.InvokeAsync(() =>
+        {
+            try
+            {
+                if (state.Webview == 0)
+                {
+                    tcs.TrySetException(new InvalidOperationException("The pane was closed."));
+                    return;
+                }
+                StartScreenshotOnUi(state.Webview, (bytes, error) =>
+                {
+                    if (bytes is not null) tcs.TrySetResult(bytes);
+                    else tcs.TrySetException(new InvalidOperationException(error ?? "Snapshot failed."));
+                });
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                tcs.TrySetException(ex);
+            }
+        }).ConfigureAwait(false);
+
+        try
+        {
+            var png = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            return Convert.ToBase64String(png);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException("webviewPane.screenshot did not complete within 15s.");
+        }
+    }
+
+    private static unsafe void StartScreenshotOnUi(nint webview, Action<byte[]?, string?> completion) =>
+        PaneScreenshotInterop.Start((saucer_webview*)webview, completion);
 
     /// <summary>The pane's current URL as last reported by navigation events.</summary>
     public string GetUrl(int id)
