@@ -150,6 +150,29 @@ public sealed class WebViewPanePermissionTests
         WebViewPaneService.DescribePermissionKinds(type).Should().Equal(expected);
     }
 
+    [Theory]
+    [InlineData(0, "browserProcessExited")]
+    [InlineData(1, "renderProcessExited")]
+    [InlineData(2, "renderProcessUnresponsive")]
+    [InlineData(6, "gpuProcessExited")]
+    [InlineData(42, "unknownProcessExited")]
+    public void WindowsProcessFailedKinds_MapToReasonStrings(int kind, string expected) =>
+        PaneLifecycleInterop.DescribeWindowsProcessFailedKind(kind).Should().Be(expected);
+
+    [Theory]
+    [InlineData(0, "crashed")]
+    [InlineData(1, "exceededMemoryLimit")]
+    [InlineData(2, "terminatedByApi")]
+    [InlineData(9, "unknown")]
+    public void LinuxTerminationReasons_MapToReasonStrings(int reason, string expected) =>
+        PaneLifecycleInterop.DescribeLinuxTerminationReason(reason).Should().Be(expected);
+
+    [Fact]
+    public void ProcessTerminatedEvent_SerializesCamelCase() =>
+        JsonSerializer.Serialize(new PaneProcessTerminatedEvent(4, "crashed"),
+                WebViewPaneJsonContext.Default.PaneProcessTerminatedEvent)
+            .Should().Be("""{"id":4,"reason":"crashed"}""");
+
     [Fact]
     public void PermissionEvent_SerializesCamelCase()
     {
@@ -197,6 +220,8 @@ public sealed class WebViewPaneDependencyInjectionTests
         await service.Awaiting(s => s.SetUserAgentAsync(1, "")).Should().ThrowAsync<ArgumentException>();
         (await service.ResolvePermissionAsync(12345, grant: true)).Should().BeFalse();
         await service.Awaiting(s => s.ScreenshotAsync(99)).Should().ThrowAsync<ArgumentException>();
+        await service.Awaiting(s => s.SetSuspendedAsync(99, true)).Should().ThrowAsync<ArgumentException>();
+        service.Invoking(s => s.ReloadFromCrash(99)).Should().NotThrow();
     }
 
     private sealed class NoopDispatcher : IMainThreadDispatcher

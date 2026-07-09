@@ -57,6 +57,13 @@ internal sealed record PanePermissionEvent(int Id, long RequestId, string[] Kind
 /// <summary>ActiveIndex is 0-based; -1 when there are no matches (or the session was stopped).</summary>
 public sealed record PaneFindResult(int Matches, int ActiveIndex);
 
+/// <summary>
+/// Reason strings — macOS: webContentProcessTerminated; Windows: browserProcessExited,
+/// renderProcessExited, renderProcessUnresponsive, and friends; Linux: crashed,
+/// exceededMemoryLimit, terminatedByApi.
+/// </summary>
+internal sealed record PaneProcessTerminatedEvent(int Id, string Reason);
+
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(PaneOpenRequest))]
 [JsonSerializable(typeof(PaneNavigatedEvent))]
@@ -67,5 +74,6 @@ public sealed record PaneFindResult(int Matches, int ActiveIndex);
 [JsonSerializable(typeof(PaneClosedEvent))]
 [JsonSerializable(typeof(PanePermissionEvent))]
 [JsonSerializable(typeof(PaneFindResult))]
+[JsonSerializable(typeof(PaneProcessTerminatedEvent))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class WebViewPaneJsonContext : JsonSerializerContext { }

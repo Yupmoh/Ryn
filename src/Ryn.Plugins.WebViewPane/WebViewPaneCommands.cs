@@ -45,6 +45,12 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.setSuspended")]
+    public Task SetSuspendedAsync(int id, bool suspended) => _service.SetSuspendedAsync(id, suspended);
+
+    [RynCommand("webviewPane.reloadFromCrash")]
+    public void ReloadFromCrash(int id) => _service.ReloadFromCrash(id);
+
     [RynCommand("webviewPane.screenshot")]
     public Task<string> ScreenshotAsync(int id) => _service.ScreenshotAsync(id);
 

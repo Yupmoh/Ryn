@@ -49,6 +49,8 @@ await window.__ryn.invoke('webviewPane.setBounds',   { id, x: 0, y: 0, width: 80
 await window.__ryn.invoke('webviewPane.setZoom',     { id, factor: 1.5 });
 await window.__ryn.invoke('webviewPane.setDevTools', { id, enabled: true });
 await window.__ryn.invoke('webviewPane.setUserAgent', { id, userAgent: 'MyApp/1.0' });
+await window.__ryn.invoke('webviewPane.setSuspended', { id, suspended: true }); // hide + throttle
+await window.__ryn.invoke('webviewPane.reloadFromCrash', { id });               // after processTerminated
 await window.__ryn.invoke('webviewPane.execute',     { id, code: "window.scrollTo(0, 0)" }); // fire-and-forget
 const result = await window.__ryn.invoke('webviewPane.eval', { id, code: "document.title" }); // JSON result
 
@@ -74,6 +76,9 @@ window.__ryn.on('webviewPane.loadStateChanged', e => { /* { id, state: 'started'
 window.__ryn.on('webviewPane.domReady',         e => { /* { id } */ });
 window.__ryn.on('webviewPane.faviconChanged',   e => { /* { id, dataUrl } — base64 data: URL for <img src> */ });
 window.__ryn.on('webviewPane.closed',           e => { /* { id } */ });
+window.__ryn.on('webviewPane.processTerminated', e => {
+  // { id, reason } — the pane's web process died (crash/OOM). Recover with reloadFromCrash.
+});
 window.__ryn.on('webviewPane.permissionRequested', async e => {
   // { id, requestId, kinds, url } — kinds ⊂ ['microphone','camera','screenShare','mouseLock',
   //                                          'deviceInfo','geolocation','clipboard','notifications','unknown']
@@ -110,6 +115,20 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 `setZoom` is native page zoom on macOS (`WKWebView.pageZoom` — crisp, survives
 navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
 each navigation; layout-affecting but universally supported.
+
+## Crash recovery & suspension
+
+A dying web process (crash, OOM-kill) raises `webviewPane.processTerminated { id, reason }` —
+the pane object survives, showing a blank view. `reloadFromCrash` renavigates to the last known
+URL, which respawns the process. Reasons: `webContentProcessTerminated` (macOS),
+`renderProcessExited`/`browserProcessExited`/… (Windows), `crashed`/`exceededMemoryLimit`/
+`terminatedByApi` (Linux).
+
+`setSuspended` **hides the pane and throttles it** — on WebView2 it is a real process freeze
+(`TrySuspend`; the engine may decline while DevTools is open or a download runs), elsewhere the
+hidden view gets the engine's background throttling. Treat it as "this pane is in the background";
+resume makes the pane visible again. Pane visibility/occlusion tracking stays app-side: your
+frontend owns every pane rect, so it already knows what is covered.
 
 ## Screenshots
 
