@@ -36,9 +36,29 @@ public sealed partial class WebViewPaneService : IDisposable
 
     private readonly object _lock = new();
     private readonly Dictionary<int, PaneState> _panes = [];
+    private readonly Dictionary<long, PendingPermission> _pendingPermissions = [];
     private int _nextPaneId = 1;
     private long _nextEvalId = 1;
+    private long _nextPermissionId = 1;
     private bool _disposed;
+
+    internal static readonly TimeSpan PermissionTimeout = TimeSpan.FromSeconds(30);
+
+    // A copied saucer permission request kept alive until the app resolves it (or the timeout denies it).
+    // Freeing the copy without accepting denies the request (engine default).
+    private sealed class PendingPermission : IDisposable
+    {
+        public required long RequestId { get; init; }
+        public required int PaneId { get; init; }
+        public nint Request;
+        public Timer? Timer;
+
+        public void Dispose()
+        {
+            Timer?.Dispose();
+            Timer = null;
+        }
+    }
 
     internal Action<string, string>? EmitEvent { get; set; }
 
@@ -135,6 +155,8 @@ public sealed partial class WebViewPaneService : IDisposable
             (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, saucer_icon*, void*, void>)&OnFavicon, 1, userdata);
         Saucer.saucer_webview_on(webview, saucer_webview_event.SAUCER_WEBVIEW_EVENT_MESSAGE,
             (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, sbyte*, nuint, void*, saucer_status>)&OnMessage, 1, userdata);
+        Saucer.saucer_webview_on(webview, saucer_webview_event.SAUCER_WEBVIEW_EVENT_PERMISSION,
+            (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, saucer_permission_request*, void*, saucer_status>)&OnPermission, 1, userdata);
 
         Saucer.saucer_webview_set_bounds(webview, request.X, request.Y, request.Width, request.Height);
 
@@ -167,6 +189,7 @@ public sealed partial class WebViewPaneService : IDisposable
         {
             if (!_panes.Remove(id, out state)) return false;
         }
+        DropPendingPermissionsForPane(id);
         await _mainThread.InvokeAsync(() => CloseOnUi(state)).ConfigureAwait(false);
         Emit("webviewPane.closed", JsonSerializer.Serialize(
             new PaneClosedEvent(id), WebViewPaneJsonContext.Default.PaneClosedEvent));
@@ -356,6 +379,8 @@ public sealed partial class WebViewPaneService : IDisposable
             panes = [.. _panes.Values];
             _panes.Clear();
         }
+        foreach (var pane in panes)
+            DropPendingPermissionsForPane(pane.Id);
         if (panes.Count == 0) return;
         _mainThread.InvokeAsync(() =>
         {
@@ -574,6 +599,128 @@ public sealed partial class WebViewPaneService : IDisposable
             state.Service.Emit("webviewPane.faviconChanged", JsonSerializer.Serialize(
                 new PaneFaviconEvent(state.Id, dataUrl), WebViewPaneJsonContext.Default.PaneFaviconEvent));
         });
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe saucer_status OnPermission(saucer_webview* webview, saucer_permission_request* request, void* userdata)
+    {
+        // Read type/url and take a copy before entering managed dispatch — the original's lifetime
+        // ends with this callback. The copy shares ownership: accept() resolves it, freeing it
+        // unresolved denies it (engine default).
+        var kinds = DescribePermissionKinds(Saucer.saucer_permission_request_type(request));
+        var url = ReadPermissionUrl(request);
+        var copy = (nint)Saucer.saucer_permission_request_copy(request);
+        if (copy == 0) return saucer_status.SAUCER_STATE_UNHANDLED;
+
+        return NativeGuard.Invoke("WebViewPaneService.OnPermission", saucer_status.SAUCER_STATE_UNHANDLED, () =>
+        {
+            var state = Resolve(userdata);
+            if (state is null)
+            {
+                Saucer.saucer_permission_request_free((saucer_permission_request*)copy);
+                return saucer_status.SAUCER_STATE_UNHANDLED;
+            }
+
+            state.Service.TrackPermissionRequest(state.Id, copy, kinds, url);
+            return saucer_status.SAUCER_STATE_HANDLED;
+        });
+    }
+
+    private void TrackPermissionRequest(int paneId, nint request, string[] kinds, string url)
+    {
+        var requestId = Interlocked.Increment(ref _nextPermissionId);
+        var pending = new PendingPermission { RequestId = requestId, PaneId = paneId, Request = request };
+        lock (_lock)
+        {
+            _pendingPermissions[requestId] = pending;
+        }
+        // Unresolved prompts would pin the request (and block the page) forever; deny after a grace window.
+        pending.Timer = new Timer(static s =>
+        {
+            var (service, id) = ((WebViewPaneService, long))s!;
+            _ = service.ResolvePermissionAsync(id, grant: false);
+        }, (this, requestId), PermissionTimeout, Timeout.InfiniteTimeSpan);
+
+        Emit("webviewPane.permissionRequested", JsonSerializer.Serialize(
+            new PanePermissionEvent(paneId, requestId, kinds, url),
+            WebViewPaneJsonContext.Default.PanePermissionEvent));
+    }
+
+    /// <summary>
+    /// Grants or denies a pending permission request. Returns false when the request is unknown —
+    /// already resolved, timed out, or its pane closed.
+    /// </summary>
+    // CA2000: `pending` is not created here — the registry owns it; removal transfers ownership to the
+    // using-block below, and the not-found path has nothing to dispose. The analyzer cannot see that.
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership transfers from the registry to the using block; the miss path holds null.")]
+    public async Task<bool> ResolvePermissionAsync(long requestId, bool grant)
+    {
+        PendingPermission? pending;
+        lock (_lock)
+        {
+            if (!_pendingPermissions.Remove(requestId, out pending)) return false;
+        }
+        using (pending)
+        {
+            await _mainThread.InvokeAsync(() => ResolvePermissionOnUi(pending.Request, grant)).ConfigureAwait(false);
+        }
+        return true;
+    }
+
+    private static unsafe void ResolvePermissionOnUi(nint request, bool grant)
+    {
+        var ptr = (saucer_permission_request*)request;
+        if (grant) Saucer.saucer_permission_request_accept(ptr, 1);
+        Saucer.saucer_permission_request_free(ptr); // deny is the drop default; accept above wins
+    }
+
+    private void DropPendingPermissionsForPane(int paneId)
+    {
+        List<PendingPermission> dropped;
+        lock (_lock)
+        {
+            dropped = [.. _pendingPermissions.Values.Where(p => p.PaneId == paneId)];
+            foreach (var pending in dropped)
+                _pendingPermissions.Remove(pending.RequestId);
+        }
+        if (dropped.Count == 0) return;
+        foreach (var pending in dropped)
+            pending.Dispose();
+        _mainThread.Post(() =>
+        {
+            foreach (var pending in dropped)
+                ResolvePermissionOnUi(pending.Request, grant: false);
+        });
+    }
+
+    internal static string[] DescribePermissionKinds(saucer_permission_type type)
+    {
+        if (type == saucer_permission_type.SAUCER_PERMISSION_TYPE_UNKNOWN) return ["unknown"];
+        var kinds = new List<string>(2);
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_AUDIO_MEDIA)) kinds.Add("microphone");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_VIDEO_MEDIA)) kinds.Add("camera");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_DESKTOP_MEDIA)) kinds.Add("screenShare");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_MOUSE_LOCK)) kinds.Add("mouseLock");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_DEVICE_INFO)) kinds.Add("deviceInfo");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_LOCATION)) kinds.Add("geolocation");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_CLIPBOARD)) kinds.Add("clipboard");
+        if (type.HasFlag(saucer_permission_type.SAUCER_PERMISSION_TYPE_NOTIFICATION)) kinds.Add("notifications");
+        return kinds.Count == 0 ? ["unknown"] : [.. kinds];
+    }
+
+    private static unsafe string ReadPermissionUrl(saucer_permission_request* request)
+    {
+        var url = Saucer.saucer_permission_request_url(request);
+        if (url == null) return "";
+        try
+        {
+            return ReadUrl(url);
+        }
+        finally
+        {
+            Saucer.saucer_url_free(url);
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

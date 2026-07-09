@@ -45,6 +45,10 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.resolvePermission")]
+    public Task<bool> ResolvePermissionAsync(long requestId, bool grant) =>
+        _service.ResolvePermissionAsync(requestId, grant);
+
     [RynCommand("webviewPane.setUserAgent")]
     public Task SetUserAgentAsync(int id, string userAgent) => _service.SetUserAgentAsync(id, userAgent);
 

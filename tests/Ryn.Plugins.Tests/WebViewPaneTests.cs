@@ -93,6 +93,35 @@ public sealed class WebViewPaneRequestTests
     }
 }
 
+public sealed class WebViewPanePermissionTests
+{
+    [Theory]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_UNKNOWN, new[] { "unknown" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_AUDIO_MEDIA, new[] { "microphone" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_VIDEO_MEDIA, new[] { "camera" })]
+    [InlineData(
+        Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_AUDIO_MEDIA
+        | Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_VIDEO_MEDIA,
+        new[] { "microphone", "camera" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_LOCATION, new[] { "geolocation" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_CLIPBOARD, new[] { "clipboard" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_NOTIFICATION, new[] { "notifications" })]
+    [InlineData(Ryn.Interop.saucer_permission_type.SAUCER_PERMISSION_TYPE_DESKTOP_MEDIA, new[] { "screenShare" })]
+    public void DescribePermissionKinds_MapsFlags(Ryn.Interop.saucer_permission_type type, string[] expected)
+    {
+        WebViewPaneService.DescribePermissionKinds(type).Should().Equal(expected);
+    }
+
+    [Fact]
+    public void PermissionEvent_SerializesCamelCase()
+    {
+        JsonSerializer.Serialize(
+                new PanePermissionEvent(2, 7, ["camera"], "https://meet.example"),
+                WebViewPaneJsonContext.Default.PanePermissionEvent)
+            .Should().Be("""{"id":2,"requestId":7,"kinds":["camera"],"url":"https://meet.example"}""");
+    }
+}
+
 public sealed class WebViewPaneDependencyInjectionTests
 {
     [Fact]
@@ -128,6 +157,7 @@ public sealed class WebViewPaneDependencyInjectionTests
         await service.Awaiting(s => s.EvalAsync(99, "1+1")).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.SetUserAgentAsync(99, "UA/1.0")).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.SetUserAgentAsync(1, "")).Should().ThrowAsync<ArgumentException>();
+        (await service.ResolvePermissionAsync(12345, grant: true)).Should().BeFalse();
     }
 
     private sealed class NoopDispatcher : IMainThreadDispatcher

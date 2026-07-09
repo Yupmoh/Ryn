@@ -48,6 +48,12 @@ internal sealed record PaneFaviconEvent(int Id, string DataUrl);
 
 internal sealed record PaneClosedEvent(int Id);
 
+/// <summary>
+/// Kinds: microphone, camera, screenShare, mouseLock, deviceInfo, geolocation, clipboard,
+/// notifications, unknown. A getUserMedia call for camera+mic carries both kinds in one request.
+/// </summary>
+internal sealed record PanePermissionEvent(int Id, long RequestId, string[] Kinds, string Url);
+
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(PaneOpenRequest))]
 [JsonSerializable(typeof(PaneNavigatedEvent))]
@@ -56,5 +62,6 @@ internal sealed record PaneClosedEvent(int Id);
 [JsonSerializable(typeof(PaneDomReadyEvent))]
 [JsonSerializable(typeof(PaneFaviconEvent))]
 [JsonSerializable(typeof(PaneClosedEvent))]
+[JsonSerializable(typeof(PanePermissionEvent))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class WebViewPaneJsonContext : JsonSerializerContext { }
