@@ -24,6 +24,7 @@
     <Project Path="src/Ryn.Ipc/Ryn.Ipc.csproj" />
     <Project Path="src/Ryn.Ipc.Generator/Ryn.Ipc.Generator.csproj" />
     <Project Path="src/Ryn.Plugins.Audio/Ryn.Plugins.Audio.csproj" />
+    <Project Path="src/Ryn.Plugins.Badge/Ryn.Plugins.Badge.csproj" />
     <Project Path="src/Ryn.Plugins.Clipboard/Ryn.Plugins.Clipboard.csproj" />
     <Project Path="src/Ryn.Plugins.Dialog/Ryn.Plugins.Dialog.csproj" />
     <Project Path="src/Ryn.Plugins.FileSystem/Ryn.Plugins.FileSystem.csproj" />

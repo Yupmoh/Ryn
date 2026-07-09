@@ -375,6 +375,7 @@ const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 | Audio | `Ryn.Plugins.Audio` | `AddRynAudio()` | `audio.play`, `audio.playSystem`, `audio.stop`, `audio.setVolume`, `audio.isPlaying` |
 | Tray | `Ryn.Plugins.Tray` | `AddRynTray(opts => ...)` | `tray.show`, `tray.hide`, `tray.setTooltip`, `tray.setMenu`, `tray.notify` |
 | MenuBar | `Ryn.Plugins.MenuBar` | `AddRynMenuBar(opts => ...)` | `menubar.setMenu`, `menubar.reset` |
+| Badge | `Ryn.Plugins.Badge` | `AddRynBadge()` | `badge.set`, `badge.setCount`, `badge.clear` |
 | Updater | `Ryn.Plugins.Updater` | `AddRynUpdater(opts => ...)` | `updater.check`, `updater.download`, `updater.apply` |
 
 > **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
