@@ -73,6 +73,9 @@ internal sealed record PaneDownloadCompletedEvent(int Id, long DownloadId, strin
 
 internal sealed record PaneDownloadFailedEvent(int Id, long DownloadId, string Error);
 
+/// <summary>ParamsJson is the CDP event's parameter object, verbatim. Windows only.</summary>
+internal sealed record PaneCdpEvent(int Id, string Event, string ParamsJson);
+
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(PaneOpenRequest))]
 [JsonSerializable(typeof(PaneNavigatedEvent))]
@@ -88,5 +91,6 @@ internal sealed record PaneDownloadFailedEvent(int Id, long DownloadId, string E
 [JsonSerializable(typeof(PaneDownloadProgressEvent))]
 [JsonSerializable(typeof(PaneDownloadCompletedEvent))]
 [JsonSerializable(typeof(PaneDownloadFailedEvent))]
+[JsonSerializable(typeof(PaneCdpEvent))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class WebViewPaneJsonContext : JsonSerializerContext { }

@@ -233,6 +233,7 @@ public sealed class WebViewPaneDependencyInjectionTests
         await service.Awaiting(s => s.SetUserAgentAsync(99, "UA/1.0")).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.SetUserAgentAsync(1, "")).Should().ThrowAsync<ArgumentException>();
         (await service.ResolvePermissionAsync(12345, grant: true)).Should().BeFalse();
+        await service.Awaiting(s => s.CdpCallAsync(99, "Page.enable", "{}")).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.ScreenshotAsync(99)).Should().ThrowAsync<ArgumentException>();
         await service.Awaiting(s => s.SetSuspendedAsync(99, true)).Should().ThrowAsync<ArgumentException>();
         service.Invoking(s => s.ReloadFromCrash(99)).Should().NotThrow();
