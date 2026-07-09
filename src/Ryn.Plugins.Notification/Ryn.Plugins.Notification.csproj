@@ -3,8 +3,16 @@
     <RootNamespace>Ryn.Plugins.Notification</RootNamespace>
     <Description>Native notification plugin for Ryn applications</Description>
     <PackageTags>ryn;plugin;notification</PackageTags>
-    <NoWarn>IL2026;IL3050;CA1062</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- CA1003: backends use Action&lt;string&gt; events deliberately (simple id payload, matches the tray plugin).
+         CA2216: backends are process-lifetime singletons owning ObjC/GLib state; a finalizer touching native
+         objects on the finalizer thread would be unsafe, so teardown is Dispose-only. -->
+    <NoWarn>IL2026;IL3050;CA1062;CA1003;CA2216</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ryn.Plugins.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
