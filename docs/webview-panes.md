@@ -1,0 +1,119 @@
+# WebView Panes — embedded browser panes
+
+`Ryn.Plugins.WebViewPane` embeds **real browsers inside your window** as positioned panes:
+secondary native webviews (WKWebView on macOS, WebView2 on Windows, WebKitGTK on Linux)
+created against the same window that hosts your app's UI. Panes render the full web —
+including sites that refuse to load in iframes (`X-Frame-Options: DENY`,
+`CSP: frame-ancestors`) — with **no embedded browser engine**: the ~5 MB binary stays a
+~5 MB binary.
+
+```csharp
+services.AddRynWebViewPane();
+```
+
+```json
+{ "capabilities": { "webviewPane": true } }
+```
+
+## The layering model
+
+A pane is a **native view floating above your HTML UI** (the same model as Electron's
+`WebContentsView` and Tauri's child webviews). Your frontend owns the layout: it reserves
+a rectangle, opens a pane with those bounds, and keeps the bounds synced when the layout
+changes (resize observers work well). Two consequences to design around:
+
+- Your HTML cannot draw **on top of** a pane — position popovers, context menus, and drag
+  overlays outside the pane rect, or hide/shrink the pane while they're open.
+- Panes ignore the page scroll; bounds are window client-area pixels.
+
+## JS API
+
+### Commands
+
+```js
+// Open — returns the pane id. All fields optional except bounds you care about.
+const id = await window.__ryn.invoke('webviewPane.open', { options: {
+  x: 300, y: 0, width: 500, height: 560,
+  url: 'https://github.com',
+  storagePath: '/path/to/session',   // per-pane cookie/storage dir (panes sharing a path share a session)
+  devTools: false,
+  zoom: 1.0                          // 0.25–5.0
+}});
+
+await window.__ryn.invoke('webviewPane.navigate',    { id, url: 'https://example.com' });
+await window.__ryn.invoke('webviewPane.back',        { id });
+await window.__ryn.invoke('webviewPane.forward',     { id });
+await window.__ryn.invoke('webviewPane.reload',      { id });
+await window.__ryn.invoke('webviewPane.setBounds',   { id, x: 0, y: 0, width: 800, height: 400 });
+await window.__ryn.invoke('webviewPane.setZoom',     { id, factor: 1.5 });
+await window.__ryn.invoke('webviewPane.setDevTools', { id, enabled: true });
+await window.__ryn.invoke('webviewPane.execute',     { id, code: "window.scrollTo(0, 0)" }); // fire-and-forget
+const result = await window.__ryn.invoke('webviewPane.eval', { id, code: "document.title" }); // JSON result
+const url    = await window.__ryn.invoke('webviewPane.url',  { id });
+const ids    = await window.__ryn.invoke('webviewPane.list');
+await window.__ryn.invoke('webviewPane.close', { id });
+```
+
+### Events
+
+```js
+window.__ryn.on('webviewPane.navigated',        e => { /* { id, url } */ });
+window.__ryn.on('webviewPane.titleChanged',     e => { /* { id, title } */ });
+window.__ryn.on('webviewPane.loadStateChanged', e => { /* { id, state: 'started' | 'finished' } */ });
+window.__ryn.on('webviewPane.domReady',         e => { /* { id } */ });
+window.__ryn.on('webviewPane.faviconChanged',   e => { /* { id, dataUrl } — base64 data: URL for <img src> */ });
+window.__ryn.on('webviewPane.closed',           e => { /* { id } */ });
+```
+
+Everything a browser pane's chrome needs — URL bar, back/forward, spinner, tab title,
+favicon — comes from these events.
+
+## `eval` semantics
+
+`webviewPane.eval` runs code in the pane and returns the JSON-serialized result;
+promises are awaited. The code is injected natively (exempt from the page's CSP) but is
+**inlined as a single expression** — it is never passed through JavaScript `eval()`,
+which strict-CSP sites (GitHub, banks) block. To run statements, wrap them in an IIFE:
+
+```js
+const stats = await window.__ryn.invoke('webviewPane.eval', { id, code: `
+  (() => {
+    const links = document.querySelectorAll('a').length;
+    return { title: document.title, links };
+  })()
+`});
+// -> '{"title":"...","links":146}'
+```
+
+Script errors reject the promise with the page-side error message; a pane that never
+responds (e.g. a syntax error in the expression) rejects after 10 seconds.
+
+## Zoom
+
+`setZoom` is native page zoom on macOS (`WKWebView.pageZoom` — crisp, survives
+navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
+each navigation; layout-affecting but universally supported.
+
+## Per-pane sessions
+
+`storagePath` gives a pane its own cookie jar and storage, persisted across runs. Use one
+path per workspace/profile to keep logins isolated, or share a path across panes that
+should share a session. Omitting it uses the engine's default (shared) session.
+
+## C# API
+
+`WebViewPaneService` (singleton, resolvable from DI) exposes the same surface:
+`OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
+`Reload`, `SetZoom`, `SetDevTools`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
+
+## Platform notes
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| Rendering | ✅ WKWebView | ✅ WebView2 | 🟡 WebKitGTK (untested interactively) |
+| Zoom | ✅ native page zoom | ✅ CSS zoom | ✅ CSS zoom |
+| DevTools | ✅ | ✅ | ✅ |
+| Per-pane session | ✅ | ✅ | ✅ |
+
+Panes attach to the main window. They are torn down automatically when the window closes
+or the service is disposed.

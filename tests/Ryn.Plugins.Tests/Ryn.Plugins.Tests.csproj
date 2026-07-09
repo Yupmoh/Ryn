@@ -33,6 +33,7 @@
     <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Audio\Ryn.Plugins.Audio.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Updater\Ryn.Plugins.Updater.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.WebViewPane\Ryn.Plugins.WebViewPane.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

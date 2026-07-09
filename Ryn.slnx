@@ -34,6 +34,7 @@
     <Project Path="src/Ryn.Plugins.Shell/Ryn.Plugins.Shell.csproj" />
     <Project Path="src/Ryn.Plugins.Tray/Ryn.Plugins.Tray.csproj" />
     <Project Path="src/Ryn.Plugins.Updater/Ryn.Plugins.Updater.csproj" />
+    <Project Path="src/Ryn.Plugins.WebViewPane/Ryn.Plugins.WebViewPane.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Ryn.Core.Tests/Ryn.Core.Tests.csproj" />

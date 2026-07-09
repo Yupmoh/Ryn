@@ -7,6 +7,7 @@ using Ryn.Plugins.GlobalShortcut;
 using Ryn.Plugins.MenuBar;
 using Ryn.Plugins.Notification;
 using Ryn.Plugins.Shell;
+using Ryn.Plugins.WebViewPane;
 using Showcase;
 
 var html = """
@@ -287,6 +288,19 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
         <div class="output" id="shortcutOutput" style="min-height:24px">Register a system-wide hotkey, then press it — even while another app is focused</div>
       </div>
       <div class="card full">
+        <h3><span class="icon">🌐</span> WebView Pane</h3>
+        <div class="row mb">
+          <input id="paneUrl" placeholder="URL" value="https://github.com" />
+          <button class="btn btn-primary btn-sm" onclick="doOpenPane()">Open Pane</button>
+          <button class="btn btn-outline btn-sm" onclick="doPaneBack()">◀</button>
+          <button class="btn btn-outline btn-sm" onclick="doPaneForward()">▶</button>
+          <button class="btn btn-outline btn-sm" onclick="doPaneZoom(-0.25)">−</button>
+          <button class="btn btn-outline btn-sm" onclick="doPaneZoom(0.25)">+</button>
+          <button class="btn btn-outline btn-sm" onclick="doClosePane()">Close</button>
+        </div>
+        <div class="output" id="paneOutput" style="min-height:24px">Opens a real native browser pane (WKWebView/WebView2) over the lower half of this window</div>
+      </div>
+      <div class="card full">
         <h3><span class="icon">🐚</span> Shell</h3>
         <div class="row mb">
           <input id="shellCmd" placeholder="Command" value="echo" style="width:120px" />
@@ -541,6 +555,47 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     el.className = 'output success';
   });
 
+  // WebView pane
+  var paneId = null;
+  var paneZoom = 1.0;
+
+  async function doOpenPane() {
+    if (paneId !== null) { toast('Pane already open'); return; }
+    var url = document.getElementById('paneUrl').value;
+    paneId = await invoke('webviewPane.open', { options: {
+      x: 0, y: Math.round(window.innerHeight / 2),
+      width: Math.round(window.innerWidth), height: Math.round(window.innerHeight / 2),
+      url: url
+    }});
+    document.getElementById('paneOutput').textContent = 'Pane ' + paneId + ' opened';
+  }
+
+  async function doClosePane() {
+    if (paneId === null) return;
+    await invoke('webviewPane.close', { id: paneId });
+    paneId = null;
+    paneZoom = 1.0;
+    document.getElementById('paneOutput').textContent = 'Pane closed';
+  }
+
+  async function doPaneBack() { if (paneId !== null) await invoke('webviewPane.back', { id: paneId }); }
+  async function doPaneForward() { if (paneId !== null) await invoke('webviewPane.forward', { id: paneId }); }
+
+  async function doPaneZoom(delta) {
+    if (paneId === null) return;
+    paneZoom = Math.min(5, Math.max(0.25, paneZoom + delta));
+    await invoke('webviewPane.setZoom', { id: paneId, factor: paneZoom });
+    toast('Zoom ' + Math.round(paneZoom * 100) + '%');
+  }
+
+  window.__ryn.on('webviewPane.titleChanged', function(e) {
+    document.getElementById('paneOutput').textContent = 'Pane ' + e.id + ': ' + e.title;
+  });
+
+  window.__ryn.on('webviewPane.navigated', function(e) {
+    document.getElementById('paneUrl').value = e.url;
+  });
+
   // Shell
   async function doShell() {
     try {
@@ -584,6 +639,7 @@ var app = RynApplication.CreateBuilder()
         services.AddRynMenuBar(menu => menu.AppName = "Ryn Showcase");
         services.AddRynBadge();
         services.AddRynGlobalShortcut();
+        services.AddRynWebViewPane();
     })
     .Build();
 
