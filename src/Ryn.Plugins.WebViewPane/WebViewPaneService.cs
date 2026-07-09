@@ -158,6 +158,13 @@ public sealed partial class WebViewPaneService : IDisposable
         Saucer.saucer_webview_on(webview, saucer_webview_event.SAUCER_WEBVIEW_EVENT_PERMISSION,
             (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, saucer_permission_request*, void*, saucer_status>)&OnPermission, 1, userdata);
 
+        PaneLifecycleInterop.RegisterCrashHandler(webview, reason =>
+        {
+            state.Service.Emit("webviewPane.processTerminated", JsonSerializer.Serialize(
+                new PaneProcessTerminatedEvent(state.Id, reason),
+                WebViewPaneJsonContext.Default.PaneProcessTerminatedEvent));
+        });
+
         Saucer.saucer_webview_set_bounds(webview, request.X, request.Y, request.Width, request.Height);
 
         if (request.DevTools)
@@ -201,6 +208,7 @@ public sealed partial class WebViewPaneService : IDisposable
         var webview = (saucer_webview*)state.Webview;
         if (webview != null)
         {
+            PaneLifecycleInterop.UnregisterCrashHandler(webview);
             // Do NOT saucer_webview_off_all before free: on macOS clearing the navigated/favicon
             // listeners tears down saucer's KVO observers, and free then removes them again —
             // NSRangeException ("not registered as an observer") and the app dies. free owns the
@@ -379,6 +387,52 @@ public sealed partial class WebViewPaneService : IDisposable
         var payload = await EvalAsync(id, expression).ConfigureAwait(false);
         return JsonSerializer.Deserialize(payload, WebViewPaneJsonContext.Default.PaneFindResult)
                ?? new PaneFindResult(0, -1);
+    }
+
+    /// <summary>
+    /// Suspends (hide + throttle; a real process freeze on WebView2) or resumes a pane. A suspended
+    /// pane is invisible on every platform — treat suspension as "this pane is in the background".
+    /// </summary>
+    public async Task SetSuspendedAsync(int id, bool suspended)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        PaneState? state;
+        lock (_lock)
+        {
+            _panes.TryGetValue(id, out state);
+        }
+        if (state is null) throw new ArgumentException($"Unknown pane id {id}.", nameof(id));
+
+        Exception? failure = null;
+        await _mainThread.InvokeAsync(() =>
+        {
+            try
+            {
+                if (state.Webview != 0)
+                    SetSuspendedOnUi(state.Webview, suspended);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failure = ex;
+            }
+        }).ConfigureAwait(false);
+        if (failure is not null) throw failure;
+    }
+
+    private static unsafe void SetSuspendedOnUi(nint webview, bool suspended) =>
+        PaneLifecycleInterop.SetSuspended((saucer_webview*)webview, suspended);
+
+    /// <summary>
+    /// Recovers a pane whose web process died: renavigates to the last known URL (the engines respawn
+    /// the web process on navigation). Pair with the <c>webviewPane.processTerminated</c> event.
+    /// </summary>
+    public void ReloadFromCrash(int id)
+    {
+        WithPane(id, (wv, state) =>
+        {
+            if (!string.IsNullOrEmpty(state.Url)) NavigateOnUi(wv, state.Url);
+            else ReloadOnUi(wv);
+        });
     }
 
     /// <summary>

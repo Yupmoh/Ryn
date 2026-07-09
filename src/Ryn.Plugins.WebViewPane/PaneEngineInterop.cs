@@ -160,6 +160,7 @@ internal static unsafe partial class PaneEngineInterop
             "cairo" => ["libcairo.so.2", "libcairo.so"],
             "glib" => ["libglib-2.0.so.0", "libglib-2.0.so"],
             "gobject" => ["libgobject-2.0.so.0", "libgobject-2.0.so"],
+            "gtk" => ["libgtk-4.so.1", "libgtk-4.so", "libgtk-3.so.0", "libgtk-3.so"],
             _ => [],
         };
         foreach (var candidate in candidates)
