@@ -59,6 +59,15 @@ public interface IRynWindow
     /// beneath it (for overlay/HUD-style windows). The page keeps running — timers, IPC and script still
     /// work — it just receives no mouse events, so re-enabling input needs a non-mouse trigger.</summary>
     public void SetClickThrough(bool clickThrough);
+    /// <summary>
+    /// Sets the window's translucent backdrop material. The material renders behind a transparent webview
+    /// background, so give the page a (semi-)transparent background to see it. Degrades to
+    /// <see cref="BackdropMaterial.None"/> where the OS can't render it — query <see cref="GetBackdrop"/> to check.
+    /// </summary>
+    public void SetBackdrop(BackdropMaterial material);
+    /// <summary>The backdrop material currently applied — may be <see cref="BackdropMaterial.None"/> if the
+    /// requested material degraded on this OS.</summary>
+    public BackdropMaterial GetBackdrop();
     /// <summary>Centers the window on its current screen.</summary>
     public void Center();
     /// <summary>

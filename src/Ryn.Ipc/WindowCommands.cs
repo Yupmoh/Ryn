@@ -58,6 +58,34 @@ internal sealed class WindowCommands
     [RynCommand("window.setClickThrough")]
     public void SetClickThrough(bool clickThrough) => _windows.Current.SetClickThrough(clickThrough);
 
+    /// <summary>Sets the window backdrop: "none", "blur", "acrylic", or "mica" (unknown values are ignored).</summary>
+    [RynCommand("window.setBackdrop")]
+    public void SetBackdrop(string material)
+    {
+        if (TryParseBackdrop(material, out var value))
+            _windows.Current.SetBackdrop(value);
+    }
+
+    /// <summary>Returns the effective backdrop material as a lowercase string (may be "none" if it degraded).</summary>
+    [RynCommand("window.getBackdrop")]
+    public string GetBackdrop() => _windows.Current.GetBackdrop() switch
+    {
+        BackdropMaterial.Blur => "blur",
+        BackdropMaterial.Acrylic => "acrylic",
+        BackdropMaterial.Mica => "mica",
+        _ => "none",
+    };
+
+    private static bool TryParseBackdrop(string material, out BackdropMaterial value)
+    {
+        value = BackdropMaterial.None;
+        if (string.Equals(material, "none", StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(material, "blur", StringComparison.OrdinalIgnoreCase)) { value = BackdropMaterial.Blur; return true; }
+        if (string.Equals(material, "acrylic", StringComparison.OrdinalIgnoreCase)) { value = BackdropMaterial.Acrylic; return true; }
+        if (string.Equals(material, "mica", StringComparison.OrdinalIgnoreCase)) { value = BackdropMaterial.Mica; return true; }
+        return false;
+    }
+
     [RynCommand("window.center")]
     public void Center() => _windows.Current.Center();
 

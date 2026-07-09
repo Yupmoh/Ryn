@@ -24,6 +24,7 @@ public sealed class RynOptions
     private int _maxHeight;
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
+    private BackdropMaterial _backdrop = BackdropMaterial.None;
     private bool _transparent;
     private bool _clickThrough;
     private bool _hardwareAcceleration = true;
@@ -74,6 +75,14 @@ public sealed class RynOptions
 
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get => _transparent; set => Set(ref _transparent, value); }
+
+    /// <summary>
+    /// The window's translucent backdrop material. Non-<see cref="BackdropMaterial.None"/> values make the
+    /// window/webview background transparent so the material shows through — give the page a (semi-)transparent
+    /// background. Degrades to <see cref="BackdropMaterial.None"/> where the OS can't render it; check the
+    /// applied value with <see cref="IRynWindow.GetBackdrop"/>.
+    /// </summary>
+    public BackdropMaterial Backdrop { get => _backdrop; set => Set(ref _backdrop, value); }
 
     /// <summary>Whether the window ignores mouse input, letting clicks fall through to whatever is beneath it.
     /// Combine with <see cref="Transparent"/>, a frameless <see cref="TitleBarStyle"/> and always-on-top for
@@ -205,6 +214,28 @@ public sealed class RynOptions
         field = value;
         _setProperties.Add(propertyName);
     }
+}
+
+/// <summary>
+/// The window's backdrop material — a translucent blur behind a transparent webview background.
+/// Support is per-OS: macOS renders all non-<see cref="None"/> values via NSVisualEffectView;
+/// Windows 11 (22H2+) maps <see cref="Mica"/>/<see cref="Acrylic"/>/<see cref="Blur"/> to the DWM
+/// system backdrop; older Windows and Linux report <see cref="None"/>. Query the applied value with
+/// <c>IRynWindow.GetBackdrop()</c> (or <c>window.getBackdrop</c>) and fall back when it degrades.
+/// </summary>
+public enum BackdropMaterial
+{
+    /// <summary>Opaque window (the default).</summary>
+    None,
+
+    /// <summary>A general translucent blur (macOS full-window vibrancy; Windows acrylic).</summary>
+    Blur,
+
+    /// <summary>A stronger, more saturated blur (macOS vibrancy; Windows acrylic).</summary>
+    Acrylic,
+
+    /// <summary>A subtle desktop-tinted material (Windows 11 mica; macOS approximates with vibrancy).</summary>
+    Mica,
 }
 
 /// <summary>Controls the appearance and behavior of the window title bar.</summary>
