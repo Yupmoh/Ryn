@@ -45,6 +45,18 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.find")]
+    public Task<PaneFindResult> FindAsync(int id, string text, bool? forward, bool? matchCase) =>
+        _service.FindAsync(id, text, forward ?? true, matchCase ?? false);
+
+    [RynCommand("webviewPane.findNext")]
+    public Task<PaneFindResult> FindNextAsync(int id, bool? forward) =>
+        _service.FindNextAsync(id, forward ?? true);
+
+    [RynCommand("webviewPane.findStop")]
+    public Task<PaneFindResult> FindStopAsync(int id, bool? clearHighlights) =>
+        _service.FindStopAsync(id, clearHighlights ?? true);
+
     [RynCommand("webviewPane.resolvePermission")]
     public Task<bool> ResolvePermissionAsync(long requestId, bool grant) =>
         _service.ResolvePermissionAsync(requestId, grant);

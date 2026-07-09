@@ -93,6 +93,44 @@ public sealed class WebViewPaneRequestTests
     }
 }
 
+public sealed class WebViewPaneFindTests
+{
+    [Fact]
+    public void BuildFind_EscapesTextAndInstallsEngineOnce()
+    {
+        var script = PaneFindScript.BuildFind("he said \"hi\"\n<b>", forward: true, matchCase: false);
+
+        script.Should().Contain("if (!window.__rynFind)");
+        script.Should().Contain("window.__rynFind = (() => {");
+        // The needle is embedded as a JSON string literal — quotes, newlines, and HTML-sensitive
+        // characters are escaped by STJ's default encoder (" for '"', < for '<').
+        script.Should().Contain("he said \\u0022hi\\u0022\\n\\u003Cb\\u003E");
+        script.Should().Contain(".find(");
+        script.Should().Contain("true, false");
+        script.Should().NotContain("eval(");
+    }
+
+    [Fact]
+    public void BuildNextAndStop_GuardAgainstMissingEngine()
+    {
+        PaneFindScript.BuildNext(forward: false).Should().Contain("window.__rynFind ? window.__rynFind.next(false)");
+        PaneFindScript.BuildStop(clearHighlights: true).Should().Contain("window.__rynFind.stop(true)");
+        PaneFindScript.BuildNext(forward: true).Should().Contain("({ matches: 0, activeIndex: -1 })");
+    }
+
+    [Fact]
+    public void PaneFindResult_RoundTripsCamelCase()
+    {
+        var parsed = JsonSerializer.Deserialize(
+            """{"matches":12,"activeIndex":3}""", WebViewPaneJsonContext.Default.PaneFindResult)!;
+        parsed.Matches.Should().Be(12);
+        parsed.ActiveIndex.Should().Be(3);
+
+        JsonSerializer.Serialize(new PaneFindResult(0, -1), WebViewPaneJsonContext.Default.PaneFindResult)
+            .Should().Be("""{"matches":0,"activeIndex":-1}""");
+    }
+}
+
 public sealed class WebViewPanePermissionTests
 {
     [Theory]

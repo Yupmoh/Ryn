@@ -352,6 +352,32 @@ public sealed partial class WebViewPaneService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts (or restarts) a find session in the pane and returns the match count with the active
+    /// match scrolled into view. Matches are painted with the CSS Custom Highlight API where the
+    /// engine supports it; a navigation clears the session.
+    /// </summary>
+    public Task<PaneFindResult> FindAsync(int id, string text, bool forward = true, bool matchCase = false)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return RunFindAsync(id, PaneFindScript.BuildFind(text, forward, matchCase));
+    }
+
+    /// <summary>Moves the active match forward/backward, wrapping at the ends.</summary>
+    public Task<PaneFindResult> FindNextAsync(int id, bool forward = true) =>
+        RunFindAsync(id, PaneFindScript.BuildNext(forward));
+
+    /// <summary>Ends the find session, clearing highlights unless told to keep them.</summary>
+    public Task<PaneFindResult> FindStopAsync(int id, bool clearHighlights = true) =>
+        RunFindAsync(id, PaneFindScript.BuildStop(clearHighlights));
+
+    private async Task<PaneFindResult> RunFindAsync(int id, string expression)
+    {
+        var payload = await EvalAsync(id, expression).ConfigureAwait(false);
+        return JsonSerializer.Deserialize(payload, WebViewPaneJsonContext.Default.PaneFindResult)
+               ?? new PaneFindResult(0, -1);
+    }
+
     /// <summary>The pane's current URL as last reported by navigation events.</summary>
     public string GetUrl(int id)
     {
