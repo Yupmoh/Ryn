@@ -154,9 +154,15 @@ internal static unsafe partial class PaneEngineInterop
 
     private static nint ResolveLinuxLibrary(string libraryName, System.Reflection.Assembly assembly, DllImportSearchPath? searchPath)
     {
-        if (libraryName != "webkitgtk") return 0;
-        foreach (var candidate in (string[])
-                 ["libwebkitgtk-6.0.so.4", "libwebkitgtk-6.0.so", "libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.1.so"])
+        string[] candidates = libraryName switch
+        {
+            "webkitgtk" => ["libwebkitgtk-6.0.so.4", "libwebkitgtk-6.0.so", "libwebkit2gtk-4.1.so.0", "libwebkit2gtk-4.1.so"],
+            "cairo" => ["libcairo.so.2", "libcairo.so"],
+            "glib" => ["libglib-2.0.so.0", "libglib-2.0.so"],
+            "gobject" => ["libgobject-2.0.so.0", "libgobject-2.0.so"],
+            _ => [],
+        };
+        foreach (var candidate in candidates)
         {
             if (NativeLibrary.TryLoad(candidate, out var handle))
                 return handle;
