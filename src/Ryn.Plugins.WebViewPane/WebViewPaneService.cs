@@ -165,6 +165,23 @@ public sealed partial class WebViewPaneService : IDisposable
                 WebViewPaneJsonContext.Default.PaneProcessTerminatedEvent));
         });
 
+        PaneDownloadInterop.RegisterPane(webview, new PaneDownloadInterop.Callbacks
+        {
+            PaneId = state.Id,
+            OnRequested = (downloadId, url, suggestedName) => state.Service.Emit("webviewPane.downloadRequested",
+                JsonSerializer.Serialize(new PaneDownloadRequestedEvent(state.Id, downloadId, url, suggestedName),
+                    WebViewPaneJsonContext.Default.PaneDownloadRequestedEvent)),
+            OnProgress = (downloadId, received, total) => state.Service.Emit("webviewPane.downloadProgress",
+                JsonSerializer.Serialize(new PaneDownloadProgressEvent(state.Id, downloadId, received, total),
+                    WebViewPaneJsonContext.Default.PaneDownloadProgressEvent)),
+            OnCompleted = (downloadId, path) => state.Service.Emit("webviewPane.downloadCompleted",
+                JsonSerializer.Serialize(new PaneDownloadCompletedEvent(state.Id, downloadId, path),
+                    WebViewPaneJsonContext.Default.PaneDownloadCompletedEvent)),
+            OnFailed = (downloadId, error) => state.Service.Emit("webviewPane.downloadFailed",
+                JsonSerializer.Serialize(new PaneDownloadFailedEvent(state.Id, downloadId, error),
+                    WebViewPaneJsonContext.Default.PaneDownloadFailedEvent)),
+        });
+
         Saucer.saucer_webview_set_bounds(webview, request.X, request.Y, request.Width, request.Height);
 
         if (request.DevTools)
@@ -209,6 +226,7 @@ public sealed partial class WebViewPaneService : IDisposable
         if (webview != null)
         {
             PaneLifecycleInterop.UnregisterCrashHandler(webview);
+            PaneDownloadInterop.UnregisterPane(webview);
             // Do NOT saucer_webview_off_all before free: on macOS clearing the navigated/favicon
             // listeners tears down saucer's KVO observers, and free then removes them again —
             // NSRangeException ("not registered as an observer") and the app dies. free owns the
@@ -421,6 +439,17 @@ public sealed partial class WebViewPaneService : IDisposable
 
     private static unsafe void SetSuspendedOnUi(nint webview, bool suspended) =>
         PaneLifecycleInterop.SetSuspended((saucer_webview*)webview, suspended);
+
+    /// <summary>
+    /// Resolves a pending download surfaced by <c>webviewPane.downloadRequested</c>: writes to
+    /// <paramref name="path"/> when <paramref name="allow"/>, otherwise cancels. Unknown or
+    /// already-resolved ids are ignored.
+    /// </summary>
+    public Task ResolveDownloadAsync(long downloadId, bool allow, string? path)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _mainThread.InvokeAsync(() => PaneDownloadInterop.Resolve(downloadId, allow, path));
+    }
 
     /// <summary>
     /// Recovers a pane whose web process died: renavigates to the last known URL (the engines respawn

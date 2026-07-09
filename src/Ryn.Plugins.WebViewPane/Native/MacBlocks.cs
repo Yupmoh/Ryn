@@ -61,4 +61,38 @@ internal static unsafe class MacBlocks
 
     /// <summary>Reads the captured context pointer from inside an invoke callback.</summary>
     public static nint GetContext(nint block) => ((BlockLiteral*)block)->Context;
+
+    // Block_copy/Block_release live in libSystem but are exported as _Block_copy/_Block_release; the exact
+    // dlsym name varies by OS version, so resolve at runtime trying both spellings.
+    private static readonly delegate* unmanaged<nint, nint> s_blockCopy = ResolveBlockFn<nint>("Block_copy");
+    private static readonly delegate* unmanaged<nint, void> s_blockRelease = ResolveBlockFn2("Block_release");
+
+    private static delegate* unmanaged<nint, nint> ResolveBlockFn<T>(string name)
+    {
+        var lib = NativeLibrary.Load("/usr/lib/libSystem.B.dylib");
+        if (NativeLibrary.TryGetExport(lib, name, out var p) || NativeLibrary.TryGetExport(lib, "_" + name, out p))
+            return (delegate* unmanaged<nint, nint>)p;
+        return null;
+    }
+
+    private static delegate* unmanaged<nint, void> ResolveBlockFn2(string name)
+    {
+        var lib = NativeLibrary.Load("/usr/lib/libSystem.B.dylib");
+        if (NativeLibrary.TryGetExport(lib, name, out var p) || NativeLibrary.TryGetExport(lib, "_" + name, out p))
+            return (delegate* unmanaged<nint, void>)p;
+        return null;
+    }
+
+    /// <summary>Copies an ObjC block to the heap so it outlives the callback that delivered it.</summary>
+    public static nint Copy(nint block) => s_blockCopy is not null ? s_blockCopy(block) : block;
+
+    /// <summary>Releases a heap block obtained from <see cref="Copy"/>.</summary>
+    public static void ReleaseCopy(nint block) { if (s_blockRelease is not null) s_blockRelease(block); }
+
+    /// <summary>Invokes a block of signature <c>void (^)(void*)</c> (e.g. a completion handler).</summary>
+    public static void InvokeVoidPtr(nint block, nint arg)
+    {
+        var invoke = ((BlockLiteral*)block)->Invoke;
+        ((delegate* unmanaged[Cdecl]<nint, nint, void>)invoke)(block, arg);
+    }
 }

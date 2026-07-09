@@ -64,6 +64,15 @@ public sealed record PaneFindResult(int Matches, int ActiveIndex);
 /// </summary>
 internal sealed record PaneProcessTerminatedEvent(int Id, string Reason);
 
+internal sealed record PaneDownloadRequestedEvent(int Id, long DownloadId, string Url, string SuggestedName);
+
+/// <summary>TotalBytes is 0 when the engine does not report a content length. Windows only (real progress).</summary>
+internal sealed record PaneDownloadProgressEvent(int Id, long DownloadId, long ReceivedBytes, long TotalBytes);
+
+internal sealed record PaneDownloadCompletedEvent(int Id, long DownloadId, string Path);
+
+internal sealed record PaneDownloadFailedEvent(int Id, long DownloadId, string Error);
+
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(PaneOpenRequest))]
 [JsonSerializable(typeof(PaneNavigatedEvent))]
@@ -75,5 +84,9 @@ internal sealed record PaneProcessTerminatedEvent(int Id, string Reason);
 [JsonSerializable(typeof(PanePermissionEvent))]
 [JsonSerializable(typeof(PaneFindResult))]
 [JsonSerializable(typeof(PaneProcessTerminatedEvent))]
+[JsonSerializable(typeof(PaneDownloadRequestedEvent))]
+[JsonSerializable(typeof(PaneDownloadProgressEvent))]
+[JsonSerializable(typeof(PaneDownloadCompletedEvent))]
+[JsonSerializable(typeof(PaneDownloadFailedEvent))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class WebViewPaneJsonContext : JsonSerializerContext { }

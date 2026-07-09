@@ -168,6 +168,20 @@ public sealed class WebViewPanePermissionTests
         PaneLifecycleInterop.DescribeLinuxTerminationReason(reason).Should().Be(expected);
 
     [Fact]
+    public void DownloadEvents_SerializeCamelCase()
+    {
+        JsonSerializer.Serialize(new PaneDownloadRequestedEvent(1, 7, "https://x/f.zip", "f.zip"),
+                WebViewPaneJsonContext.Default.PaneDownloadRequestedEvent)
+            .Should().Be("""{"id":1,"downloadId":7,"url":"https://x/f.zip","suggestedName":"f.zip"}""");
+        JsonSerializer.Serialize(new PaneDownloadProgressEvent(1, 7, 512, 2048),
+                WebViewPaneJsonContext.Default.PaneDownloadProgressEvent)
+            .Should().Be("""{"id":1,"downloadId":7,"receivedBytes":512,"totalBytes":2048}""");
+        JsonSerializer.Serialize(new PaneDownloadCompletedEvent(1, 7, "/tmp/f.zip"),
+                WebViewPaneJsonContext.Default.PaneDownloadCompletedEvent)
+            .Should().Be("""{"id":1,"downloadId":7,"path":"/tmp/f.zip"}""");
+    }
+
+    [Fact]
     public void ProcessTerminatedEvent_SerializesCamelCase() =>
         JsonSerializer.Serialize(new PaneProcessTerminatedEvent(4, "crashed"),
                 WebViewPaneJsonContext.Default.PaneProcessTerminatedEvent)

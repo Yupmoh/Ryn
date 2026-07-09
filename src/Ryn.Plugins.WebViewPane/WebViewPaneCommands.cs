@@ -45,6 +45,11 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.resolveDownload")]
+    public Task ResolveDownloadAsync(long downloadId, string action, string? path) =>
+        _service.ResolveDownloadAsync(downloadId,
+            string.Equals(action, "allow", StringComparison.OrdinalIgnoreCase), path);
+
     [RynCommand("webviewPane.setSuspended")]
     public Task SetSuspendedAsync(int id, bool suspended) => _service.SetSuspendedAsync(id, suspended);
 
