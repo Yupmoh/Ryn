@@ -515,6 +515,78 @@ public sealed partial class WebViewPaneService : IDisposable
     private static unsafe void StartScreenshotOnUi(nint webview, Action<byte[]?, string?> completion) =>
         PaneScreenshotInterop.Start((saucer_webview*)webview, completion);
 
+    /// <summary>
+    /// Calls a Chrome DevTools Protocol method on the pane and returns the JSON result. Windows only
+    /// (WebView2); throws on macOS/Linux, which have no public DevTools Protocol.
+    /// </summary>
+    public async Task<string> CdpCallAsync(int id, string method, string paramsJson)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(method);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        PaneState? state;
+        lock (_lock)
+        {
+            _panes.TryGetValue(id, out state);
+        }
+        if (state is null) throw new ArgumentException($"Unknown pane id {id}.", nameof(id));
+
+        Task<string>? call = null;
+        Exception? failure = null;
+        await _mainThread.InvokeAsync(() =>
+        {
+            try
+            {
+                if (state.Webview != 0) call = CdpCallOnUi(state.Webview, method, paramsJson ?? "{}");
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failure = ex;
+            }
+        }).ConfigureAwait(false);
+        if (failure is not null) throw failure;
+        if (call is null) throw new InvalidOperationException("The pane was closed.");
+        return await call.ConfigureAwait(false);
+    }
+
+    private static unsafe Task<string> CdpCallOnUi(nint webview, string method, string paramsJson) =>
+        PaneCdpInterop.CallAsync((saucer_webview*)webview, method, paramsJson);
+
+    /// <summary>
+    /// Subscribes the pane to a CDP event; each occurrence is emitted as <c>webviewPane.cdpEvent</c>
+    /// carrying the pane id, event name, and parameter JSON. Windows only.
+    /// </summary>
+    public async Task CdpSubscribeAsync(int id, string eventName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(eventName);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        PaneState? state;
+        lock (_lock)
+        {
+            _panes.TryGetValue(id, out state);
+        }
+        if (state is null) throw new ArgumentException($"Unknown pane id {id}.", nameof(id));
+
+        Exception? failure = null;
+        await _mainThread.InvokeAsync(() =>
+        {
+            try
+            {
+                if (state.Webview != 0)
+                    CdpSubscribeOnUi(state.Webview, eventName, payload => state.Service.Emit("webviewPane.cdpEvent",
+                        JsonSerializer.Serialize(new PaneCdpEvent(state.Id, eventName, payload),
+                            WebViewPaneJsonContext.Default.PaneCdpEvent)));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                failure = ex;
+            }
+        }).ConfigureAwait(false);
+        if (failure is not null) throw failure;
+    }
+
+    private static unsafe void CdpSubscribeOnUi(nint webview, string eventName, Action<string> onEvent) =>
+        PaneCdpInterop.Subscribe((saucer_webview*)webview, eventName, onEvent);
+
     /// <summary>The pane's current URL as last reported by navigation events.</summary>
     public string GetUrl(int id)
     {

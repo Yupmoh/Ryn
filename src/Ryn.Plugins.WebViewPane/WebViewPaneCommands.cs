@@ -45,6 +45,13 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.setDevTools")]
     public void SetDevTools(int id, bool enabled) => _service.SetDevTools(id, enabled);
 
+    [RynCommand("webviewPane.cdpCall")]
+    public Task<string> CdpCallAsync(int id, string method, string? paramsJson) =>
+        _service.CdpCallAsync(id, method, paramsJson ?? "{}");
+
+    [RynCommand("webviewPane.cdpSubscribe")]
+    public Task CdpSubscribeAsync(int id, string eventName) => _service.CdpSubscribeAsync(id, eventName);
+
     [RynCommand("webviewPane.resolveDownload")]
     public Task ResolveDownloadAsync(long downloadId, string action, string? path) =>
         _service.ResolveDownloadAsync(downloadId,

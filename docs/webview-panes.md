@@ -168,6 +168,22 @@ still work — only the visual highlight is missing. Sessions are page-scoped: a
 them, and matches spanning element boundaries (`ab<b>cd</b>`) are not found. Searching an empty
 string returns `{ matches: 0, activeIndex: -1 }` without error.
 
+## DevTools Protocol (Windows only)
+
+WebView2 exposes a real Chrome DevTools Protocol endpoint, so on **Windows** a pane can drive CDP
+directly:
+
+```js
+const metrics = await window.__ryn.invoke('webviewPane.cdpCall',
+  { id, method: 'Page.getLayoutMetrics', paramsJson: '{}' });        // → result JSON
+await window.__ryn.invoke('webviewPane.cdpSubscribe', { id, event: 'Network.responseReceived' });
+window.__ryn.on('webviewPane.cdpEvent', e => { /* { id, event, paramsJson } */ });
+```
+
+macOS (WKWebView) and Linux (WebKitGTK) have **no public DevTools Protocol**, so `cdpCall` and
+`cdpSubscribe` reject with a typed "unsupported" error there (they never hang) — use `eval` for the
+scriptable subset on those platforms.
+
 ## Permission prompts
 
 When a page in a pane asks for a sensitive capability (getUserMedia, geolocation, …) the
@@ -196,7 +212,8 @@ should share a session. Omitting it uses the engine's default (shared) session.
 `OpenAsync(PaneOpenRequest)`, `CloseAsync`, `SetBounds`, `Navigate`, `Back`, `Forward`,
 `Reload`, `SetZoom`, `SetDevTools`, `SetUserAgentAsync`, `ScreenshotAsync`, `FindAsync`,
 `FindNextAsync`, `FindStopAsync`, `ResolvePermissionAsync`, `ResolveDownloadAsync`,
-`SetSuspendedAsync`, `ReloadFromCrash`, `Execute`, `EvalAsync`, `GetUrl`, `List`, `CloseAll`.
+`SetSuspendedAsync`, `ReloadFromCrash`, `CdpCallAsync`, `CdpSubscribeAsync`, `Execute`,
+`EvalAsync`, `GetUrl`, `List`, `CloseAll`.
 
 ## Platform notes
 
