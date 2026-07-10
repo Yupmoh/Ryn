@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\src\Ryn.Plugins.Badge\Ryn.Plugins.Badge.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.GlobalShortcut\Ryn.Plugins.GlobalShortcut.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.MenuBar\Ryn.Plugins.MenuBar.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Plugins.Tray\Ryn.Plugins.Tray.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Notification\Ryn.Plugins.Notification.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Audio\Ryn.Plugins.Audio.csproj" />
     <ProjectReference Include="..\..\src\Ryn.Plugins.Updater\Ryn.Plugins.Updater.csproj" />
