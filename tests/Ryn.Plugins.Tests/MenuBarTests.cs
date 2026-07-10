@@ -145,6 +145,30 @@ public sealed class MenuBarDefaultsTests
     }
 
     [Fact]
+    public void Enabled_DefaultsToTrue_WhenAbsentFromJson()
+    {
+        // Regression: `enabled` absent from the setMenu JSON must deserialize to true. A `= true` initializer
+        // is dropped by some STJ source-generator versions (absent members skip initializers), which built
+        // every item disabled on the shipped 0.20.1 binary. The default now lives in the getter, not an
+        // initializer, so it holds regardless of the generator.
+        var absent = System.Text.Json.JsonSerializer.Deserialize(
+            """[{"id":"x","label":"X"}]""", MenuBarJsonContext.Default.MenuBarItemArray)!;
+        absent[0].Enabled.Should().BeTrue();
+
+        var explicitFalse = System.Text.Json.JsonSerializer.Deserialize(
+            """[{"id":"x","label":"X","enabled":false}]""", MenuBarJsonContext.Default.MenuBarItemArray)!;
+        explicitFalse[0].Enabled.Should().BeFalse();
+
+        var explicitTrue = System.Text.Json.JsonSerializer.Deserialize(
+            """[{"id":"x","label":"X","enabled":true}]""", MenuBarJsonContext.Default.MenuBarItemArray)!;
+        explicitTrue[0].Enabled.Should().BeTrue();
+
+        // C# initializer still works (non-breaking).
+        new MenuBarItem { Id = "x", Enabled = false }.Enabled.Should().BeFalse();
+        new MenuBarItem { Id = "x" }.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
     public void EveryRole_UsedByDefaultMenus_IsKnown()
     {
         var menus = MenuBarDefaults.CreateDefault("TestApp");
