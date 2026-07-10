@@ -570,6 +570,83 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
     }
 
+    internal unsafe void InjectTitleBarScript()
+    {
+        fixed (byte* ptr = TitleBarScript)
+        {
+            Saucer.saucer_webview_inject(
+                (saucer_webview*)_webview,
+                (sbyte*)ptr,
+                saucer_script_time.SAUCER_SCRIPT_TIME_CREATION,
+                1, // no_frames: main frame only
+                0);
+        }
+    }
+
+    // Implements the data-webview-* custom-title-bar contract. Publishes drag/interactive rectangles to the
+    // host (the macOS overlay drag view hit-tests them so only drag regions drag and everything else clicks
+    // through) and wires drag/double-click-zoom/window-control buttons on Windows/Linux where no native drag
+    // view exists. On macOS the native drag view intercepts drag-region mousedowns before the DOM sees them,
+    // so the mousedown->startDrag path here only fires on Windows/Linux — no double drag.
+    private static ReadOnlySpan<byte> TitleBarScript =>
+        """
+        (function(){
+          if (window.top !== window.self) return;
+          var ryn = window.__ryn; if (!ryn) return;
+          function closest(t, sel){ return t && t.closest ? t.closest(sel) : null; }
+          function rectsOf(sel){
+            var out = [], nodes = document.querySelectorAll(sel);
+            for (var i=0;i<nodes.length;i++){
+              var r = nodes[i].getBoundingClientRect();
+              if (r.width>0 && r.height>0) out.push(r.left, r.top, r.width, r.height);
+            }
+            return out;
+          }
+          var scheduled = false;
+          function publish(){
+            scheduled = false;
+            var drag = [], nodes = document.querySelectorAll('[data-webview-drag]');
+            for (var i=0;i<nodes.length;i++){
+              if (closest(nodes[i], '[data-webview-ignore]')) continue;
+              var r = nodes[i].getBoundingClientRect();
+              if (r.width>0 && r.height>0) drag.push(r.left, r.top, r.width, r.height);
+            }
+            var ignore = rectsOf('[data-webview-ignore],[data-webview-minimize],[data-webview-maximize],[data-webview-close],[data-webview-resize]');
+            try { ryn.invoke('window.setTitleBarDragRegions', { drag: drag, ignore: ignore }); } catch(e){}
+          }
+          function schedule(){ if (scheduled) return; scheduled = true; requestAnimationFrame(publish); }
+          function edgeFor(v){
+            switch((v||'').toLowerCase()){
+              case 'top': return 1; case 'bottom': return 2; case 'left': return 4; case 'right': return 8;
+              case 'topleft': return 5; case 'topright': return 9;
+              case 'bottomleft': return 6; case 'bottomright': return 10; default: return 10;
+            }
+          }
+          document.addEventListener('mousedown', function(e){
+            if (e.button !== 0) return;
+            var resize = closest(e.target, '[data-webview-resize]');
+            if (resize){ e.preventDefault(); ryn.invoke('window.startResize', { edge: edgeFor(resize.getAttribute('data-webview-resize')) }); return; }
+            if (closest(e.target, '[data-webview-ignore]')) return;
+            if (closest(e.target, '[data-webview-drag]')){ e.preventDefault(); ryn.invoke('window.startDrag'); }
+          }, true);
+          document.addEventListener('dblclick', function(e){
+            if (closest(e.target, '[data-webview-ignore]')) return;
+            if (closest(e.target, '[data-webview-drag]')) ryn.invoke('window.toggleMaximize');
+          }, true);
+          document.addEventListener('click', function(e){
+            if (closest(e.target, '[data-webview-minimize]')) ryn.invoke('window.minimize');
+            else if (closest(e.target, '[data-webview-maximize]')) ryn.invoke('window.toggleMaximize');
+            else if (closest(e.target, '[data-webview-close]')) ryn.invoke('window.close');
+          }, true);
+          window.addEventListener('resize', schedule);
+          window.addEventListener('load', schedule);
+          document.addEventListener('DOMContentLoaded', schedule);
+          try { new MutationObserver(schedule).observe(document.documentElement,
+            { childList:true, subtree:true, attributes:true, attributeFilter:['style','class','hidden'] }); } catch(e){}
+          schedule();
+        })();
+        """u8;
+
     internal void RaiseFileDrop(FileDropEventArgs args) => FileDrop?.Invoke(this, args);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

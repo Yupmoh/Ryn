@@ -58,6 +58,15 @@ internal sealed class WindowCommands
     [RynCommand("window.setClickThrough")]
     public void SetClickThrough(bool clickThrough) => _windows.Current.SetClickThrough(clickThrough);
 
+    /// <summary>
+    /// Publishes the title bar's draggable and interactive rectangles (viewport-top-left CSS pixels, each a
+    /// flat [x,y,w,h] run). Normally driven by the injected <c>data-webview-drag</c> script; exposed so an app
+    /// can manage drag regions itself. See <c>IRynWindow.SetTitleBarDragRegions</c>.
+    /// </summary>
+    [RynCommand("window.setTitleBarDragRegions")]
+    public void SetTitleBarDragRegions(double[]? drag, double[]? ignore) =>
+        _windows.Current.SetTitleBarDragRegions(drag ?? [], ignore ?? []);
+
     /// <summary>Sets the window backdrop: "none", "blur", "acrylic", or "mica" (unknown values are ignored).</summary>
     [RynCommand("window.setBackdrop")]
     public void SetBackdrop(string material)

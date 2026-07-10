@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
@@ -9,7 +10,19 @@ internal static partial class MacOsTitleBar
     private static nint _dragViewClass;
     private static bool _classRegistered;
 
-    internal static unsafe void Apply(nint nsWindowPtr, bool overlay)
+    // Drag/ignore regions published by the page (the data-webview-* script), keyed by NSWindow* and stored as
+    // viewport-top-left CSS-pixel rects [x,y,w,h,...]. The drag view's hitTest consults them: a point inside an
+    // ignore rect (an interactive control) or outside every drag rect falls through to the webview; a point
+    // inside a drag rect (and not an ignore rect) is a native window drag. Absent → nothing draggable there.
+    private sealed record Regions(double[] Drag, double[] Ignore);
+    private static readonly ConcurrentDictionary<nint, Regions> DragRegions = new();
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NSPoint { public double X, Y; }
+
+    internal static unsafe void Apply(nint nsWindowPtr, bool overlay) => Apply(nsWindowPtr, overlay, dragView: true);
+
+    internal static unsafe void Apply(nint nsWindowPtr, bool overlay, bool dragView)
     {
         if (nsWindowPtr == 0) return;
 
@@ -25,34 +38,47 @@ internal static partial class MacOsTitleBar
             var mask = objc_msgSend_ret_nint(nsWindow, sel_registerName("styleMask"));
             objc_msgSend_nint(nsWindow, sel_registerName("setStyleMask:"), mask | (1 << 15));
 
-            // Native drag view on top of webview in the title bar region
-            AddDragView(nsWindow);
+            // Native drag view over the webview. It only grabs points inside published drag regions (hitTest);
+            // every other point falls through to the DOM. Skipped when the app opts out to self-manage drag.
+            if (dragView) AddDragView(nsWindow);
         }
         // Hidden: no fullSizeContentView — title bar stays as a separate native strip
         // with drag and traffic lights. Content renders below it.
+    }
+
+    /// <summary>
+    /// Publishes the page's draggable and ignored rectangles (viewport-top-left CSS pixels, flat [x,y,w,h,...])
+    /// for a window. The overlay drag view's hitTest uses them to decide drag-vs-forward-to-webview.
+    /// </summary>
+    internal static void SetDragRegions(nint nsWindowPtr, double[] drag, double[] ignore)
+    {
+        if (nsWindowPtr == 0) return;
+        DragRegions[nsWindowPtr] = new Regions(drag ?? [], ignore ?? []);
+    }
+
+    internal static void ClearDragRegions(nint nsWindowPtr)
+    {
+        if (nsWindowPtr != 0) DragRegions.TryRemove(nsWindowPtr, out _);
     }
 
     private static unsafe void AddDragView(void* nsWindow)
     {
         EnsureDragViewClass();
 
-        // Get the window's content view frame to determine width
         var contentView = (void*)objc_msgSend_ret_nint(nsWindow, sel_registerName("contentView"));
         var frame = GetRect(contentView, sel_registerName("frame"));
 
-        // Position: right of traffic lights (x=70), top of window, full remaining width, 28px tall
-        var dragWidth = Math.Max(0, frame.Width - 70);
-        var dragFrame = new NSRect { X = 70, Y = frame.Height - 28, Width = dragWidth, Height = 28 };
+        // Full-content-size overlay: hitTest returns self only inside a published drag region, nil elsewhere,
+        // so the app's drag regions can be any height/position and all other clicks reach the DOM.
+        var dragFrame = new NSRect { X = 0, Y = 0, Width = frame.Width, Height = frame.Height };
 
-        // Create the drag view
         var alloc = objc_msgSend_ret_nint((void*)_dragViewClass, sel_registerName("alloc"));
         var dragView = (void*)objc_msgSend_rect_ret_nint((void*)alloc, sel_registerName("initWithFrame:"), dragFrame);
 
-        // Autoresizing: stick to top, flex width
-        // NSViewWidthSizable = 2, NSViewMinYMargin = 8
-        objc_msgSend_nint(dragView, sel_registerName("setAutoresizingMask:"), 2 | 8);
+        // NSViewWidthSizable(2) | NSViewHeightSizable(16): track the content view on resize.
+        objc_msgSend_nint(dragView, sel_registerName("setAutoresizingMask:"), 2 | 16);
 
-        // Add on top of the webview
+        // Add on top of the webview.
         objc_msgSend_ptr(contentView, sel_registerName("addSubview:"), dragView);
     }
 
@@ -62,6 +88,14 @@ internal static partial class MacOsTitleBar
 
         var superclass = objc_getClass("NSView");
         _dragViewClass = objc_allocateClassPair(superclass, "RynTitleBarDragView", 0);
+
+        // hitTest: — grab only points inside a published drag region; return nil elsewhere so the event
+        // falls through to the webview (a sibling added before this view).
+        class_addMethod(
+            _dragViewClass,
+            sel_registerName("hitTest:"),
+            (nint)(delegate* unmanaged[Cdecl]<nint, nint, NSPoint, nint>)&OnHitTest,
+            "@@:{CGPoint=dd}");
 
         // Override mouseDown: to perform window drag
         class_addMethod(
@@ -80,6 +114,28 @@ internal static partial class MacOsTitleBar
         objc_registerClassPair(_dragViewClass);
         _classRegistered = true;
     }
+
+    // aPoint is in the superview (contentView) coordinate system: bottom-left origin, points. Convert to the
+    // page's top-left CSS pixels (1:1 with points for WKWebView) and test against the published regions.
+    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static unsafe nint OnHitTest(nint self, nint sel, NSPoint aPoint)
+        => NativeGuard.Invoke("titlebar.hitTest", (nint)0, () =>
+        {
+            var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
+            if (window == 0 || !DragRegions.TryGetValue(window, out var regions) || regions.Drag.Length < 4)
+                return 0; // nothing draggable → fall through to the webview
+
+            var superview = (void*)objc_msgSend_ret_nint((void*)self, sel_registerName("superview"));
+            if (superview == null) return 0;
+            var bounds = GetRect(superview, sel_registerName("bounds"));
+
+            var cssX = aPoint.X;
+            var cssY = bounds.Height - aPoint.Y; // flip: AppKit bottom-left → CSS top-left
+
+            // Draggable only when the point is inside a drag region and not inside an interactive (ignore)
+            // rect. Otherwise return nil so the click falls through to the webview.
+            return TitleBarRegions.IsDraggable(regions.Drag, regions.Ignore, cssX, cssY) ? self : 0;
+        });
 
     [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     private static unsafe void OnMouseDown(nint self, nint sel, nint nsEvent)

@@ -378,6 +378,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_options.DevTools) _rynWebView.InjectConsoleForwardScript();
         _rynWebView.InjectFileDropScript();
         if (_options.TitleBarStyle is TitleBarStyle.Hidden or TitleBarStyle.Overlay) InjectTitleBarInsets();
+        // The data-webview-* drag/control contract is meaningful for any style where the app draws its own
+        // title-bar chrome (Overlay/Hidden/Frameless), not the platform-native bar.
+        if (_options.TitleBarStyle is not TitleBarStyle.Native) _rynWebView.InjectTitleBarScript();
 
         _themeDetector = new SystemThemeDetector();
         _themeDetector.ThemeChanged += t =>
@@ -689,8 +692,21 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // (INT-11). saucer reports 8 in practice, so this lower bound is defensive only.
         if (size < (nuint)sizeof(nint) || size > 64) return;
         Span<byte> buf = stackalloc byte[(int)size];
-        fixed (byte* ptr = buf) { Saucer.saucer_window_native(_window, 0, ptr, &size); var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf); if (nsWindow != 0) MacOsTitleBar.Apply(nsWindow, overlay); }
+        fixed (byte* ptr = buf) { Saucer.saucer_window_native(_window, 0, ptr, &size); var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf); if (nsWindow != 0) MacOsTitleBar.Apply(nsWindow, overlay, _options.TitleBarDragView); }
     }
+
+    /// <summary>
+    /// Publishes the page's draggable/ignored title-bar rectangles (viewport-top-left CSS pixels, each a flat
+    /// [x,y,w,h,…] run) so the macOS Overlay drag view drags only over drag regions and forwards every other
+    /// click to the webview. No-op off macOS and when there is no overlay drag view.
+    /// </summary>
+    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore) => RunOnUi(() =>
+    {
+        if (_window == null || !OperatingSystem.IsMacOS()) return;
+        var handle = GetNativeWindowHandle();
+        if (handle != 0)
+            MacOsTitleBar.SetDragRegions(handle, [.. drag], [.. ignore]);
+    });
 
     /// <summary>
     /// The underlying saucer window handle (a <c>saucer_window*</c>), or 0 after disposal. For plugin

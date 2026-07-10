@@ -2,8 +2,22 @@
 
 A frameless or overlay window (set `RynWindowOptions.TitleBarStyle`) lets your HTML own the title-bar area.
 To make a region of that HTML drag the window, resize it, or act as a window button, add a `data-webview-*`
-attribute to the element. The webview hit-tests these attributes **inside the `mousedown` event** and
-performs the native action immediately — no IPC round-trip, no lag.
+attribute to the element. Ryn injects a small script (for every non-`Native` title-bar style) that wires
+these up.
+
+> **Capability.** The drag/control attributes call `window.*` commands, so an app with a `ryn.json` must
+> grant the **`window`** capability (`{ "capabilities": { "window": true } }`). Without it the calls are
+> denied (a host-stdout warning + rejected promise) and the title bar appears inert. Dev mode with no
+> `ryn.json` allows all commands.
+
+**How it works, per platform:**
+- **macOS** — an invisible native drag view sits over the webview and hit-tests the `data-webview-drag`
+  rectangles the script publishes. A mouse-down inside one starts a **native, lag-free** window drag
+  (`performWindowDragWithEvent:`); every other point falls straight through to the DOM, so buttons and
+  inputs in the title bar are clickable. Set `RynOptions.TitleBarDragView = false` to remove the native
+  view and self-manage dragging.
+- **Windows / Linux** — the script starts the drag from the `mousedown` via `window.startDrag`; there is no
+  click-eating overlay, so interactive elements work without extra markup.
 
 ## Which `TitleBarStyle` for a custom title bar?
 
@@ -38,11 +52,16 @@ only when you want the native strip but no title text; use `Overlay` for edge-to
 | `data-webview-resize="<edge>"` | drag-resize from an edge/corner (`top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`) |
 | `data-webview-close` | close the window on click |
 | `data-webview-minimize` | minimize on click |
-| `data-webview-maximize` | toggle maximize on click; `data-webview-maximize="double"` toggles only on a double-click |
-| `data-webview-ignore` | exclude an element from all of the above (keep it clickable) |
+| `data-webview-maximize` | toggle maximize on click (double-clicking any `data-webview-drag` region also zooms) |
+| `data-webview-ignore` | exclude an element from dragging (keep it clickable) |
 
-These fire on a left-button `mousedown` and are handled natively, so they work on macOS (WKWebView),
-Windows (WebView2), and Linux (WebKitGTK) alike.
+Window controls fire on `click`; drag and resize fire on left-button `mousedown`. All work on macOS
+(WKWebView), Windows (WebView2), and Linux (WebKitGTK).
+
+**Interactive children inside a drag region.** On macOS the native drag view grabs the whole
+`data-webview-drag` rectangle, so a button *inside* the drag bar must be marked `data-webview-ignore`
+(the window-control attributes above are treated as ignore automatically). Place non-draggable controls
+outside the drag rectangle, or tag them `data-webview-ignore`.
 
 ## Why not `-webkit-app-region: drag`?
 
@@ -50,14 +69,12 @@ Windows (WebView2), and Linux (WebKitGTK) alike.
 on macOS (WKWebView) or Linux (WebKitGTK), and works only incidentally on Windows (WebView2 is Chromium).
 Use `data-webview-drag` instead; it works on every backend.
 
-## Why not `window.startDrag` / `IRynWindow.StartDrag` for title bars?
+## Why not `window.startDrag` / `IRynWindow.StartDrag` directly?
 
-The `window.startDrag` IPC command (and `IRynWindow.StartDrag`) still exists as a programmatic escape
-hatch, but **don't use it to drag a title bar.** It routes through the IPC pipeline (XHR → loopback
-HTTP/scheme → UI-thread marshal), so the native drag begins only *after* the round-trip. On macOS that is
-visibly broken: the native `performWindowDragWithEvent:` reads the *current* event, which by the time the
-command runs is no longer the original mouse-down — so the window lags behind the cursor (drag desync).
-`data-webview-drag` starts the drag synchronously inside the mouse-down, so there is no lag.
+`window.startDrag` still exists as a programmatic escape hatch, but prefer `data-webview-drag`. On macOS
+the attribute path drags natively with no IPC (the drag view starts the OS drag inside the real
+mouse-down), avoiding the cursor desync you get calling `startDrag` from JS after an IPC round-trip. On
+Windows/Linux `data-webview-drag` uses `startDrag` under the hood, which is fine there.
 
 See `samples/VueApp` for a `data-webview-drag` title bar, and [multi-window.md](multi-window.md) for opening
 and managing multiple windows.
