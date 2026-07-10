@@ -114,9 +114,11 @@ internal sealed partial class WindowsMenuBarBackend : IMenuBarBackend
                 continue;
             }
 
-            if (item.Items is not null)
+            // Submenu only when it has children; an empty (non-null) Items — a JSON `items: []` leaf — must
+            // stay a clickable command, not a dead popup. See MenuBarItem.IsSubmenu.
+            if (item.IsSubmenu)
             {
-                var submenu = BuildPopup(item.Items, ref nextId);
+                var submenu = BuildPopup(item.Items!, ref nextId);
                 AppendMenu(menu, MfPopup, submenu, item.Label ?? item.Id ?? string.Empty);
                 continue;
             }

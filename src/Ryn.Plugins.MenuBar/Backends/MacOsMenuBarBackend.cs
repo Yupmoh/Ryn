@@ -159,7 +159,9 @@ internal sealed partial class MacOsMenuBarBackend : IMenuBarBackend
                 continue;
             }
 
-            if (item.Items is not null)
+            // A submenu only when it actually has children; an empty (non-null) Items — a JSON `items: []`
+            // leaf — must stay a clickable custom item, not a dead targetless submenu. See MenuBarItem.IsSubmenu.
+            if (item.IsSubmenu)
             {
                 var holderAlloc = objc_msgSend_ret_nint(
                     (void*)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
@@ -168,7 +170,7 @@ internal sealed partial class MacOsMenuBarBackend : IMenuBarBackend
                     sel_registerName("initWithTitle:action:keyEquivalent:"),
                     CreateNSString(item.Label ?? item.Id ?? string.Empty), 0, CreateNSString(""));
 
-                var submenu = BuildMenu(item.Label ?? string.Empty, item.Items);
+                var submenu = BuildMenu(item.Label ?? string.Empty, item.Items!);
                 objc_msgSend_ptr(holder, sel_registerName("setSubmenu:"), (void*)submenu);
                 objc_msgSend_ret_nint((void*)submenu, sel_registerName("release"));
 
@@ -313,9 +315,17 @@ internal sealed partial class MacOsMenuBarBackend : IMenuBarBackend
             lock (instance._lock)
             {
                 if (tag >= 0 && tag < instance._customIds.Count)
+                {
                     itemId = instance._customIds[tag];
+                }
                 else
+                {
+                    // A click on an item whose tag no longer maps (e.g. a rebuild raced the click). Surface it
+                    // rather than dropping silently — this class of no-op cost a downstream integrator an hour.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"MenuBar: click dropped — item tag {tag} out of range (custom items: {instance._customIds.Count}).");
                     return;
+                }
             }
             instance.MenuItemClicked?.Invoke(itemId);
         });

@@ -122,6 +122,29 @@ public sealed class MenuBarDefaultsTests
     }
 
     [Fact]
+    public void IsSubmenu_TreatsEmptyItemsAsLeaf_NotSubmenu()
+    {
+        // Regression: a leaf that arrives with `items: []` (the shape frontends emit via children.map())
+        // must be a clickable custom item, not a dead targetless submenu. Broke every menu click in 0.20.
+        new MenuBarItem { Id = "x", Label = "X" }.IsSubmenu.Should().BeFalse();                 // Items null
+        new MenuBarItem { Id = "x", Label = "X", Items = [] }.IsSubmenu.Should().BeFalse();     // Items empty
+        new MenuBarItem { Label = "M", Items = [new MenuBarItem { Id = "c" }] }.IsSubmenu       // Items with a child
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetMenuCommand_DeserializesEmptyItemsArray_AsEmptyNotNull()
+    {
+        // Proves the deserialized shape that triggered the bug: `items: []` → non-null empty list → IsSubmenu false.
+        var items = System.Text.Json.JsonSerializer.Deserialize(
+            """[{"label":"View","items":[{"id":"zen","label":"Zen","items":[]}]}]""",
+            MenuBarJsonContext.Default.MenuBarItemArray)!;
+        var leaf = items[0].Items![0];
+        leaf.Items.Should().NotBeNull().And.BeEmpty();
+        leaf.IsSubmenu.Should().BeFalse();
+    }
+
+    [Fact]
     public void EveryRole_UsedByDefaultMenus_IsKnown()
     {
         var menus = MenuBarDefaults.CreateDefault("TestApp");

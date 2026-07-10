@@ -28,6 +28,11 @@ await window.__ryn.invoke('window.setBackdrop', { material: 'mica' }); // none|b
 const applied = await window.__ryn.invoke('window.getBackdrop');       // "none" if degraded
 ```
 
+> The JS `window.setBackdrop` / `window.getBackdrop` commands (like all `window.*` commands) require the
+> **`window`** capability in `ryn.json` (`{ "capabilities": { "window": true } }`). Without it the call is
+> denied — the rejection surfaces only as a host-stdout warning and a rejected promise, so add the capability
+> if a `window.*` invoke silently fails. The C# `IRynWindow.SetBackdrop`/`GetBackdrop` are not gated.
+
 ## Platform support
 
 | Material | macOS | Windows 11 (22H2+) | Windows 10 | Linux |

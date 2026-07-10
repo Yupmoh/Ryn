@@ -38,4 +38,12 @@ public sealed class MenuBarItem
 
     /// <summary>Child items; set on top-level menus and submenus.</summary>
     public IReadOnlyList<MenuBarItem>? Items { get; init; }
+
+    /// <summary>
+    /// Whether this nested item is a submenu (has children) versus a clickable leaf. An item that arrives
+    /// with an <b>empty</b> <see cref="Items"/> list — the shape a JSON <c>items: []</c> deserializes to,
+    /// which frontends emit for every leaf via <c>children.map()</c> — is a leaf, not a dead submenu. Only
+    /// consulted for nested items; a top-level entry is always a menu.
+    /// </summary>
+    internal bool IsSubmenu => Items is { Count: > 0 };
 }
