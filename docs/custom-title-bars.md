@@ -63,6 +63,19 @@ Window controls fire on `click`; drag and resize fire on left-button `mousedown`
 (the window-control attributes above are treated as ignore automatically). Place non-draggable controls
 outside the drag rectangle, or tag them `data-webview-ignore`.
 
+## Traffic-light position (macOS)
+
+By default the macOS traffic lights hug the top edge, which looks off in a taller custom title bar. Set
+`RynOptions.TrafficLightPosition` (or call `IRynWindow.SetTrafficLightPosition` / `window.setTrafficLightPosition`
+at runtime) to place the close button's top-left, in points from the window's top-left; the miniaturize and
+zoom buttons follow at their native spacing. Ryn re-applies it on resize.
+
+```csharp
+// Vertically center the (~14pt) lights in a 48pt title bar: (48 - 14) / 2 ≈ 17.
+opts.TitleBarStyle = TitleBarStyle.Overlay;
+opts.TrafficLightPosition = new TrafficLightPosition(X: 20, Y: 17);
+```
+
 ## Why not `-webkit-app-region: drag`?
 
 `-webkit-app-region` is a Chromium/Electron CSS property — it is **not honored by WebKit**. It does nothing

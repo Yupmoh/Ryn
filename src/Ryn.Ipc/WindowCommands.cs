@@ -67,6 +67,11 @@ internal sealed class WindowCommands
     public void SetTitleBarDragRegions(double[]? drag, double[]? ignore) =>
         _windows.Current.SetTitleBarDragRegions(drag ?? [], ignore ?? []);
 
+    /// <summary>Positions the macOS traffic-light buttons (close button top-left, points from the window top-left).</summary>
+    [RynCommand("window.setTrafficLightPosition")]
+    public void SetTrafficLightPosition(double x, double y) =>
+        _windows.Current.SetTrafficLightPosition(new TrafficLightPosition(x, y));
+
     /// <summary>Sets the window backdrop: "none", "blur", "acrylic", or "mica" (unknown values are ignored).</summary>
     [RynCommand("window.setBackdrop")]
     public void SetBackdrop(string material)

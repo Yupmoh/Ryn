@@ -25,6 +25,7 @@ public sealed class RynOptions
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
     private bool _titleBarDragView = true;
+    private TrafficLightPosition? _trafficLight;
     private BackdropMaterial _backdrop = BackdropMaterial.None;
     private bool _transparent;
     private bool _clickThrough;
@@ -81,6 +82,13 @@ public sealed class RynOptions
     /// <c>window.startDrag</c> on mousedown. No effect off macOS.
     /// </summary>
     public bool TitleBarDragView { get => _titleBarDragView; set => Set(ref _titleBarDragView, value); }
+
+    /// <summary>
+    /// Position of the macOS traffic-light buttons — the close button's top-left, in points from the window's
+    /// top-left. Set it to vertically center the lights in a taller custom title bar (they hug the top edge by
+    /// default). <c>null</c> keeps the platform default. No effect off macOS. Re-applied on resize.
+    /// </summary>
+    public TrafficLightPosition? TrafficLightPosition { get => _trafficLight; set => Set(ref _trafficLight, value); }
 
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get => _transparent; set => Set(ref _transparent, value); }
@@ -246,6 +254,12 @@ public enum BackdropMaterial
     /// <summary>A subtle desktop-tinted material (Windows 11 mica; macOS approximates with vibrancy).</summary>
     Mica,
 }
+
+/// <summary>
+/// The macOS traffic-light buttons' position: the close button's top-left corner, in points measured from
+/// the window's top-left. The miniaturize and zoom buttons keep their native spacing to the right.
+/// </summary>
+public readonly record struct TrafficLightPosition(double X, double Y);
 
 /// <summary>Controls the appearance and behavior of the window title bar.</summary>
 public enum TitleBarStyle
