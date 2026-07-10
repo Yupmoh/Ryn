@@ -5,6 +5,15 @@ To make a region of that HTML drag the window, resize it, or act as a window but
 attribute to the element. The webview hit-tests these attributes **inside the `mousedown` event** and
 performs the native action immediately — no IPC round-trip, no lag.
 
+## Which `TitleBarStyle` for a custom title bar?
+
+**Drawing your own title bar in HTML? Use `Overlay`.** On macOS `Overlay` gives the webview the full window
+height (`fullSizeContentView`) with a transparent title bar and native traffic lights floating on top, so
+your page reaches the very top edge. `Hidden` instead leaves an **empty native title-bar strip** above the
+webview — your content renders *below* it, and with a transparent/`Backdrop` window that strip reads as a
+see-through band around the traffic lights. `Frameless` removes all chrome (no traffic lights). Use `Hidden`
+only when you want the native strip but no title text; use `Overlay` for edge-to-edge custom chrome.
+
 ## Dragging
 
 ```html
