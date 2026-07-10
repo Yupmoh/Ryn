@@ -65,6 +65,14 @@ public interface IRynWindow
     /// <see cref="BackdropMaterial.None"/> where the OS can't render it — query <see cref="GetBackdrop"/> to check.
     /// </summary>
     public void SetBackdrop(BackdropMaterial material);
+    /// <summary>
+    /// Publishes the title bar's draggable and interactive (ignored) rectangles — viewport-top-left CSS
+    /// pixels, each region a flat <c>[x, y, w, h]</c> run. On a macOS Overlay window the native drag view
+    /// then drags only over a drag region and forwards every other click (buttons, inputs) to the page.
+    /// The <c>data-webview-drag</c> script publishes these automatically; apps can also call it directly.
+    /// No effect off macOS or without an overlay drag view.
+    /// </summary>
+    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore);
     /// <summary>The backdrop material currently applied — may be <see cref="BackdropMaterial.None"/> if the
     /// requested material degraded on this OS.</summary>
     public BackdropMaterial GetBackdrop();
