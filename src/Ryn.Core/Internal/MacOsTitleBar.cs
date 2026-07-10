@@ -158,6 +158,92 @@ internal static partial class MacOsTitleBar
             }
         });
 
+    // Requested traffic-light top-left (window-top-left CSS points) per window, so the resize/key observer
+    // can re-apply after AppKit re-lays the buttons out.
+    private static readonly ConcurrentDictionary<nint, NSPoint> TrafficLight = new();
+    private static nint _observerObject;
+    private static bool _observerRegistered;
+
+    /// <summary>
+    /// Moves the traffic-light buttons so the close button's top-left sits at (x, y) measured from the
+    /// window's top-left (points), preserving the buttons' spacing. Re-applied automatically on resize and
+    /// when the window becomes key. Use to vertically center the lights in a taller custom title bar.
+    /// </summary>
+    internal static unsafe void SetTrafficLightPosition(nint nsWindowPtr, double x, double y)
+    {
+        if (nsWindowPtr == 0) return;
+        TrafficLight[nsWindowPtr] = new NSPoint { X = x, Y = y };
+        EnsureObserver(nsWindowPtr);
+        ApplyTrafficLight(nsWindowPtr, x, y);
+    }
+
+    internal static void ClearTrafficLightPosition(nint nsWindowPtr)
+    {
+        if (nsWindowPtr != 0) TrafficLight.TryRemove(nsWindowPtr, out _);
+    }
+
+    private static unsafe void ApplyTrafficLight(nint nsWindowPtr, double x, double y)
+    {
+        var nsWindow = (void*)nsWindowPtr;
+        var close = (void*)objc_msgSend_nint_ret_nint(nsWindow, sel_registerName("standardWindowButton:"), 0);
+        var min = (void*)objc_msgSend_nint_ret_nint(nsWindow, sel_registerName("standardWindowButton:"), 1);
+        var zoom = (void*)objc_msgSend_nint_ret_nint(nsWindow, sel_registerName("standardWindowButton:"), 2);
+        if ((nint)close == 0) return;
+
+        var superview = (void*)objc_msgSend_ret_nint(close, sel_registerName("superview"));
+        if ((nint)superview == 0) return;
+        var superH = GetRect(superview, sel_registerName("bounds")).Height;
+
+        var closeFrame = GetRect(close, sel_registerName("frame"));
+        // Convert the requested top-left y (from the window top) to the superview's bottom-left origin.
+        var newX = x;
+        var newY = superH - y - closeFrame.Height;
+        var dx = newX - closeFrame.X;
+        var dy = newY - closeFrame.Y;
+
+        // Shift all three by the same delta so their native spacing is preserved.
+        foreach (var button in new[] { close, min, zoom })
+        {
+            if ((nint)button == 0) continue;
+            var f = GetRect(button, sel_registerName("frame"));
+            objc_msgSend_setpt(button, sel_registerName("setFrameOrigin:"), new NSPoint { X = f.X + dx, Y = f.Y + dy });
+        }
+    }
+
+    private static unsafe void EnsureObserver(nint nsWindowPtr)
+    {
+        if (!_observerRegistered)
+        {
+            var cls = objc_allocateClassPair(objc_getClass("NSObject"), "RynTrafficLightObserver", 0);
+            class_addMethod(cls, sel_registerName("onNotify:"),
+                (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnTrafficLightNotify, "v@:@");
+            objc_registerClassPair(cls);
+            _observerObject = objc_msgSend_ret_nint((void*)objc_msgSend_ret_nint((void*)cls, sel_registerName("alloc")), sel_registerName("init"));
+            _observerRegistered = true;
+        }
+
+        // Observe this window's resize and become-key: AppKit re-lays the buttons out on both.
+        var center = (void*)objc_msgSend_ret_nint((void*)objc_getClass("NSNotificationCenter"), sel_registerName("defaultCenter"));
+        foreach (var name in new[] { "NSWindowDidResizeNotification", "NSWindowDidBecomeKeyNotification" })
+        {
+            objc_msgSend_observe((void*)center, sel_registerName("addObserver:selector:name:object:"),
+                (void*)_observerObject, sel_registerName("onNotify:"),
+                (void*)CreateNSString(name), (void*)nsWindowPtr);
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    private static unsafe void OnTrafficLightNotify(nint self, nint sel, nint notification)
+        => NativeGuard.Invoke("titlebar.trafficLight", () =>
+        {
+            var window = objc_msgSend_ret_nint((void*)notification, sel_registerName("object"));
+            if (window != 0 && TrafficLight.TryGetValue(window, out var pos))
+                ApplyTrafficLight(window, pos.X, pos.Y);
+        });
+
+    private static unsafe nint CreateNSString(string s) =>
+        objc_msgSend_strarg_ret_nint((void*)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), s);
+
     internal static unsafe (double Left, double Top) GetTrafficLightInsets(nint nsWindowPtr)
     {
         if (nsWindowPtr == 0) return (0, 0);
@@ -226,6 +312,22 @@ internal static partial class MacOsTitleBar
     [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static unsafe partial nint objc_msgSend_nint_ret_nint(void* receiver, nint selector, nint arg);
+
+    // setFrameOrigin: — NSPoint (2 doubles) by value; arm64 passes it in FP registers via the ordinary trampoline.
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial void objc_msgSend_setpt(void* receiver, nint selector, NSPoint point);
+
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial nint objc_msgSend_strarg_ret_nint(void* receiver, nint selector,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string arg);
+
+    // addObserver:selector:name:object: — (id observer, SEL selector, NSString* name, id object).
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial void objc_msgSend_observe(void* receiver, nint selector,
+        void* observer, nint selectorArg, void* name, void* obj);
 
     // NSRect is 32 bytes (4 doubles), so its return ABI differs by architecture:
     //  * arm64  — the Apple AAPCS64 returns the struct in floating-point registers (d0..d3) via the

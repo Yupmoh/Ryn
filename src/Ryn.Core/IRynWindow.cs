@@ -73,6 +73,12 @@ public interface IRynWindow
     /// No effect off macOS or without an overlay drag view.
     /// </summary>
     public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore);
+    /// <summary>
+    /// Positions the macOS traffic-light buttons — the close button's top-left, in points from the window's
+    /// top-left — to vertically center them in a taller custom title bar. Re-applied on resize. No effect
+    /// off macOS.
+    /// </summary>
+    public void SetTrafficLightPosition(TrafficLightPosition position);
     /// <summary>The backdrop material currently applied — may be <see cref="BackdropMaterial.None"/> if the
     /// requested material degraded on this OS.</summary>
     public BackdropMaterial GetBackdrop();

@@ -585,6 +585,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                 Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_NONE);
                 break;
         }
+        if (OperatingSystem.IsMacOS() && _options.TrafficLightPosition is { } tlp)
+            ApplyMacOsTrafficLight(tlp.X, tlp.Y);
         if (_options.IconPath is not null && File.Exists(_options.IconPath))
         {
             Span<byte> iconBuf = stackalloc byte[1024];
@@ -707,6 +709,16 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (handle != 0)
             MacOsTitleBar.SetDragRegions(handle, [.. drag], [.. ignore]);
     });
+
+    public void SetTrafficLightPosition(TrafficLightPosition position) =>
+        RunOnUi(() => { if (_window != null && OperatingSystem.IsMacOS()) ApplyMacOsTrafficLight(position.X, position.Y); });
+
+    [System.Runtime.Versioning.SupportedOSPlatform("macos")]
+    private void ApplyMacOsTrafficLight(double x, double y)
+    {
+        var handle = GetNativeWindowHandle();
+        if (handle != 0) MacOsTitleBar.SetTrafficLightPosition(handle, x, y);
+    }
 
     /// <summary>
     /// The underlying saucer window handle (a <c>saucer_window*</c>), or 0 after disposal. For plugin
