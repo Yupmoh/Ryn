@@ -23,6 +23,7 @@ internal sealed class WebViewPaneCommands
     [RynCommand("webviewPane.close")]
     public Task<bool> CloseAsync(int id) => _service.CloseAsync(id);
 
+    /// <summary>Top-left CSS pixels relative to the window content area on every platform.</summary>
     [RynCommand("webviewPane.setBounds")]
     public void SetBounds(int id, int x, int y, int width, int height) =>
         _service.SetBounds(id, x, y, width, height);

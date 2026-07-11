@@ -2,7 +2,12 @@ using System.Text.Json.Serialization;
 
 namespace Ryn.Plugins.WebViewPane;
 
-/// <summary>Options for <c>webviewPane.open</c>. Bounds are window client-area pixels.</summary>
+/// <summary>
+/// Options for <c>webviewPane.open</c>. Bounds are top-left CSS pixels relative to the window content
+/// area on every platform (the rect from <c>getBoundingClientRect()</c> places the pane at that visual
+/// position; the macOS bottom-left flip happens internally). Bounds are not re-derived on window resize —
+/// re-send them from JS on layout changes.
+/// </summary>
 public sealed class PaneOpenRequest
 {
     public int X { get; set; }

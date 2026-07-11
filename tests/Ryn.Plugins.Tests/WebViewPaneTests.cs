@@ -247,6 +247,21 @@ public sealed class WebViewPaneDependencyInjectionTests
 }
 
 /// <summary>
+/// Pane bounds are top-left CSS pixels relative to the window content area on every platform; on macOS the
+/// Y is converted into AppKit's bottom-left contentView space at apply time.
+/// </summary>
+public sealed class WebViewPaneBoundsTests
+{
+    [Theory]
+    [InlineData(600, 0, 100, 500)]   // pane at the top of a 600pt window → native Y is near the top (500)
+    [InlineData(600, 500, 100, 0)]   // pane at the bottom → native Y 0
+    [InlineData(600, 100, 400, 100)] // mid-window rect
+    [InlineData(400, 0, 400, 0)]     // full-height pane
+    public void ToMacNativeY_FlipsTopLeftIntoBottomLeftSpace(int contentHeight, int y, int height, int expected)
+        => WebViewPaneService.ToMacNativeY(contentHeight, y, height).Should().Be(expected);
+}
+
+/// <summary>
 /// Panes must be torn down inside the native close event (before saucer snapshots the closed-event
 /// listeners), never first on <see cref="IRynWindow.Closed"/> — see WirePaneTeardown. These cover the
 /// interface-fallback wiring; the RynWindow path (CloseApproved) needs a native window.
