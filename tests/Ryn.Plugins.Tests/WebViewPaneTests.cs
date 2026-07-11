@@ -245,3 +245,47 @@ public sealed class WebViewPaneDependencyInjectionTests
         public Task InvokeAsync(Action action) => Task.CompletedTask;
     }
 }
+
+/// <summary>
+/// Panes must be torn down inside the native close event (before saucer snapshots the closed-event
+/// listeners), never first on <see cref="IRynWindow.Closed"/> — see WirePaneTeardown. These cover the
+/// interface-fallback wiring; the RynWindow path (CloseApproved) needs a native window.
+/// </summary>
+public sealed class WebViewPanePluginTeardownTests
+{
+    [Fact]
+    public void WirePaneTeardown_ClosesPanesWhenClosingIsNotCancelled()
+    {
+        var window = NSubstitute.Substitute.For<IRynWindow>();
+        var calls = 0;
+        WebViewPanePlugin.WirePaneTeardown(window, () => calls++);
+
+        window.Closing += NSubstitute.Raise.EventWith(window, new WindowClosingEventArgs());
+
+        calls.Should().Be(1, "an allowed close must release panes inside the close event");
+    }
+
+    [Fact]
+    public void WirePaneTeardown_KeepsPanesAliveWhenAnEarlierHandlerCancelledTheClose()
+    {
+        var window = NSubstitute.Substitute.For<IRynWindow>();
+        var calls = 0;
+        WebViewPanePlugin.WirePaneTeardown(window, () => calls++);
+
+        window.Closing += NSubstitute.Raise.EventWith(window, new WindowClosingEventArgs { Cancel = true });
+
+        calls.Should().Be(0, "a cancelled close keeps the window open, so its panes must survive");
+    }
+
+    [Fact]
+    public void WirePaneTeardown_AlsoClosesOnClosedAsASafetyNet()
+    {
+        var window = NSubstitute.Substitute.For<IRynWindow>();
+        var calls = 0;
+        WebViewPanePlugin.WirePaneTeardown(window, () => calls++);
+
+        window.Closed += NSubstitute.Raise.EventWith(window, EventArgs.Empty);
+
+        calls.Should().Be(1);
+    }
+}

@@ -26,8 +26,28 @@ internal sealed class WebViewPanePlugin : IRynPlugin
         // freed-window teardown race live pane webviews.
         var window = _services.GetService<IRynWindow>();
         if (window is not null)
-            window.Closed += (_, _) => service.CloseAll();
+            WirePaneTeardown(window, service.CloseAll);
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Panes must be released inside the native close event, not after it: every saucer webview keeps a
+    /// non-clearable window-closed listener that captures its native instance, and saucer fires the closed
+    /// event over a snapshot of listeners — a pane freed during <c>Closed</c> has already been copied into
+    /// that snapshot, so its listener runs on freed memory (SIGSEGV on macOS/Windows). Tearing down on
+    /// <see cref="RynWindow.CloseApproved"/> (or <see cref="IRynWindow.Closing"/> for other window
+    /// implementations) lets each pane unhook its listener before the snapshot is taken. The
+    /// <see cref="IRynWindow.Closed"/> subscription stays as a safety net for close paths that skip the
+    /// close event; closeAll is idempotent, so double invocation is harmless.
+    /// </summary>
+    internal static void WirePaneTeardown(IRynWindow window, Action closeAll)
+    {
+        if (window is RynWindow rynWindow)
+            rynWindow.CloseApproved += (_, _) => closeAll();
+        else
+            window.Closing += (_, args) => { if (!args.Cancel) closeAll(); };
+
+        window.Closed += (_, _) => closeAll();
     }
 }
