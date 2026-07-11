@@ -182,7 +182,7 @@ public sealed partial class WebViewPaneService : IDisposable
                     WebViewPaneJsonContext.Default.PaneDownloadFailedEvent)),
         });
 
-        Saucer.saucer_webview_set_bounds(webview, request.X, request.Y, request.Width, request.Height);
+        SetBoundsOnUi((nint)webview, request.X, request.Y, request.Width, request.Height);
 
         if (request.DevTools)
             Saucer.saucer_webview_set_dev_tools(webview, 1);
@@ -246,8 +246,28 @@ public sealed partial class WebViewPaneService : IDisposable
     public void SetBounds(int id, int x, int y, int width, int height) =>
         WithPane(id, (wv, _) => SetBoundsOnUi(wv, x, y, width, height));
 
-    private static unsafe void SetBoundsOnUi(nint webview, int x, int y, int width, int height) =>
-        Saucer.saucer_webview_set_bounds((saucer_webview*)webview, x, y, width, height);
+    // Pane bounds are top-left CSS pixels relative to the window content area on every platform — the rect a
+    // JS caller gets from getBoundingClientRect() places the pane at that visual position. WKWebView frames
+    // live in the contentView's bottom-left, unflipped space, so the Y is converted here; WebView2 is already
+    // top-left. Bounds are not re-derived on window resize: re-apply from JS on layout changes.
+    private unsafe void SetBoundsOnUi(nint webview, int x, int y, int width, int height)
+    {
+        var yNative = y;
+        if (OperatingSystem.IsMacOS())
+        {
+            var windowHandle = _services.GetService<RynWindowAccessor>()?.Window?.SaucerWindowHandle ?? 0;
+            if (windowHandle != 0)
+            {
+                int contentWidth, contentHeight;
+                Saucer.saucer_window_size((saucer_window*)windowHandle, &contentWidth, &contentHeight);
+                yNative = ToMacNativeY(contentHeight, y, height);
+            }
+        }
+        Saucer.saucer_webview_set_bounds((saucer_webview*)webview, x, yNative, width, height);
+    }
+
+    /// <summary>Converts a top-left pane Y to AppKit's bottom-left contentView coordinate.</summary>
+    internal static int ToMacNativeY(int contentHeight, int y, int height) => contentHeight - y - height;
 
     public void Navigate(int id, string url)
     {

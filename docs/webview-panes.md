@@ -24,7 +24,14 @@ changes (resize observers work well). Two consequences to design around:
 
 - Your HTML cannot draw **on top of** a pane — position popovers, context menus, and drag
   overlays outside the pane rect, or hide/shrink the pane while they're open.
-- Panes ignore the page scroll; bounds are window client-area pixels.
+- Panes ignore the page scroll; bounds are **top-left CSS pixels relative to the window content
+  area on every platform** (since 0.23.0). The rect you get from `getBoundingClientRect()` on a
+  placeholder element is exactly what you pass — no per-platform flipping. Bounds are not
+  re-derived on window resize, so re-send them when your layout changes.
+
+> **Upgrading from ≤ 0.22:** on macOS, `x`/`y` used to pass straight into AppKit's bottom-left
+> coordinate space, so apps flipped Y themselves. Ryn now flips internally — delete your own
+> flip when you adopt 0.23.0, or panes will land vertically mirrored again.
 
 ## JS API
 
