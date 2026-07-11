@@ -371,13 +371,13 @@ const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 | Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save` |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
 | Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptyMetrics`, `shell.ptyKill` |
-| Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.isSupported`, `notification.requestPermission` |
+| Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.sendWithSound`, `notification.sendWithIcon`, `notification.sendWithId`, `notification.isSupported`, `notification.isPermissionGranted`, `notification.requestPermission` |
 | Audio | `Ryn.Plugins.Audio` | `AddRynAudio()` | `audio.play`, `audio.playSystem`, `audio.stop`, `audio.setVolume`, `audio.isPlaying` |
 | Tray | `Ryn.Plugins.Tray` | `AddRynTray(opts => ...)` | `tray.show`, `tray.hide`, `tray.setTooltip`, `tray.setMenu`, `tray.notify` |
 | MenuBar | `Ryn.Plugins.MenuBar` | `AddRynMenuBar(opts => ...)` | `menubar.setMenu`, `menubar.reset` |
 | Badge | `Ryn.Plugins.Badge` | `AddRynBadge()` | `badge.set`, `badge.setCount`, `badge.clear` |
 | GlobalShortcut | `Ryn.Plugins.GlobalShortcut` | `AddRynGlobalShortcut()` | `globalShortcut.register`, `globalShortcut.unregister`, `globalShortcut.isRegistered`, `globalShortcut.unregisterAll` |
-| WebViewPane | `Ryn.Plugins.WebViewPane` | `AddRynWebViewPane()` | `webviewPane.open`, `webviewPane.close`, `webviewPane.setBounds`, `webviewPane.navigate`, `webviewPane.back`, `webviewPane.forward`, `webviewPane.reload`, `webviewPane.setZoom`, `webviewPane.setDevTools`, `webviewPane.execute`, `webviewPane.eval`, `webviewPane.url`, `webviewPane.list` |
+| WebViewPane | `Ryn.Plugins.WebViewPane` | `AddRynWebViewPane()` | `webviewPane.open`, `webviewPane.close`, `webviewPane.setBounds`, `webviewPane.setBackground`, `webviewPane.navigate`, `webviewPane.back`, `webviewPane.forward`, `webviewPane.reload`, `webviewPane.setZoom`, `webviewPane.setDevTools`, `webviewPane.setUserAgent`, `webviewPane.setSuspended`, `webviewPane.reloadFromCrash`, `webviewPane.screenshot`, `webviewPane.find`, `webviewPane.findNext`, `webviewPane.findStop`, `webviewPane.resolvePermission`, `webviewPane.resolveDownload`, `webviewPane.cdpCall`, `webviewPane.cdpSubscribe`, `webviewPane.execute`, `webviewPane.eval`, `webviewPane.url`, `webviewPane.list` |
 | Updater | `Ryn.Plugins.Updater` | `AddRynUpdater(opts => ...)` | `updater.check`, `updater.download`, `updater.apply` |
 
 The file pickers (`dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`) resolve to
