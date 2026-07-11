@@ -29,31 +29,26 @@ after launch may paint only its background (a WebKit/`saucer` first-paint limita
 documented in that doc); the API surface is complete and unaffected. (tracks
 CMP-01, ARC-13)
 
-### Application menu bar and global shortcuts
+### Application menu bar and global shortcuts — **delivered**
 
-Ryn currently has no native application menu and no global hotkey registration. On
-macOS in particular, an app without the standard App/Edit/Window menus and the
-usual Cmd-Q / Cmd-C conventions sits below the platform baseline. The plan is an
-app-menu API backed by per-platform native menus (NSMenu via the ObjC runtime on
-macOS first, then Win32 and GTK) and a global-shortcut API (RegisterHotKey on
-Windows, Carbon RegisterEventHotKey on macOS, the GTK equivalent on Linux). The
-Tray plugin already proves the per-platform native-backend approach, so the same
-structure applies. This adds a new menu surface to `Ryn.Core` and a new
-global-shortcut plugin. Status: **Planned**. (tracks CMP-03)
+Shipped as three plugins: `Ryn.Plugins.MenuBar` (native menus with roles —
+NSMenu on macOS, Win32 menus on Windows; Linux intentionally unsupported since
+GTK apps use header bars), `Ryn.Plugins.GlobalShortcut` (RegisterHotKey /
+Carbon RegisterEventHotKey; Wayland needs the portal API and is not yet
+supported), and `Ryn.Plugins.Badge` (Dock badge / taskbar overlay). See the
+plugin table in [getting-started.md](getting-started.md). (tracked CMP-03)
 
-### Finished installers and code signing
+### Finished installers and code signing — **partially delivered**
 
-The bundler stops one manual step short of shippable artifacts. macOS produces an
-`.app` with codesign and notarization but no disk image; Windows emits a folder
-plus a generated WiX `.wxs` and a printed instruction to build the MSI yourself,
-with no Authenticode signing; Linux produces an AppDir and only builds an AppImage
-if `appimagetool` happens to be on the PATH. The last mile is exactly where
-evaluators decide, so the plan is to make `ryn bundle` produce final artifacts in
-one command: a `.dmg` via `hdiutil` plus notarization on macOS, a built MSI or
-NSIS installer with `signtool` / Azure Trusted Signing on Windows, and a `.deb`
-via `dpkg-deb` on Linux, auto-downloading missing tools the way it already does
-for `appimagetool`. This work lives in `Ryn.Cli`'s bundle command. Status:
-**Planned**. (tracks CMP-04)
+macOS is done end-to-end: `ryn bundle --icon --sign --entitlements --notarize
+--dmg` produces a signed (hardened runtime + timestamp), notarized `.app` and a
+compressed `.dmg`. Windows still emits a folder plus a generated WiX `.wxs` with
+a printed instruction to build the MSI yourself, and has no Authenticode
+signing; Linux produces an AppDir and only builds an AppImage if `appimagetool`
+is on the PATH. Remaining plan: a built MSI or NSIS installer with `signtool` /
+Azure Trusted Signing on Windows, and a `.deb` via `dpkg-deb` on Linux,
+auto-downloading missing tools the way it already does for `appimagetool`.
+Status: **Planned** (Windows/Linux last mile). (tracks CMP-04)
 
 ### Linux GUI end-to-end verification
 
@@ -72,15 +67,18 @@ harness; it changes no public API. Status: **Planned**. (tracks CMP-05)
 ### Webview lifecycle, navigation, and permission events
 
 saucer exposes navigation (with a policy hook that can block), navigated,
-dom-ready, load, title, favicon, and permission-request events, but `IRynWebView`
-surfaces none of them today (only file drop). As a result an app cannot stop the
-top frame from navigating to an arbitrary external site, cannot reliably wait for
-the page to be ready before emitting events, and cannot apply its own policy to
-camera, microphone, or geolocation permission requests. The plan is to add
-`NavigationStarting` (cancellable), `Navigated`, `DomReady`/`Loaded`, and
-`PermissionRequested` to `IRynWebView`, mapped from the saucer callbacks, before
-the interface is frozen. This is scoped to `Ryn.Core`'s webview surface. Status:
-**Planned**. (tracks ARC-14)
+dom-ready, load, title, favicon, and permission-request events. **Embedded panes
+already surface the full set** (`webviewPane.navigated` / `titleChanged` /
+`loadState` / `domReady` / `favicon` / `permissionRequested` /
+`processTerminated` / download events — see
+[webview-panes.md](webview-panes.md)), but the **main** `IRynWebView` still only
+surfaces file drop. As a result an app cannot stop its top frame from navigating
+to an arbitrary external site, reliably wait for page readiness, or apply policy
+to camera/microphone/geolocation prompts on the primary webview. The plan is to
+add `NavigationStarting` (cancellable), `Navigated`, `DomReady`/`Loaded`, and
+`PermissionRequested` to `IRynWebView`, mapped from the saucer callbacks (the
+pane plugin's interop is the template), before the interface is frozen. Status:
+**Planned** (main webview only). (tracks ARC-14)
 
 ### Hot-reload dev loop
 

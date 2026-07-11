@@ -17,7 +17,9 @@ Ryn gives .NET developers the Tauri experience without leaving C#. You write the
 - **Lightweight:** uses the native OS webview (WebView2, WKWebView, WebKitGTK) instead of bundling Chromium.
 - **NativeAOT:** small, self-contained binaries (~5 MB) with no runtime dependency.
 - **Cross-platform:** Windows, macOS, and Linux.
-- **Plugin system:** FileSystem, Dialog (native pickers), Clipboard, Shell (spawn/PTY streaming), Notification, Audio, Tray, MenuBar (native menus + roles), Badge (dock/taskbar), GlobalShortcut (system-wide hotkeys), WebViewPane (embedded browser panes), and a signed Auto-updater.
+- **Plugin system:** FileSystem, Dialog (native pickers), Clipboard, Shell (spawn/PTY streaming), Notification (with activation events), Audio, Tray, MenuBar (native menus + roles), Badge (dock/taskbar), GlobalShortcut (system-wide hotkeys), WebViewPane (embedded browser panes), and a signed Auto-updater.
+- **Embedded browser panes:** N real webviews per window (no bundled Chromium) with per-pane sessions, user agents, background colors, find-in-page, screenshots, downloads, permission prompts, crash recovery, suspension, and a CDP passthrough on Windows.
+- **Native chrome control:** overlay/hidden title bars driven by declarative `data-webview-*` attributes, traffic-light positioning, and window backdrop materials (blur / acrylic / mica).
 - **Security model:** `ryn.json` capability scopes, deny-by-default.
 - **Branded by default:** every window and bundled `.app`/installer ships with the Ryn icon, overridable per app.
 
@@ -44,13 +46,15 @@ How Ryn compares on the axes that matter for a small, native, web-UI desktop app
 | Renderer | OS webview | OS webview | OS webview | bundled Chromium | OS webview |
 | Hello-world binary | ~5 MB | ~3–10 MB | ~1 MB wrapper¹ | ~100+ MB | tens of MB |
 | NativeAOT | yes | n/a (Rust) | no | no | no |
-| First-party plugins | 8 | many | none | none | n/a |
+| First-party plugins | 12 | many | none | none | n/a |
 | Capability sandbox | yes (deny-by-default) | yes | no | no | no |
 | IPC source generator | yes | n/a | no | no | n/a |
 | Scaffold/dev/bundle CLI | yes | yes | no | partial | dotnet |
 | Signed auto-updater | yes | yes | no | no | no |
 | Multi-window | yes² | yes | yes | yes | limited |
-| Native app menus | no (planned) | yes | partial | yes | yes |
+| Embedded browser panes | yes | experimental | no | yes (Chromium) | no |
+| Native app menus | yes | yes | partial | yes | yes |
+| Global shortcuts | yes | yes | no | yes | no |
 | Mobile | no (desktop-only) | yes | no | no | yes |
 
 ¹ Photino is a thin wrapper; the deployed size depends on your own .NET app and runtime. The point of the row is the relative weight of the webview layer, not a head-to-head app size.
@@ -93,6 +97,9 @@ Legend: ✅ verified on a real app · 🟡 implemented, not yet GUI-verified · 
 | App badge | ✅ (Dock) | ✅ (taskbar overlay) | ❌ (no portable badge surface) |
 | Global shortcuts | ✅ | ✅ | ❌ (Wayland needs the portal API) |
 | WebView panes (embedded browser) | ✅ | ✅ (CSS zoom) | 🟡 (untested) |
+| Pane extras (find, screenshot, downloads, crash recovery, suspend) | ✅ | ✅ (+ CDP passthrough) | 🟡 |
+| Custom title bars (`data-webview-*`) | ✅ | ✅ | 🟡 |
+| Window backdrop (blur / acrylic / mica) | ✅ (vibrancy) | ✅ (acrylic/mica) | ⚪ (degrades to solid) |
 | Auto-updater (signed) | ✅ | ✅ | 🟡 |
 | NativeAOT publish | ✅ | ✅ | 🟡 |
 
@@ -299,8 +306,10 @@ Options:
 - `--aot`: enable NativeAOT publishing
 - `--self-contained`: include the .NET runtime
 - `--icon path/to/icon.png`: override the app icon (a PNG is auto-converted to `.icns` on macOS / `.ico` on Windows; an `.icns`/`.ico` is used as-is)
-- `--sign "Developer ID"`: code sign (macOS)
-- `--notarize`: submit for Apple notarization (macOS)
+- `--sign "Developer ID Application: ..."`: code sign with hardened runtime + secure timestamp (macOS)
+- `--entitlements path/to.entitlements`: entitlements applied while signing (macOS)
+- `--notarize`: submit for Apple notarization (macOS; uses `--notary-profile`, default `notarize`)
+- `--dmg`: also produce a compressed `.dmg` disk image (macOS)
 - `--version 1.0.0`: set the bundle version
 
 When no icon is supplied (via `--icon` or `ryn.json` → `bundle.icon`), the bundle is branded with the Ryn default icon: a real dock icon (`AppIcon.icns`) on macOS, an `.ico` on Windows, and a hicolor PNG on Linux.
@@ -321,6 +330,7 @@ Output:
 | [FileManager](samples/FileManager) | File browser with breadcrumb nav and preview | `dotnet run --project samples/FileManager` |
 | [MarkdownEditor](samples/MarkdownEditor) | Split-pane editor with live preview and native dialogs | `dotnet run --project samples/MarkdownEditor` |
 | [VueApp](samples/VueApp) | Vue 3 + Vite frontend with typed IPC | `dotnet run --project samples/VueApp` |
+| [MultiWindow](samples/MultiWindow) | Multiple windows with per-window IPC | `dotnet run --project samples/MultiWindow` |
 | [DevKit](samples/DevKit) | Developer toolkit exercising every Ryn capability | `dotnet run --project samples/DevKit` |
 
 ## Project Structure
@@ -332,10 +342,10 @@ src/
   Ryn.Interop          Auto-generated saucer C bindings via ClangSharp
   Ryn.Ipc              JS <> C# IPC bridge, source generator, capabilities, observability
   Ryn.Plugins.*        FileSystem, Dialog, Clipboard, Shell, Notification, Audio, Tray, MenuBar, Badge, GlobalShortcut, WebViewPane, Updater
-  Ryn.Cli              CLI: new, dev, build, bundle, doctor
-samples/               8 example applications
+  Ryn.Cli              CLI: new, dev, build, bundle, doctor, updater keygen
+samples/               9 example applications
 templates/             dotnet new template pack
-tests/                 200+ xUnit tests across 7 test projects
+tests/                 600+ xUnit tests across 7 test projects
 benchmarks/            BenchmarkDotNet suites (IPC, marshaling, JSON, escaping)
 docs/
   getting-started.md   Walkthrough from install to bundle
@@ -343,8 +353,12 @@ docs/
   capabilities.md      Canonical ryn.json capability schema reference
   plugin-authoring.md  Guide for writing Ryn plugins
   vite-integration.md  Using Vite and TypeScript with Ryn
-  custom-title-bars.md Frameless title bars: data-webview-drag and window controls
+  custom-title-bars.md Frameless title bars: data-webview-* contract and window controls
   multi-window.md      Opening and managing multiple windows
+  webview-panes.md     Embedded browser panes: layout, sessions, lifecycle, downloads
+  window-backdrop.md   Backdrop materials: vibrancy, acrylic, mica
+  notifications.md     Notifications and activation events
+  gpu-rendering.md     GPU/WebGL behavior per platform webview
   accessibility-and-i18n.md  Current a11y / i18n stance
   ROADMAP.md           Planned work beyond the current alpha
 ```
@@ -357,8 +371,12 @@ docs/
 - [Capabilities Reference](docs/capabilities.md): the canonical `ryn.json` schema
 - [Plugin Authoring](docs/plugin-authoring.md): writing Ryn plugins with commands, options, DI, and events
 - [Vite Integration](docs/vite-integration.md): using Vite and TypeScript with Ryn
-- [Custom Title Bars](docs/custom-title-bars.md): frameless title bars, `data-webview-drag`, and window controls
+- [Custom Title Bars](docs/custom-title-bars.md): frameless title bars, the `data-webview-*` contract, and window controls
 - [Multi-window](docs/multi-window.md): opening and managing multiple windows
+- [WebView Panes](docs/webview-panes.md): embedded browser panes — layout, sessions, find/screenshot/downloads, lifecycle
+- [Window Backdrop](docs/window-backdrop.md): translucent backdrop materials (vibrancy / acrylic / mica)
+- [Notifications](docs/notifications.md): sending notifications and handling activation events
+- [GPU Rendering](docs/gpu-rendering.md): WebGL and GPU behavior across the platform webviews
 - [Accessibility & Internationalization](docs/accessibility-and-i18n.md): the current a11y / i18n stance
 - [Roadmap](docs/ROADMAP.md): planned capabilities beyond the current alpha
 - [Third-Party Notices](THIRD-PARTY-NOTICES.md): licenses for the native libraries Ryn redistributes
