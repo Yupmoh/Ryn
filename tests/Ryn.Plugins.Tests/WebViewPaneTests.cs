@@ -226,6 +226,8 @@ public sealed class WebViewPaneDependencyInjectionTests
         service.List().Should().BeEmpty();
         service.GetUrl(99).Should().BeEmpty();
         service.Invoking(s => s.SetBounds(99, 0, 0, 10, 10)).Should().NotThrow();
+        service.Invoking(s => s.SetBackground(99, "#1e1e2e")).Should().NotThrow();
+        service.Invoking(s => s.SetBackground(99, "not-a-color")).Should().Throw<ArgumentException>();
         service.Invoking(s => s.SetZoom(99, 2.0)).Should().NotThrow();
         service.Invoking(s => s.CloseAll()).Should().NotThrow();
         (await service.CloseAsync(99)).Should().BeFalse();
@@ -259,6 +261,40 @@ public sealed class WebViewPaneBoundsTests
     [InlineData(400, 0, 400, 0)]     // full-height pane
     public void ToMacNativeY_FlipsTopLeftIntoBottomLeftSpace(int contentHeight, int y, int height, int expected)
         => WebViewPaneService.ToMacNativeY(contentHeight, y, height).Should().Be(expected);
+}
+
+public sealed class PaneColorTests
+{
+    [Theory]
+    [InlineData("#1e1e2e", 0x1e, 0x1e, 0x2e, 255)]
+    [InlineData("#1e1e2eff", 0x1e, 0x1e, 0x2e, 255)]
+    [InlineData("#1e1e2e80", 0x1e, 0x1e, 0x2e, 0x80)]
+    [InlineData("#fff", 255, 255, 255, 255)]
+    [InlineData("#f00c", 255, 0, 0, 0xcc)]
+    [InlineData("  #ABCDEF  ", 0xab, 0xcd, 0xef, 255)] // whitespace + uppercase
+    [InlineData("rgb(30, 30, 46)", 30, 30, 46, 255)]
+    [InlineData("rgba(30, 30, 46, 0.5)", 30, 30, 46, 128)]
+    [InlineData("rgba(0,0,0,0)", 0, 0, 0, 0)]
+    [InlineData("RGBA(1, 2, 3, 1)", 1, 2, 3, 255)]
+    public void TryParse_AcceptsCssColorForms(string input, int r, int g, int b, int a)
+    {
+        PaneColor.TryParse(input, out var pr, out var pg, out var pb, out var pa).Should().BeTrue();
+        (pr, pg, pb, pa).Should().Be(((byte)r, (byte)g, (byte)b, (byte)a));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("#12345")]           // wrong hex length
+    [InlineData("#gggggg")]          // non-hex digits
+    [InlineData("1e1e2e")]           // missing #
+    [InlineData("rgb(30, 30)")]      // too few components
+    [InlineData("rgb(300, 0, 0)")]   // out of byte range
+    [InlineData("rgba(0, 0, 0, 2)")] // alpha out of 0–1
+    [InlineData("hsl(200, 50%, 50%)")]
+    public void TryParse_RejectsMalformedColors(string? input)
+        => PaneColor.TryParse(input, out _, out _, out _, out _).Should().BeFalse();
 }
 
 /// <summary>

@@ -28,6 +28,10 @@ internal sealed class WebViewPaneCommands
     public void SetBounds(int id, int x, int y, int width, int height) =>
         _service.SetBounds(id, x, y, width, height);
 
+    /// <summary>Background color: #rgb/#rrggbb/#rrggbbaa/rgb()/rgba(). See PaneOpenRequest.Background.</summary>
+    [RynCommand("webviewPane.setBackground")]
+    public void SetBackground(int id, string color) => _service.SetBackground(id, color);
+
     [RynCommand("webviewPane.navigate")]
     public void Navigate(int id, string url) => _service.Navigate(id, url);
 

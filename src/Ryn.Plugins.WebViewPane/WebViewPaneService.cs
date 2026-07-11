@@ -109,6 +109,15 @@ public sealed partial class WebViewPaneService : IDisposable
 
     private unsafe int OpenOnUi(PaneOpenRequest request)
     {
+        // Validate before any native allocation so a bad color can't leak a half-created webview.
+        (byte R, byte G, byte B, byte A)? background = null;
+        if (!string.IsNullOrEmpty(request.Background))
+        {
+            if (!PaneColor.TryParse(request.Background, out var r, out var g, out var b, out var a))
+                throw new ArgumentException($"Unrecognized pane background color '{request.Background}'.", nameof(request));
+            background = (r, g, b, a);
+        }
+
         var window = _services.GetService<RynWindowAccessor>()?.Window;
         var windowHandle = window?.SaucerWindowHandle ?? 0;
         if (windowHandle == 0) return -1;
@@ -181,6 +190,11 @@ public sealed partial class WebViewPaneService : IDisposable
                 JsonSerializer.Serialize(new PaneDownloadFailedEvent(state.Id, downloadId, error),
                     WebViewPaneJsonContext.Default.PaneDownloadFailedEvent)),
         });
+
+        // Apply the background before bounds/navigation so the pane never paints the engine-default white.
+        // (Parsed and validated up front, before the webview existed.)
+        if (background is not null)
+            Saucer.saucer_webview_set_background(webview, background.Value.R, background.Value.G, background.Value.B, background.Value.A);
 
         SetBoundsOnUi((nint)webview, request.X, request.Y, request.Width, request.Height);
 
@@ -268,6 +282,17 @@ public sealed partial class WebViewPaneService : IDisposable
 
     /// <summary>Converts a top-left pane Y to AppKit's bottom-left contentView coordinate.</summary>
     internal static int ToMacNativeY(int contentHeight, int y, int height) => contentHeight - y - height;
+
+    /// <summary>Sets the pane's background color (see <see cref="PaneOpenRequest.Background"/> for formats).</summary>
+    public void SetBackground(int id, string color)
+    {
+        if (!PaneColor.TryParse(color, out var r, out var g, out var b, out var a))
+            throw new ArgumentException($"Unrecognized pane background color '{color}'.", nameof(color));
+        WithPane(id, (wv, _) => SetBackgroundOnUi(wv, r, g, b, a));
+    }
+
+    private static unsafe void SetBackgroundOnUi(nint webview, byte r, byte g, byte b, byte a) =>
+        Saucer.saucer_webview_set_background((saucer_webview*)webview, r, g, b, a);
 
     public void Navigate(int id, string url)
     {
