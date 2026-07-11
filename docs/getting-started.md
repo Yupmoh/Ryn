@@ -368,7 +368,7 @@ const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 | Plugin | Package | Registration | Commands |
 |--------|---------|-------------|----------|
 | FileSystem | `Ryn.Plugins.FileSystem` | `AddRynFileSystem(opts => ...)` | `fs.readTextFile`, `fs.writeTextFile`, `fs.readDir`, `fs.stat`, `fs.exists`, `fs.mkdir`, `fs.remove` |
-| Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFolder`, `dialog.save` |
+| Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save` |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
 | Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptyMetrics`, `shell.ptyKill` |
 | Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.isSupported`, `notification.requestPermission` |
@@ -379,6 +379,12 @@ const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 | GlobalShortcut | `Ryn.Plugins.GlobalShortcut` | `AddRynGlobalShortcut()` | `globalShortcut.register`, `globalShortcut.unregister`, `globalShortcut.isRegistered`, `globalShortcut.unregisterAll` |
 | WebViewPane | `Ryn.Plugins.WebViewPane` | `AddRynWebViewPane()` | `webviewPane.open`, `webviewPane.close`, `webviewPane.setBounds`, `webviewPane.navigate`, `webviewPane.back`, `webviewPane.forward`, `webviewPane.reload`, `webviewPane.setZoom`, `webviewPane.setDevTools`, `webviewPane.execute`, `webviewPane.eval`, `webviewPane.url`, `webviewPane.list` |
 | Updater | `Ryn.Plugins.Updater` | `AddRynUpdater(opts => ...)` | `updater.check`, `updater.download`, `updater.apply` |
+
+The file pickers (`dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`) resolve to
+the picked path (`openFiles`: a JSON array of paths), `null` when the user cancels, and reject with an
+error when the dialog itself fails. The initial path is best-effort: a leading `~` expands, a file path
+means its directory, and unusable paths (relative or nonexistent) fall back to the platform's default
+location instead of failing.
 
 > **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
 

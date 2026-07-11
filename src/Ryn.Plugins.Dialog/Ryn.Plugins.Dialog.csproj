@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Ryn.Plugins.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
     <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
     <ProjectReference Include="..\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
