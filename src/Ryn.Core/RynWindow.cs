@@ -46,6 +46,15 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// <inheritdoc />
     public event EventHandler? Closed;
 
+    /// <summary>
+    /// Raised after every <see cref="Closing"/> handler has allowed the close, while the native window and
+    /// its child views are still alive. Native teardown that must precede window destruction (e.g. releasing
+    /// child webviews whose saucer event listeners reference the window) belongs here, not on
+    /// <see cref="Closed"/> — by <see cref="Closed"/> the closed-event listener snapshot has already been
+    /// taken, so listeners freed there still get invoked (use-after-free). Not raised for a cancelled close.
+    /// </summary>
+    internal event EventHandler? CloseApproved;
+
     /// <inheritdoc />
     public event EventHandler<WindowResizedEventArgs>? Resized;
 
@@ -769,6 +778,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             var args = new WindowClosingEventArgs();
             self.Closing?.Invoke(self, args);
             if (args.Cancel) { self._rynWebView?.EmitEvent("window.closeCancelled", "{}"); return saucer_policy.SAUCER_POLICY_BLOCK; }
+            // The close is going ahead: run pre-destruction teardown while still inside the native close
+            // event, before saucer snapshots the closed-event listeners (see CloseApproved docs).
+            self.CloseApproved?.Invoke(self, EventArgs.Empty);
             return saucer_policy.SAUCER_POLICY_ALLOW;
         });
     }
