@@ -45,7 +45,8 @@ const id = await window.__ryn.invoke('webviewPane.open', { options: {
   storagePath: '/path/to/session',   // per-pane cookie/storage dir (panes sharing a path share a session)
   devTools: false,
   zoom: 1.0,                         // 0.25–5.0
-  userAgent: 'MyApp/1.0'             // custom UA for this pane (omit for the engine default)
+  userAgent: 'MyApp/1.0',            // custom UA for this pane (omit for the engine default)
+  background: '#1e1e2e'              // painted until first page paint — no white flash in dark UIs
 }});
 
 await window.__ryn.invoke('webviewPane.navigate',    { id, url: 'https://example.com' });
@@ -54,6 +55,7 @@ await window.__ryn.invoke('webviewPane.forward',     { id });
 await window.__ryn.invoke('webviewPane.reload',      { id });
 await window.__ryn.invoke('webviewPane.setBounds',   { id, x: 0, y: 0, width: 800, height: 400 });
 await window.__ryn.invoke('webviewPane.setZoom',     { id, factor: 1.5 });
+await window.__ryn.invoke('webviewPane.setBackground', { id, color: 'rgba(30, 30, 46, 1)' }); // #rgb/#rrggbb/#rrggbbaa/rgb()/rgba()
 await window.__ryn.invoke('webviewPane.setDevTools', { id, enabled: true });
 await window.__ryn.invoke('webviewPane.setUserAgent', { id, userAgent: 'MyApp/1.0' });
 await window.__ryn.invoke('webviewPane.setSuspended', { id, suspended: true }); // hide + throttle

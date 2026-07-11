@@ -37,6 +37,13 @@ public sealed class PaneOpenRequest
 
     /// <summary>Initial zoom factor (1.0 = 100%). Clamped to 0.25–5.0.</summary>
     public double Zoom { get; set; } = 1.0;
+
+    /// <summary>
+    /// Background color painted from creation until the page's first paint (and behind transparent pages):
+    /// <c>#rgb</c>, <c>#rrggbb</c>, <c>#rrggbbaa</c>, <c>rgb()</c> or <c>rgba()</c>. Omit for the engine
+    /// default (white). Set it to your UI's surface color so a pane never flashes a white rectangle.
+    /// </summary>
+    public string? Background { get; set; }
 }
 
 internal sealed record PaneNavigatedEvent(int Id, string Url);
