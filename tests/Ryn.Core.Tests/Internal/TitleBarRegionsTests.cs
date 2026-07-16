@@ -26,6 +26,29 @@ public sealed class TitleBarRegionsTests
         TitleBarRegions.Contains([], 0, 0).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(1.25, 2295, true)]
+    [InlineData(0.8, 1469, true)]
+    public void Scale_IgnoreRegionCatchesNativeClickAtPageZoom(double factor, double nativeX, bool expected)
+    {
+        double[] drag = [0, 0, 1920, 48];
+        double[] ignore = [1836, 8, 64, 32];
+        var scaledDrag = TitleBarRegions.Scale(drag, factor);
+        var scaledIgnore = TitleBarRegions.Scale(ignore, factor);
+
+        TitleBarRegions.Contains(scaledIgnore, nativeX, 16 * factor).Should().Be(expected);
+        TitleBarRegions.IsDraggable(scaledDrag, scaledIgnore, nativeX, 16 * factor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Scale_DropsIncompleteTrailingValuesAndDoesNotMutateInput()
+    {
+        double[] input = [10, 20, 30, 40, 99];
+
+        TitleBarRegions.Scale(input, 0.8).Should().Equal(8, 16, 24, 32);
+        input.Should().Equal(10, 20, 30, 40, 99);
+    }
+
     [Fact]
     public void Contains_HandlesMultipleRects()
     {

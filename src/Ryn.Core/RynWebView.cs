@@ -593,6 +593,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         (function(){
           if (window.top !== window.self) return;
           var ryn = window.__ryn; if (!ryn) return;
+          var invoke = ryn.invoke.bind(ryn);
           function closest(t, sel){ return t && t.closest ? t.closest(sel) : null; }
           function rectsOf(sel){
             var out = [], nodes = document.querySelectorAll(sel);
@@ -612,7 +613,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
               if (r.width>0 && r.height>0) drag.push(r.left, r.top, r.width, r.height);
             }
             var ignore = rectsOf('[data-webview-ignore],[data-webview-minimize],[data-webview-maximize],[data-webview-close],[data-webview-resize]');
-            try { ryn.invoke('window.setTitleBarDragRegions', { drag: drag, ignore: ignore }); } catch(e){}
+            try { invoke('window.setTitleBarDragRegions', { drag: drag, ignore: ignore }); } catch(e){}
           }
           function schedule(){ if (scheduled) return; scheduled = true; requestAnimationFrame(publish); }
           function edgeFor(v){
@@ -625,18 +626,18 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
           document.addEventListener('mousedown', function(e){
             if (e.button !== 0) return;
             var resize = closest(e.target, '[data-webview-resize]');
-            if (resize){ e.preventDefault(); ryn.invoke('window.startResize', { edge: edgeFor(resize.getAttribute('data-webview-resize')) }); return; }
+            if (resize){ e.preventDefault(); invoke('window.startResize', { edge: edgeFor(resize.getAttribute('data-webview-resize')) }); return; }
             if (closest(e.target, '[data-webview-ignore]')) return;
-            if (closest(e.target, '[data-webview-drag]')){ e.preventDefault(); ryn.invoke('window.startDrag'); }
+            if (closest(e.target, '[data-webview-drag]')){ e.preventDefault(); invoke('window.startDrag'); }
           }, true);
           document.addEventListener('dblclick', function(e){
             if (closest(e.target, '[data-webview-ignore]')) return;
-            if (closest(e.target, '[data-webview-drag]')) ryn.invoke('window.toggleMaximize');
+            if (closest(e.target, '[data-webview-drag]')) invoke('window.toggleMaximize');
           }, true);
           document.addEventListener('click', function(e){
-            if (closest(e.target, '[data-webview-minimize]')) ryn.invoke('window.minimize');
-            else if (closest(e.target, '[data-webview-maximize]')) ryn.invoke('window.toggleMaximize');
-            else if (closest(e.target, '[data-webview-close]')) ryn.invoke('window.close');
+            if (closest(e.target, '[data-webview-minimize]')) invoke('window.minimize');
+            else if (closest(e.target, '[data-webview-maximize]')) invoke('window.toggleMaximize');
+            else if (closest(e.target, '[data-webview-close]')) invoke('window.close');
           }, true);
           window.addEventListener('resize', schedule);
           window.addEventListener('load', schedule);

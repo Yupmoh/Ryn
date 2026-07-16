@@ -14,6 +14,15 @@ internal static class TitleBarRegions
     public static bool IsDraggable(double[] drag, double[] ignore, double x, double y) =>
         !Contains(ignore, x, y) && Contains(drag, x, y);
 
+    /// <summary>Scales complete <c>[x, y, w, h]</c> runs from page CSS pixels into native points.</summary>
+    public static double[] Scale(IReadOnlyList<double> rects, double factor)
+    {
+        var scaled = new double[rects.Count - rects.Count % 4];
+        for (var i = 0; i < scaled.Length; i++)
+            scaled[i] = rects[i] * factor;
+        return scaled;
+    }
+
     /// <summary>True when (x, y) falls inside any <c>[x, y, w, h]</c> rect in the flat run.</summary>
     public static bool Contains(double[] rects, double x, double y)
     {

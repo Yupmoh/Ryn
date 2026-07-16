@@ -55,6 +55,13 @@ public interface IRynWindow
     public void SetFullscreen(bool fullscreen);
     /// <summary>Sets whether the window stays above other windows.</summary>
     public void SetAlwaysOnTop(bool alwaysOnTop);
+    /// <summary>
+    /// Sets the main page zoom, clamped to 0.25–5.0. This is engine page zoom rather than legacy CSS zoom,
+    /// so DOM geometry, hit testing, title-bar regions, and webview-pane bounds remain in sync.
+    /// </summary>
+    public void SetPageZoom(double factor);
+    /// <summary>Returns the main page zoom factor currently tracked by the window.</summary>
+    public double GetPageZoom();
     /// <summary>Sets whether the window ignores mouse input, letting clicks fall through to whatever is
     /// beneath it (for overlay/HUD-style windows). The page keeps running — timers, IPC and script still
     /// work — it just receives no mouse events, so re-enabling input needs a non-mouse trigger.</summary>

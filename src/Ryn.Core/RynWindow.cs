@@ -38,6 +38,11 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private int _normalY;
     private int _normalWidth;
     private int _normalHeight;
+    private double _pageZoom = 1.0;
+    private double[] _titleBarDragRegions = [];
+    private double[] _titleBarIgnoreRegions = [];
+    private readonly object _titleBarRegionsLock = new();
+    private volatile bool _usesPageZoomFallback;
     private volatile bool _disposed;
 
     /// <inheritdoc />
@@ -54,6 +59,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// taken, so listeners freed there still get invoked (use-after-free). Not raised for a cancelled close.
     /// </summary>
     internal event EventHandler? CloseApproved;
+
+    /// <summary>Raised on the UI thread after this window's effective main-page zoom changes.</summary>
+    internal event EventHandler? PageZoomChanged;
 
     /// <inheritdoc />
     public event EventHandler<WindowResizedEventArgs>? Resized;
@@ -228,6 +236,44 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public void SetAlwaysOnTop(bool alwaysOnTop) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_always_on_top(_window, (byte)(alwaysOnTop ? 1 : 0)); });
 
+    public void SetPageZoom(double factor)
+    {
+        var clamped = WebViewPageZoom.Clamp(factor);
+        Volatile.Write(ref _pageZoom, clamped);
+        RunOnUi(() =>
+        {
+            ApplyPageZoomOnUi(clamped);
+            ApplyTitleBarDragRegionsOnUi();
+            PageZoomChanged?.Invoke(this, EventArgs.Empty);
+        });
+    }
+
+    public double GetPageZoom() => Volatile.Read(ref _pageZoom);
+
+    /// <summary>
+    /// The factor that converts this window's page CSS pixels into native points/pixels for coordinate
+    /// bridges (title-bar regions, pane bounds). Equal to the page zoom under native engine zoom. Under the
+    /// CSS-zoom fallback on Windows/Linux the engines implement standardized zoom — getBoundingClientRect()
+    /// already returns visually scaled values — so the bridge scale is 1.0 there (scaling again would
+    /// double-apply). macOS WKWebView implements CSS zoom in legacy mode (unscaled rects), so the fallback
+    /// still scales — the same as the native path.
+    /// </summary>
+    internal double EffectiveCoordinateScale =>
+        _usesPageZoomFallback && !OperatingSystem.IsMacOS() ? 1.0 : GetPageZoom();
+
+    private void ApplyPageZoomOnUi(double factor)
+    {
+        if (_webview == null) return;
+        _usesPageZoomFallback = !WebViewPageZoom.TryApply(_webview, factor);
+        if (!_usesPageZoomFallback) return;
+
+        var zoom = factor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Span<byte> buffer = stackalloc byte[256];
+        var script = Utf8String.Create($"document.documentElement.style.zoom={zoom};", buffer);
+        Saucer.saucer_webview_execute(_webview, script.Pointer);
+        script.Dispose();
+    }
+
     public void SetClickThrough(bool clickThrough) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_click_through(_window, (byte)(clickThrough ? 1 : 0)); });
 
@@ -390,6 +436,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // The data-webview-* drag/control contract is meaningful for any style where the app draws its own
         // title-bar chrome (Overlay/Hidden/Frameless), not the platform-native bar.
         if (_options.TitleBarStyle is not TitleBarStyle.Native) _rynWebView.InjectTitleBarScript();
+        if (GetPageZoom() != 1.0) ApplyPageZoomOnUi(GetPageZoom());
 
         _themeDetector = new SystemThemeDetector();
         _themeDetector.ThemeChanged += t =>
@@ -711,13 +758,31 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// [x,y,w,h,…] run) so the macOS Overlay drag view drags only over drag regions and forwards every other
     /// click to the webview. No-op off macOS and when there is no overlay drag view.
     /// </summary>
-    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore) => RunOnUi(() =>
+    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore)
+    {
+        lock (_titleBarRegionsLock)
+        {
+            _titleBarDragRegions = [.. drag];
+            _titleBarIgnoreRegions = [.. ignore];
+        }
+        RunOnUi(ApplyTitleBarDragRegionsOnUi);
+    }
+
+    private void ApplyTitleBarDragRegionsOnUi()
     {
         if (_window == null || !OperatingSystem.IsMacOS()) return;
         var handle = GetNativeWindowHandle();
-        if (handle != 0)
-            MacOsTitleBar.SetDragRegions(handle, [.. drag], [.. ignore]);
-    });
+        if (handle == 0) return;
+        var scale = EffectiveCoordinateScale;
+        double[] drag;
+        double[] ignore;
+        lock (_titleBarRegionsLock)
+        {
+            drag = TitleBarRegions.Scale(_titleBarDragRegions, scale);
+            ignore = TitleBarRegions.Scale(_titleBarIgnoreRegions, scale);
+        }
+        MacOsTitleBar.SetDragRegions(handle, drag, ignore);
+    }
 
     public void SetTrafficLightPosition(TrafficLightPosition position) =>
         RunOnUi(() => { if (_window != null && OperatingSystem.IsMacOS()) ApplyMacOsTrafficLight(position.X, position.Y); });
@@ -765,6 +830,19 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         Saucer.saucer_window_on(_window, saucer_window_event.SAUCER_WINDOW_EVENT_FOCUS, (void*)(delegate* unmanaged[Cdecl]<saucer_window*, byte, void*, void>)&OnWindowFocus, 1, _selfHandle);
         Saucer.saucer_window_on(_window, saucer_window_event.SAUCER_WINDOW_EVENT_MAXIMIZE, (void*)(delegate* unmanaged[Cdecl]<saucer_window*, byte, void*, void>)&OnWindowMaximize, 1, _selfHandle);
         Saucer.saucer_window_on(_window, saucer_window_event.SAUCER_WINDOW_EVENT_MINIMIZE, (void*)(delegate* unmanaged[Cdecl]<saucer_window*, byte, void*, void>)&OnWindowMinimize, 1, _selfHandle);
+        Saucer.saucer_webview_on(_webview, saucer_webview_event.SAUCER_WEBVIEW_EVENT_DOM_READY,
+            (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, void*, void>)&OnPageDomReady, 1, _selfHandle);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnPageDomReady(saucer_webview* webview, void* userdata)
+    {
+        var self = NativeCallbackHelper.Resolve<RynWindow>(userdata);
+        NativeGuard.Invoke("RynWindow.OnPageDomReady", () =>
+        {
+            if (self._usesPageZoomFallback)
+                self.ApplyPageZoomOnUi(self.GetPageZoom());
+        });
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

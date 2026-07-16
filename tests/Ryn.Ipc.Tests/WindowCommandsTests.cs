@@ -53,6 +53,32 @@ public sealed class WindowCommandsTests
     }
 
     [Fact]
+    public async Task SetPageZoom_ForwardsToCurrentWindow()
+    {
+        var (dispatcher, window) = BuildWindowDispatcher();
+
+        CurrentWindow.Value = window;
+        try { await dispatcher.DispatchAsync("window.setPageZoom", JsonArgs("{\"factor\":1.25}")); }
+        finally { CurrentWindow.Value = null; }
+
+        window.Received(1).SetPageZoom(1.25);
+    }
+
+    [Fact]
+    public async Task GetPageZoom_ReturnsCurrentWindowValue()
+    {
+        var (dispatcher, window) = BuildWindowDispatcher();
+        window.GetPageZoom().Returns(0.8);
+
+        CurrentWindow.Value = window;
+        string result;
+        try { result = await dispatcher.DispatchAsync("window.getPageZoom", ReadOnlyMemory<byte>.Empty); }
+        finally { CurrentWindow.Value = null; }
+
+        result.Should().Be("0.8");
+    }
+
+    [Fact]
     public async Task Center_ForwardsToCurrentWindow()
     {
         var (dispatcher, window) = BuildWindowDispatcher();

@@ -52,6 +52,14 @@ internal sealed class WindowCommands
     [RynCommand("window.setAlwaysOnTop")]
     public void SetAlwaysOnTop(bool alwaysOnTop) => _windows.Current.SetAlwaysOnTop(alwaysOnTop);
 
+    /// <summary>Sets main-page zoom, clamped to 0.25–5.0.</summary>
+    [RynCommand("window.setPageZoom")]
+    public void SetPageZoom(double factor) => _windows.Current.SetPageZoom(factor);
+
+    /// <summary>Returns the current main-page zoom factor.</summary>
+    [RynCommand("window.getPageZoom")]
+    public double GetPageZoom() => _windows.Current.GetPageZoom();
+
     /// <summary>Makes the calling window ignore mouse input (clicks fall through to what's beneath). The page
     /// keeps running and can still invoke commands — it just gets no mouse events — so re-enabling input needs
     /// a non-mouse trigger (a timer or event in this page, C#, or another window).</summary>
