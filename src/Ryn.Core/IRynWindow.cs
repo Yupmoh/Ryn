@@ -73,13 +73,13 @@ public interface IRynWindow
     /// </summary>
     public void SetBackdrop(BackdropMaterial material);
     /// <summary>
-    /// Publishes the title bar's draggable and interactive (ignored) rectangles — viewport-top-left CSS
-    /// pixels, each region a flat <c>[x, y, w, h]</c> run. On a macOS Overlay window the native drag view
-    /// then drags only over a drag region and forwards every other click (buttons, inputs) to the page.
-    /// The <c>data-webview-drag</c> script publishes these automatically; apps can also call it directly.
-    /// No effect off macOS or without an overlay drag view.
+    /// Starts a native macOS window drag anchored to the retained left-mousedown event, verified against the
+    /// verdict point (<paramref name="x"/>, <paramref name="y"/> in viewport-top-left CSS pixels). Driven by
+    /// the injected title-bar script when the live DOM rules a mousedown point draggable — because the drag
+    /// starts from the ORIGINAL event, the IPC delay costs nothing and the window never desyncs from the
+    /// cursor. No effect off macOS (use <see cref="StartDrag"/> there); see docs/custom-title-bars.md.
     /// </summary>
-    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore);
+    public void BeginNativeDrag(double x, double y);
     /// <summary>
     /// Positions the macOS traffic-light buttons — the close button's top-left, in points from the window's
     /// top-left — to vertically center them in a taller custom title bar. Re-applied on resize. No effect
@@ -92,10 +92,10 @@ public interface IRynWindow
     /// <summary>Centers the window on its current screen.</summary>
     public void Center();
     /// <summary>
-    /// Initiates a window drag operation (for frameless windows). For dragging a title bar from HTML, prefer
-    /// the <c>data-webview-drag</c> attribute instead: it starts the OS drag synchronously inside the mousedown
-    /// with no IPC, whereas this command's round-trip makes the window lag the cursor on macOS. See
-    /// docs/custom-title-bars.md.
+    /// Initiates a window drag operation (for frameless windows on Windows/Linux). For dragging a title bar
+    /// from HTML, prefer the <c>data-webview-drag</c> attribute; on macOS the injected script routes through
+    /// <see cref="BeginNativeDrag"/>, which anchors to the real mousedown event and cannot lag the cursor.
+    /// See docs/custom-title-bars.md.
     /// </summary>
     public void StartDrag();
     /// <summary>Initiates a window resize operation from the specified edge.</summary>

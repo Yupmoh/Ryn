@@ -66,8 +66,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public void SetClickThrough(bool clickThrough) => Live.SetClickThrough(clickThrough);
     public void SetBackdrop(BackdropMaterial material) => Live.SetBackdrop(material);
     public BackdropMaterial GetBackdrop() => Live.GetBackdrop();
-    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore) =>
-        Live.SetTitleBarDragRegions(drag, ignore);
+    public void BeginNativeDrag(double x, double y) => Live.BeginNativeDrag(x, y);
     public void SetTrafficLightPosition(TrafficLightPosition position) => Live.SetTrafficLightPosition(position);
     public void Center() => Live.Center();
     public void StartDrag() => Live.StartDrag();

@@ -570,8 +570,17 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
     }
 
-    internal unsafe void InjectTitleBarScript()
+    /// <summary>
+    /// Injects the title-bar contract script plus its per-window config. <paramref name="autoDragHeight"/>
+    /// is the automatic top drag strip in CSS pixels (0 = only explicit <c>data-webview-drag</c> regions).
+    /// </summary>
+    internal unsafe void InjectTitleBarScript(double autoDragHeight)
     {
+        var mac = OperatingSystem.IsMacOS() ? "true" : "false";
+        var strip = autoDragHeight > 0
+            ? autoDragHeight.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+            : "0";
+        InjectAtCreation($"window.__ryn_titlebar={{mac:{mac},strip:{strip}}};");
         fixed (byte* ptr = TitleBarScript)
         {
             Saucer.saucer_webview_inject(
@@ -583,11 +592,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
     }
 
-    // Implements the data-webview-* custom-title-bar contract. Publishes drag/interactive rectangles to the
-    // host (the macOS overlay drag view hit-tests them so only drag regions drag and everything else clicks
-    // through) and wires drag/double-click-zoom/window-control buttons on Windows/Linux where no native drag
-    // view exists. On macOS the native drag view intercepts drag-region mousedowns before the DOM sees them,
-    // so the mousedown->startDrag path here only fires on Windows/Linux — no double drag.
+    // Implements the data-webview-* custom-title-bar contract with a live-DOM verdict at mousedown time:
+    // a point is draggable when its real topmost element is not interactive and either sits inside a
+    // data-webview-drag element or inside the configured auto drag strip. On macOS the verdict posts
+    // window.beginNativeDrag; the host starts the OS drag from the RETAINED original mousedown NSEvent, so
+    // the IPC delay can't desync the window from the cursor. Windows/Linux use window.startDrag as before.
+    // No geometry is ever published, so there is nothing to go stale — popovers, modals and dynamic layout
+    // are correct by construction (their elements are simply what the mousedown hits).
     private static ReadOnlySpan<byte> TitleBarScript =>
         """
         (function(){
@@ -595,27 +606,26 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
           var ryn = window.__ryn; if (!ryn) return;
           var invoke = ryn.invoke.bind(ryn);
           function closest(t, sel){ return t && t.closest ? t.closest(sel) : null; }
-          function rectsOf(sel){
-            var out = [], nodes = document.querySelectorAll(sel);
-            for (var i=0;i<nodes.length;i++){
-              var r = nodes[i].getBoundingClientRect();
-              if (r.width>0 && r.height>0) out.push(r.left, r.top, r.width, r.height);
-            }
-            return out;
+          var INTERACTIVE = 'button,a[href],input,select,textarea,summary,label,[contenteditable]:not([contenteditable="false"]),' +
+            'audio[controls],video[controls],[role="button"],[role="link"],[role="menuitem"],[role="menuitemcheckbox"],' +
+            '[role="menuitemradio"],[role="tab"],[role="checkbox"],[role="radio"],[role="switch"],[role="slider"],' +
+            '[role="combobox"],[role="option"],[role="textbox"],[onclick],[draggable="true"],[data-webview-ignore],' +
+            '[data-webview-minimize],[data-webview-maximize],[data-webview-close],[data-webview-resize]';
+          function cfg(){ return window.__ryn_titlebar || {}; }
+          function isDragPoint(e){
+            var t = e.target;
+            if (!t || !t.closest) return false;
+            if (closest(t, INTERACTIVE)) return false;
+            if (closest(t, '[data-webview-drag]')) return true;
+            var strip = cfg().strip || 0;
+            if (!(strip > 0) || e.clientY > strip) return false;
+            // Auto strip: the hit element must belong to the top-bar chrome, not an overlay (modal,
+            // popover, backdrop) that happens to cover the top of the page. Chrome fits within (about)
+            // the strip; overlays extend far below it. Bare html/body hits count as chrome.
+            if (t === document.documentElement || t === document.body) return true;
+            var r = t.getBoundingClientRect();
+            return r.bottom <= strip * 1.5;
           }
-          var scheduled = false;
-          function publish(){
-            scheduled = false;
-            var drag = [], nodes = document.querySelectorAll('[data-webview-drag]');
-            for (var i=0;i<nodes.length;i++){
-              if (closest(nodes[i], '[data-webview-ignore]')) continue;
-              var r = nodes[i].getBoundingClientRect();
-              if (r.width>0 && r.height>0) drag.push(r.left, r.top, r.width, r.height);
-            }
-            var ignore = rectsOf('[data-webview-ignore],[data-webview-minimize],[data-webview-maximize],[data-webview-close],[data-webview-resize]');
-            try { invoke('window.setTitleBarDragRegions', { drag: drag, ignore: ignore }); } catch(e){}
-          }
-          function schedule(){ if (scheduled) return; scheduled = true; requestAnimationFrame(publish); }
           function edgeFor(v){
             switch((v||'').toLowerCase()){
               case 'top': return 1; case 'bottom': return 2; case 'left': return 4; case 'right': return 8;
@@ -627,24 +637,19 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             if (e.button !== 0) return;
             var resize = closest(e.target, '[data-webview-resize]');
             if (resize){ e.preventDefault(); invoke('window.startResize', { edge: edgeFor(resize.getAttribute('data-webview-resize')) }); return; }
-            if (closest(e.target, '[data-webview-ignore]')) return;
-            if (closest(e.target, '[data-webview-drag]')){ e.preventDefault(); invoke('window.startDrag'); }
+            if (!isDragPoint(e)) return;
+            e.preventDefault();
+            if (cfg().mac) invoke('window.beginNativeDrag', { x: e.clientX, y: e.clientY });
+            else invoke('window.startDrag');
           }, true);
           document.addEventListener('dblclick', function(e){
-            if (closest(e.target, '[data-webview-ignore]')) return;
-            if (closest(e.target, '[data-webview-drag]')) invoke('window.toggleMaximize');
+            if (isDragPoint(e)) invoke('window.toggleMaximize');
           }, true);
           document.addEventListener('click', function(e){
             if (closest(e.target, '[data-webview-minimize]')) invoke('window.minimize');
             else if (closest(e.target, '[data-webview-maximize]')) invoke('window.toggleMaximize');
             else if (closest(e.target, '[data-webview-close]')) invoke('window.close');
           }, true);
-          window.addEventListener('resize', schedule);
-          window.addEventListener('load', schedule);
-          document.addEventListener('DOMContentLoaded', schedule);
-          try { new MutationObserver(schedule).observe(document.documentElement,
-            { childList:true, subtree:true, attributes:true, attributeFilter:['style','class','hidden'] }); } catch(e){}
-          schedule();
         })();
         """u8;
 

@@ -35,6 +35,10 @@ public sealed class RynWindowOptions
     /// <summary>Controls the window title bar appearance.</summary>
     public TitleBarStyle TitleBarStyle { get; set; } = TitleBarStyle.Native;
 
+    /// <summary>Height in CSS pixels of an automatic drag strip along the top of the page (0 = off). See
+    /// <see cref="RynOptions.TitleBarAutoDragHeight"/>.</summary>
+    public double TitleBarAutoDragHeight { get; set; }
+
     /// <summary>Whether the window background is transparent.</summary>
     public bool Transparent { get; set; }
 
@@ -108,6 +112,7 @@ public sealed class RynWindowOptions
             MaxHeight = MaxHeight,
             Resizable = Resizable,
             TitleBarStyle = TitleBarStyle,
+            TitleBarAutoDragHeight = TitleBarAutoDragHeight,
             Transparent = Transparent,
             ClickThrough = ClickThrough,
             HardwareAcceleration = HardwareAcceleration,

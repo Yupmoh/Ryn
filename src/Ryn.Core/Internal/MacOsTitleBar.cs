@@ -7,22 +7,27 @@ namespace Ryn.Core.Internal;
 [SupportedOSPlatform("macos")]
 internal static partial class MacOsTitleBar
 {
-    private static nint _dragViewClass;
-    private static bool _classRegistered;
+    // Last left-mousedown NSEvent per swizzled NSWindow*, retained between mousedown and mouseup. When the
+    // page's injected title-bar script rules the point draggable (live-DOM verdict at click time), the
+    // window.beginNativeDrag command lands here and the drag starts from this REAL originating event via
+    // performWindowDragWithEvent: — so the IPC delay costs nothing: AppKit anchors the drag to the original
+    // mousedown location and the window can never desync from the cursor (unlike dragging from
+    // NSApp.currentEvent, which by IPC time is a later, unrelated event).
+    private readonly record struct PendingMouseDown(nint Event, long TimestampMs);
+    private static readonly ConcurrentDictionary<nint, PendingMouseDown> Pending = new();
 
-    // Drag/ignore regions published by the page (the data-webview-* script), keyed by NSWindow* and stored as
-    // viewport-top-left CSS-pixel rects [x,y,w,h,...]. The drag view's hitTest consults them: a point inside an
-    // ignore rect (an interactive control) or outside every drag rect falls through to the webview; a point
-    // inside a drag rect (and not an ignore rect) is a native window drag. Absent → nothing draggable there.
-    private sealed record Regions(double[] Drag, double[] Ignore);
-    private static readonly ConcurrentDictionary<nint, Regions> DragRegions = new();
+    // Declared window class → original sendEvent: IMP, saved before we IMP-swap our observer in. The
+    // observer calls the ORIGINAL IMP directly (never objc_msgSendSuper), so it is recursion-proof and
+    // KVO-transparent: the window's runtime (isa) class is often a dynamically-registered KVO/notifying
+    // class we must not re-parent — WKWebView and saucer both observe the window — so we swap the method
+    // on the DECLARED class ([window class]) instead of touching the isa.
+    private static readonly ConcurrentDictionary<nint, nint> OriginalSendEvent = new();
+    private static readonly object SwizzleLock = new();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NSPoint { public double X, Y; }
 
-    internal static unsafe void Apply(nint nsWindowPtr, bool overlay) => Apply(nsWindowPtr, overlay, dragView: true);
-
-    internal static unsafe void Apply(nint nsWindowPtr, bool overlay, bool dragView)
+    internal static unsafe void Apply(nint nsWindowPtr, bool overlay)
     {
         if (nsWindowPtr == 0) return;
 
@@ -32,131 +37,107 @@ internal static partial class MacOsTitleBar
         objc_msgSend_nint(nsWindow, sel_registerName("setTitleVisibility:"), 1);
         objc_msgSend_bool(nsWindow, sel_registerName("setTitlebarAppearsTransparent:"), 1);
 
+        // Overlay: content extends under title bar (fullSizeContentView).
         if (overlay)
         {
-            // Overlay: content extends under title bar
             var mask = objc_msgSend_ret_nint(nsWindow, sel_registerName("styleMask"));
             objc_msgSend_nint(nsWindow, sel_registerName("setStyleMask:"), mask | (1 << 15));
-
-            // Native drag view over the webview. It only grabs points inside published drag regions (hitTest);
-            // every other point falls through to the DOM. Skipped when the app opts out to self-manage drag.
-            if (dragView) AddDragView(nsWindow);
         }
         // Hidden: no fullSizeContentView — title bar stays as a separate native strip
         // with drag and traffic lights. Content renders below it.
     }
 
     /// <summary>
-    /// Publishes the page's draggable and ignored rectangles (viewport-top-left CSS pixels, flat [x,y,w,h,...])
-    /// for a window. The overlay drag view's hitTest uses them to decide drag-vs-forward-to-webview.
+    /// IMP-swaps <c>sendEvent:</c> on the window's declared class so the latest left-mousedown event is
+    /// retained (released again on mouseup) and everything is forwarded to the original implementation.
+    /// Passive on its own: a drag only starts when the page verdict arrives via <see cref="BeginDrag"/>.
+    /// Idempotent; one swap per declared class covers every window of that class.
     /// </summary>
-    internal static void SetDragRegions(nint nsWindowPtr, double[] drag, double[] ignore)
+    internal static unsafe void InstallDragMonitor(nint nsWindowPtr)
     {
         if (nsWindowPtr == 0) return;
-        DragRegions[nsWindowPtr] = new Regions(drag ?? [], ignore ?? []);
-    }
-
-    internal static void ClearDragRegions(nint nsWindowPtr)
-    {
-        if (nsWindowPtr != 0) DragRegions.TryRemove(nsWindowPtr, out _);
-    }
-
-    private static unsafe void AddDragView(void* nsWindow)
-    {
-        EnsureDragViewClass();
-
-        var contentView = (void*)objc_msgSend_ret_nint(nsWindow, sel_registerName("contentView"));
-        var frame = GetRect(contentView, sel_registerName("frame"));
-
-        // Full-content-size overlay: hitTest returns self only inside a published drag region, nil elsewhere,
-        // so the app's drag regions can be any height/position and all other clicks reach the DOM.
-        var dragFrame = new NSRect { X = 0, Y = 0, Width = frame.Width, Height = frame.Height };
-
-        var alloc = objc_msgSend_ret_nint((void*)_dragViewClass, sel_registerName("alloc"));
-        var dragView = (void*)objc_msgSend_rect_ret_nint((void*)alloc, sel_registerName("initWithFrame:"), dragFrame);
-
-        // NSViewWidthSizable(2) | NSViewHeightSizable(16): track the content view on resize.
-        objc_msgSend_nint(dragView, sel_registerName("setAutoresizingMask:"), 2 | 16);
-
-        // Add on top of the webview.
-        objc_msgSend_ptr(contentView, sel_registerName("addSubview:"), dragView);
-    }
-
-    private static unsafe void EnsureDragViewClass()
-    {
-        if (_classRegistered) return;
-
-        var superclass = objc_getClass("NSView");
-        _dragViewClass = objc_allocateClassPair(superclass, "RynTitleBarDragView", 0);
-
-        // hitTest: — grab only points inside a published drag region; return nil elsewhere so the event
-        // falls through to the webview (a sibling added before this view).
-        class_addMethod(
-            _dragViewClass,
-            sel_registerName("hitTest:"),
-            (nint)(delegate* unmanaged[Cdecl]<nint, nint, NSPoint, nint>)&OnHitTest,
-            "@@:{CGPoint=dd}");
-
-        // Override mouseDown: to perform window drag
-        class_addMethod(
-            _dragViewClass,
-            sel_registerName("mouseDown:"),
-            (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnMouseDown,
-            "v@:@");
-
-        // Override mouseUp: to handle double-click maximize
-        class_addMethod(
-            _dragViewClass,
-            sel_registerName("mouseUp:"),
-            (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnMouseUp,
-            "v@:@");
-
-        objc_registerClassPair(_dragViewClass);
-        _classRegistered = true;
-    }
-
-    // aPoint is in the superview (contentView) coordinate system: bottom-left origin, points. Convert to the
-    // page's top-left CSS pixels (1:1 with points for WKWebView) and test against the published regions.
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
-    private static unsafe nint OnHitTest(nint self, nint sel, NSPoint aPoint)
-        => NativeGuard.Invoke("titlebar.hitTest", (nint)0, () =>
+        lock (SwizzleLock)
         {
-            var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
-            if (window == 0 || !DragRegions.TryGetValue(window, out var regions) || regions.Drag.Length < 4)
-                return 0; // nothing draggable → fall through to the webview
+            // The DECLARED class, not object_getClass: KVO observers (WKWebView, saucer) isa-swizzle the
+            // window into a runtime subclass that must stay in place; [window class] sees through it.
+            var cls = objc_msgSend_ret_nint((void*)nsWindowPtr, sel_registerName("class"));
+            if (cls == 0 || OriginalSendEvent.ContainsKey(cls)) return;
+            var sel = sel_registerName("sendEvent:");
+            var method = class_getInstanceMethod(cls, sel); // hierarchy-searching: finds NSWindow's if not overridden
+            if (method == 0) return;
+            var original = method_getImplementation(method);
+            if (original == 0) return;
+            OriginalSendEvent[cls] = original;
+            class_replaceMethod(cls, sel, (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnSendEvent, "v@:@");
+        }
+    }
 
-            var superview = (void*)objc_msgSend_ret_nint((void*)self, sel_registerName("superview"));
-            if (superview == null) return 0;
-            var bounds = GetRect(superview, sel_registerName("bounds"));
-
-            var cssX = aPoint.X;
-            var cssY = bounds.Height - aPoint.Y; // flip: AppKit bottom-left → CSS top-left
-
-            // Draggable only when the point is inside a drag region and not inside an interactive (ignore)
-            // rect. Otherwise return nil so the click falls through to the webview.
-            return TitleBarRegions.IsDraggable(regions.Drag, regions.Ignore, cssX, cssY) ? self : 0;
-        });
-
+    // NSEventType: LeftMouseDown = 1, LeftMouseUp = 2. Observe-and-forward only — never swallows an event,
+    // so the DOM always sees the full click stream (the page preventDefaults draggable mousedowns itself).
     [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
-    private static unsafe void OnMouseDown(nint self, nint sel, nint nsEvent)
-        => NativeGuard.Invoke("titlebar.mouseDown", () =>
+    private static unsafe void OnSendEvent(nint self, nint sel, nint nsEvent)
+    {
+        NativeGuard.Invoke("titlebar.sendEvent", () =>
         {
-            var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
-            objc_msgSend_ptr((void*)window, sel_registerName("performWindowDragWithEvent:"), (void*)nsEvent);
-        });
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
-    private static unsafe void OnMouseUp(nint self, nint sel, nint nsEvent)
-        => NativeGuard.Invoke("titlebar.mouseUp", () =>
-        {
-            // Double-click title bar = zoom (maximize/restore)
-            var clickCount = objc_msgSend_ret_nint((void*)nsEvent, sel_registerName("clickCount"));
-            if (clickCount == 2)
+            var type = objc_msgSend_ret_nint((void*)nsEvent, sel_registerName("type"));
+            if (type == 1)
             {
-                var window = objc_msgSend_ret_nint((void*)self, sel_registerName("window"));
-                objc_msgSend_ptr((void*)window, sel_registerName("zoom:"), null);
+                objc_msgSend_ret_nint((void*)nsEvent, sel_registerName("retain"));
+                if (Pending.TryRemove(self, out var stale))
+                    objc_msgSend_ret_nint((void*)stale.Event, sel_registerName("release"));
+                Pending[self] = new PendingMouseDown(nsEvent, Environment.TickCount64);
+            }
+            else if (type == 2 && Pending.TryRemove(self, out var p))
+            {
+                objc_msgSend_ret_nint((void*)p.Event, sel_registerName("release"));
             }
         });
+        // Always forward to the original implementation, even if the guard tripped. Resolve it from the
+        // declared class (KVO-transparent); walk up in case a subclass window inherited our swap.
+        var cls = objc_msgSend_ret_nint((void*)self, sel_registerName("class"));
+        while (cls != 0 && !OriginalSendEvent.TryGetValue(cls, out _)) cls = class_getSuperclass(cls);
+        if (cls != 0 && OriginalSendEvent.TryGetValue(cls, out var original))
+            ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)original)(self, sel, nsEvent);
+    }
+
+    /// <summary>
+    /// Starts a native window drag from the retained mousedown event, if the page's verdict plausibly refers
+    /// to it: the event is fresh (&lt; 1 s), the button is still down, and the verdict's page CSS-pixel point
+    /// (scaled to points by <paramref name="scale"/>) matches the event location. A stale or mismatched
+    /// verdict — e.g. one racing a newer click on an interactive control — is dropped.
+    /// </summary>
+    internal static unsafe void BeginDrag(nint nsWindowPtr, double cssX, double cssY, double scale)
+    {
+        if (nsWindowPtr == 0 || !Pending.TryRemove(nsWindowPtr, out var p)) return;
+        try
+        {
+            if (Environment.TickCount64 - p.TimestampMs > 1000) return;
+            var pressed = objc_msgSend_ret_nint((void*)objc_getClass("NSEvent"), sel_registerName("pressedMouseButtons"));
+            if ((pressed & 1) == 0) return; // released before the verdict arrived — it's a click, not a drag
+
+            var nsWindow = (void*)nsWindowPtr;
+            var contentView = (void*)objc_msgSend_ret_nint(nsWindow, sel_registerName("contentView"));
+            if (contentView == null) return;
+
+            // Event location (window base coords) → content view coords → top-left origin, then compare
+            // against the verdict's point. convertPoint:fromView: with nil converts from window coordinates
+            // and is title-bar-inset-correct for every TitleBarStyle.
+            var loc = objc_msgSend_ret_pt((void*)p.Event, sel_registerName("locationInWindow"));
+            var inView = objc_msgSend_pt_ptr_ret_pt(contentView, sel_registerName("convertPoint:fromView:"), loc, null);
+            var bounds = GetRect(contentView, sel_registerName("bounds"));
+            var px = inView.X;
+            var py = bounds.Height - inView.Y; // flip: AppKit bottom-left → CSS top-left
+            const double Tolerance = 12.0;
+            if (Math.Abs(px - cssX * scale) > Tolerance || Math.Abs(py - cssY * scale) > Tolerance) return;
+
+            objc_msgSend_ptr(nsWindow, sel_registerName("performWindowDragWithEvent:"), (void*)p.Event);
+        }
+        finally
+        {
+            objc_msgSend_ret_nint((void*)p.Event, sel_registerName("release"));
+        }
+    }
+
 
     // Requested traffic-light top-left (window-top-left CSS points) per window, so the resize/key observer
     // can re-apply after AppKit re-lays the buttons out.
@@ -292,6 +273,36 @@ internal static partial class MacOsTitleBar
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool class_addMethod(nint cls, nint sel, nint imp, [MarshalAs(UnmanagedType.LPUTF8Str)] string types);
+
+    [LibraryImport("libobjc.dylib")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint class_getSuperclass(nint cls);
+
+    // class_getInstanceMethod searches the whole hierarchy, so it resolves the effective sendEvent: even
+    // when the window's own class doesn't override it (NSWindow's implementation is returned).
+    [LibraryImport("libobjc.dylib")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint class_getInstanceMethod(nint cls, nint sel);
+
+    [LibraryImport("libobjc.dylib")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint method_getImplementation(nint method);
+
+    [LibraryImport("libobjc.dylib")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint class_replaceMethod(nint cls, nint sel, nint imp, [MarshalAs(UnmanagedType.LPUTF8Str)] string types);
+
+    // NSPoint (16 bytes, 2 doubles) returns in registers on BOTH ABIs — arm64 in v0/v1, x86_64 System V in
+    // xmm0/xmm1 (two SSE-class eightbytes) — so the ordinary objc_msgSend trampoline is correct everywhere;
+    // only the 32-byte NSRect needs the _stret split below.
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial NSPoint objc_msgSend_ret_pt(void* receiver, nint selector);
+
+    // convertPoint:fromView: — (NSPoint, NSView*) in, NSPoint out; all register-class on both ABIs.
+    [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static unsafe partial NSPoint objc_msgSend_pt_ptr_ret_pt(void* receiver, nint selector, NSPoint point, void* view);
 
     [LibraryImport("libobjc.dylib", EntryPoint = "objc_msgSend")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

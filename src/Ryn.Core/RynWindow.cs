@@ -39,9 +39,6 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private int _normalWidth;
     private int _normalHeight;
     private double _pageZoom = 1.0;
-    private double[] _titleBarDragRegions = [];
-    private double[] _titleBarIgnoreRegions = [];
-    private readonly object _titleBarRegionsLock = new();
     private volatile bool _usesPageZoomFallback;
     private volatile bool _disposed;
 
@@ -243,7 +240,6 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         RunOnUi(() =>
         {
             ApplyPageZoomOnUi(clamped);
-            ApplyTitleBarDragRegionsOnUi();
             PageZoomChanged?.Invoke(this, EventArgs.Empty);
         });
     }
@@ -435,7 +431,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_options.TitleBarStyle is TitleBarStyle.Hidden or TitleBarStyle.Overlay) InjectTitleBarInsets();
         // The data-webview-* drag/control contract is meaningful for any style where the app draws its own
         // title-bar chrome (Overlay/Hidden/Frameless), not the platform-native bar.
-        if (_options.TitleBarStyle is not TitleBarStyle.Native) _rynWebView.InjectTitleBarScript();
+        if (_options.TitleBarStyle is not TitleBarStyle.Native)
+            _rynWebView.InjectTitleBarScript(_options.TitleBarAutoDragHeight);
         if (GetPageZoom() != 1.0) ApplyPageZoomOnUi(GetPageZoom());
 
         _themeDetector = new SystemThemeDetector();
@@ -641,6 +638,13 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                 Saucer.saucer_window_set_decorations(_window, saucer_window_decoration.SAUCER_WINDOW_DECORATION_NONE);
                 break;
         }
+        // DOM-verdict native dragging: observe mousedown/up in sendEvent so a page verdict (BeginNativeDrag)
+        // can start the drag from the REAL originating event. Passive without a verdict; any non-native style.
+        if (OperatingSystem.IsMacOS() && _options.TitleBarStyle is not TitleBarStyle.Native)
+        {
+            var dragHandle = GetNativeWindowHandle();
+            if (dragHandle != 0) MacOsTitleBar.InstallDragMonitor(dragHandle);
+        }
         if (OperatingSystem.IsMacOS() && _options.TrafficLightPosition is { } tlp)
             ApplyMacOsTrafficLight(tlp.X, tlp.Y);
         if (_options.IconPath is not null && File.Exists(_options.IconPath))
@@ -750,39 +754,20 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // (INT-11). saucer reports 8 in practice, so this lower bound is defensive only.
         if (size < (nuint)sizeof(nint) || size > 64) return;
         Span<byte> buf = stackalloc byte[(int)size];
-        fixed (byte* ptr = buf) { Saucer.saucer_window_native(_window, 0, ptr, &size); var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf); if (nsWindow != 0) MacOsTitleBar.Apply(nsWindow, overlay, _options.TitleBarDragView); }
+        fixed (byte* ptr = buf) { Saucer.saucer_window_native(_window, 0, ptr, &size); var nsWindow = System.Runtime.InteropServices.MemoryMarshal.Read<nint>(buf); if (nsWindow != 0) MacOsTitleBar.Apply(nsWindow, overlay); }
     }
 
     /// <summary>
-    /// Publishes the page's draggable/ignored title-bar rectangles (viewport-top-left CSS pixels, each a flat
-    /// [x,y,w,h,…] run) so the macOS Overlay drag view drags only over drag regions and forwards every other
-    /// click to the webview. No-op off macOS and when there is no overlay drag view.
+    /// Starts a native macOS drag from the retained mousedown event, after verifying the verdict point
+    /// (page CSS pixels, scaled to points here) matches that event. Invoked by the injected title-bar
+    /// script's live-DOM verdict; no-op off macOS — the script calls <see cref="StartDrag"/> there instead.
     /// </summary>
-    public void SetTitleBarDragRegions(IReadOnlyList<double> drag, IReadOnlyList<double> ignore)
-    {
-        lock (_titleBarRegionsLock)
-        {
-            _titleBarDragRegions = [.. drag];
-            _titleBarIgnoreRegions = [.. ignore];
-        }
-        RunOnUi(ApplyTitleBarDragRegionsOnUi);
-    }
-
-    private void ApplyTitleBarDragRegionsOnUi()
+    public void BeginNativeDrag(double x, double y) => RunOnUi(() =>
     {
         if (_window == null || !OperatingSystem.IsMacOS()) return;
         var handle = GetNativeWindowHandle();
-        if (handle == 0) return;
-        var scale = EffectiveCoordinateScale;
-        double[] drag;
-        double[] ignore;
-        lock (_titleBarRegionsLock)
-        {
-            drag = TitleBarRegions.Scale(_titleBarDragRegions, scale);
-            ignore = TitleBarRegions.Scale(_titleBarIgnoreRegions, scale);
-        }
-        MacOsTitleBar.SetDragRegions(handle, drag, ignore);
-    }
+        if (handle != 0) MacOsTitleBar.BeginDrag(handle, x, y, EffectiveCoordinateScale);
+    });
 
     public void SetTrafficLightPosition(TrafficLightPosition position) =>
         RunOnUi(() => { if (_window != null && OperatingSystem.IsMacOS()) ApplyMacOsTrafficLight(position.X, position.Y); });

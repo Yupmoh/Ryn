@@ -67,13 +67,12 @@ internal sealed class WindowCommands
     public void SetClickThrough(bool clickThrough) => _windows.Current.SetClickThrough(clickThrough);
 
     /// <summary>
-    /// Publishes the title bar's draggable and interactive rectangles (viewport-top-left CSS pixels, each a
-    /// flat [x,y,w,h] run). Normally driven by the injected <c>data-webview-drag</c> script; exposed so an app
-    /// can manage drag regions itself. See <c>IRynWindow.SetTitleBarDragRegions</c>.
+    /// Starts a native macOS window drag anchored to the retained mousedown event, verified against the
+    /// verdict point (viewport-top-left CSS pixels). Invoked by the injected title-bar script when the live
+    /// DOM rules a mousedown point draggable; no-op off macOS (the script uses <c>window.startDrag</c> there).
     /// </summary>
-    [RynCommand("window.setTitleBarDragRegions")]
-    public void SetTitleBarDragRegions(double[]? drag, double[]? ignore) =>
-        _windows.Current.SetTitleBarDragRegions(drag ?? [], ignore ?? []);
+    [RynCommand("window.beginNativeDrag")]
+    public void BeginNativeDrag(double x, double y) => _windows.Current.BeginNativeDrag(x, y);
 
     /// <summary>Positions the macOS traffic-light buttons (close button top-left, points from the window top-left).</summary>
     [RynCommand("window.setTrafficLightPosition")]

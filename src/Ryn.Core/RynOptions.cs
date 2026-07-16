@@ -24,7 +24,7 @@ public sealed class RynOptions
     private int _maxHeight;
     private bool _resizable = true;
     private TitleBarStyle _titleBarStyle = TitleBarStyle.Native;
-    private bool _titleBarDragView = true;
+    private double _titleBarAutoDragHeight;
     private TrafficLightPosition? _trafficLight;
     private BackdropMaterial _backdrop = BackdropMaterial.None;
     private bool _transparent;
@@ -76,12 +76,13 @@ public sealed class RynOptions
     public TitleBarStyle TitleBarStyle { get => _titleBarStyle; set => Set(ref _titleBarStyle, value); }
 
     /// <summary>
-    /// Whether an <see cref="TitleBarStyle.Overlay"/> window installs the native macOS drag view. Default
-    /// <c>true</c>: the app marks drag regions with <c>data-webview-drag</c> and the drag view drags only
-    /// there (every other click reaches the DOM). Set <c>false</c> to self-manage dragging via
-    /// <c>window.startDrag</c> on mousedown. No effect off macOS.
+    /// Height in CSS pixels of an automatic drag strip along the top of the page (0 = off). Inside the strip,
+    /// any point that is not an interactive element (buttons, inputs, links, <c>data-webview-ignore</c>, …)
+    /// and is not covered by an overlay extending below the strip drags the window — no
+    /// <c>data-webview-drag</c> markup needed. Applies to every non-<see cref="TitleBarStyle.Native"/> style,
+    /// on every platform. See docs/custom-title-bars.md.
     /// </summary>
-    public bool TitleBarDragView { get => _titleBarDragView; set => Set(ref _titleBarDragView, value); }
+    public double TitleBarAutoDragHeight { get => _titleBarAutoDragHeight; set => Set(ref _titleBarAutoDragHeight, value); }
 
     /// <summary>
     /// Position of the macOS traffic-light buttons — the close button's top-left, in points from the window's

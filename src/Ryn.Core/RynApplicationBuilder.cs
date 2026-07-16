@@ -230,6 +230,9 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.TitleBarStyle)] is { } titleBarStyle && Enum.TryParse<TitleBarStyle>(titleBarStyle, true, out var tbs))
             options.TitleBarStyle = tbs;
 
+        if (section[nameof(RynOptions.TitleBarAutoDragHeight)] is { } autoDrag && double.TryParse(autoDrag, NumberStyles.Float, CultureInfo.InvariantCulture, out var adh))
+            options.TitleBarAutoDragHeight = adh;
+
         if (section[nameof(RynOptions.Transparent)] is { } transparent && bool.TryParse(transparent, out var t))
             options.Transparent = t;
 
@@ -261,6 +264,7 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.MaxHeight), static (t, s) => t.MaxHeight = s.MaxHeight);
         CopyIfSet(target, source, nameof(RynOptions.Resizable), static (t, s) => t.Resizable = s.Resizable);
         CopyIfSet(target, source, nameof(RynOptions.TitleBarStyle), static (t, s) => t.TitleBarStyle = s.TitleBarStyle);
+        CopyIfSet(target, source, nameof(RynOptions.TitleBarAutoDragHeight), static (t, s) => t.TitleBarAutoDragHeight = s.TitleBarAutoDragHeight);
         CopyIfSet(target, source, nameof(RynOptions.Transparent), static (t, s) => t.Transparent = s.Transparent);
         CopyIfSet(target, source, nameof(RynOptions.HardwareAcceleration), static (t, s) => t.HardwareAcceleration = s.HardwareAcceleration);
         CopyIfSet(target, source, nameof(RynOptions.Url), static (t, s) => t.Url = s.Url);
