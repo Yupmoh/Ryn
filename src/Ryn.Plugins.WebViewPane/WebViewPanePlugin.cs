@@ -28,6 +28,9 @@ internal sealed class WebViewPanePlugin : IRynPlugin
         if (window is not null)
             WirePaneTeardown(window, service.CloseAll);
 
+        _services.GetService<Ryn.Core.Internal.RynWindowAccessor>()?.OnReady(rynWindow =>
+            rynWindow.PageZoomChanged += (_, _) => service.ReapplyBoundsForPageZoom());
+
         return ValueTask.CompletedTask;
     }
 

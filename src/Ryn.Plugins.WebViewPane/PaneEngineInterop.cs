@@ -143,6 +143,7 @@ internal static unsafe partial class PaneEngineInterop
         [MarshalAs(UnmanagedType.LPUTF8Str)] string arg);
 
     // --- Linux: WebKitGTK ---
+    // The webkitgtk candidate sonames must stay in sync with WebViewPageZoom.ResolveLinuxLibrary in Ryn.Core.
     // saucer 8 builds against GTK4/libadwaita (WebKitGTK 6.0 API); older 4.1 kept as a fallback so a
     // saucer built against webkit2gtk-4.1 still resolves.
 

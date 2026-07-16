@@ -255,6 +255,27 @@ public sealed class WebViewPaneDependencyInjectionTests
 public sealed class WebViewPaneBoundsTests
 {
     [Theory]
+    [InlineData(100, 50, 400, 200, 1.25, 125, 63, 500, 250)]
+    [InlineData(1836, 8, 64, 32, 0.8, 1469, 6, 51, 26)]
+    [InlineData(20, 40, 400, 200, 1.0, 20, 40, 400, 200)]
+    public void ScaleBounds_ConvertsHostCssPixelsToNativeCoordinates(
+        int x, int y, int width, int height, double factor,
+        int expectedX, int expectedY, int expectedWidth, int expectedHeight)
+    {
+        WebViewPaneService.ScaleBounds(x, y, width, height, factor)
+            .Should().Be((expectedX, expectedY, expectedWidth, expectedHeight));
+    }
+
+    [Fact]
+    public void ScaleBounds_RoundTripsLogicalBoundsAcrossZoomChanges()
+    {
+        WebViewPaneService.ScaleBounds(123, 77, 401, 199, 1.25)
+            .Should().NotBe(WebViewPaneService.ScaleBounds(123, 77, 401, 199, 1.0));
+        WebViewPaneService.ScaleBounds(123, 77, 401, 199, 1.0)
+            .Should().Be((123, 77, 401, 199));
+    }
+
+    [Theory]
     [InlineData(600, 0, 100, 500)]   // pane at the top of a 600pt window → native Y is near the top (500)
     [InlineData(600, 500, 100, 0)]   // pane at the bottom → native Y 0
     [InlineData(600, 100, 400, 100)] // mid-window rect

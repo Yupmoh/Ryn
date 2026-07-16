@@ -70,6 +70,10 @@ public sealed partial class WebViewPaneService : IDisposable
         public nint Webview;
         public GCHandle Handle;
         public double Zoom = 1.0;
+        public int X;
+        public int Y;
+        public int Width;
+        public int Height;
         public string Url = "";
         public readonly ConcurrentDictionary<long, TaskCompletionSource<string>> PendingEvals = new();
     }
@@ -147,7 +151,16 @@ public sealed partial class WebViewPaneService : IDisposable
         {
             id = _nextPaneId++;
         }
-        var state = new PaneState { Service = this, Id = id, Webview = (nint)webview };
+        var state = new PaneState
+        {
+            Service = this,
+            Id = id,
+            Webview = (nint)webview,
+            X = request.X,
+            Y = request.Y,
+            Width = request.Width,
+            Height = request.Height,
+        };
         state.Zoom = Math.Clamp(request.Zoom, MinZoom, MaxZoom);
         state.Handle = GCHandle.Alloc(state);
 
@@ -258,7 +271,14 @@ public sealed partial class WebViewPaneService : IDisposable
     }
 
     public void SetBounds(int id, int x, int y, int width, int height) =>
-        WithPane(id, (wv, _) => SetBoundsOnUi(wv, x, y, width, height));
+        WithPane(id, (wv, state) =>
+        {
+            state.X = x;
+            state.Y = y;
+            state.Width = width;
+            state.Height = height;
+            SetBoundsOnUi(wv, x, y, width, height);
+        });
 
     // Pane bounds are top-left CSS pixels relative to the window content area on every platform — the rect a
     // JS caller gets from getBoundingClientRect() places the pane at that visual position. WKWebView frames
@@ -266,18 +286,49 @@ public sealed partial class WebViewPaneService : IDisposable
     // top-left. Bounds are not re-derived on window resize: re-apply from JS on layout changes.
     private unsafe void SetBoundsOnUi(nint webview, int x, int y, int width, int height)
     {
-        var yNative = y;
+        var window = _services.GetService<RynWindowAccessor>()?.Window;
+        var bounds = ScaleBounds(x, y, width, height, window?.EffectiveCoordinateScale ?? 1.0);
+        var yNative = bounds.Y;
         if (OperatingSystem.IsMacOS())
         {
-            var windowHandle = _services.GetService<RynWindowAccessor>()?.Window?.SaucerWindowHandle ?? 0;
+            var windowHandle = window?.SaucerWindowHandle ?? 0;
             if (windowHandle != 0)
             {
                 int contentWidth, contentHeight;
                 Saucer.saucer_window_size((saucer_window*)windowHandle, &contentWidth, &contentHeight);
-                yNative = ToMacNativeY(contentHeight, y, height);
+                yNative = ToMacNativeY(contentHeight, bounds.Y, bounds.Height);
             }
         }
-        Saucer.saucer_webview_set_bounds((saucer_webview*)webview, x, yNative, width, height);
+        Saucer.saucer_webview_set_bounds((saucer_webview*)webview, bounds.X, yNative, bounds.Width, bounds.Height);
+    }
+
+    internal static (int X, int Y, int Width, int Height) ScaleBounds(
+        int x, int y, int width, int height, double factor)
+    {
+        factor = WebViewPageZoom.Clamp(factor);
+        var left = ScaleCoordinate(x, factor);
+        var top = ScaleCoordinate(y, factor);
+        var right = ScaleCoordinate((long)x + width, factor);
+        var bottom = ScaleCoordinate((long)y + height, factor);
+        return (left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
+    private static int ScaleCoordinate(long value, double factor)
+    {
+        var scaled = Math.Round(value * factor, MidpointRounding.AwayFromZero);
+        return (int)Math.Clamp(scaled, int.MinValue, int.MaxValue);
+    }
+
+    /// <summary>Re-applies every pane's logical CSS bounds after the host page zoom changes.</summary>
+    internal void ReapplyBoundsForPageZoom()
+    {
+        List<PaneState> panes;
+        lock (_lock) panes = [.. _panes.Values];
+        foreach (var pane in panes)
+        {
+            if (pane.Webview != 0)
+                SetBoundsOnUi(pane.Webview, pane.X, pane.Y, pane.Width, pane.Height);
+        }
     }
 
     /// <summary>Converts a top-left pane Y to AppKit's bottom-left contentView coordinate.</summary>
