@@ -68,7 +68,9 @@ public sealed class PickerInitialPathTests
     [Fact]
     public void DefaultLocationClause_EmitsTheEscapedNormalizedPath()
     {
+        // Windows temp paths contain backslashes, which the AppleScript escaping doubles — mirror it.
         var dir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
-        PickerCommands.DefaultLocationClause(dir).Should().Be($" default location \"{dir}\"");
+        var escaped = dir.Replace("\\", "\\\\", StringComparison.Ordinal);
+        PickerCommands.DefaultLocationClause(dir).Should().Be($" default location \"{escaped}\"");
     }
 }
