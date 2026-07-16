@@ -657,7 +657,6 @@ var app = RynApplication.CreateBuilder()
         opts.Height = 750;
         opts.Html = html;
         opts.TitleBarStyle = TitleBarStyle.Overlay;
-        opts.DevTools = true;
     })
     .ConfigureServices(services =>
     {
