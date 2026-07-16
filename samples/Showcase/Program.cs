@@ -30,10 +30,12 @@ var html = """
     overflow-x: hidden;
   }
   .header {
+    position: relative;
     background: linear-gradient(135deg, #1a1a2e 0%, #16162a 100%);
     border-bottom: 1px solid var(--border);
     padding: 32px 40px 24px;
   }
+  .header-action { position: absolute; top: 14px; right: 18px; }
   .header h1 {
     font-size: 28px; font-weight: 700;
     background: linear-gradient(135deg, var(--accent2), var(--accent3));
@@ -139,9 +141,10 @@ var html = """
 </head>
 <body>
 
-<div class="header">
+<div class="header" data-webview-drag>
   <h1>Ryn <span class="badge">Showcase</span></h1>
   <p>Rich Yet Native — a cross-platform desktop framework for .NET</p>
+  <button class="btn btn-outline btn-sm header-action" data-webview-ignore onclick="toast('Title-bar button clicked')">Test title-bar button</button>
 </div>
 
 <div class="tabs">
@@ -286,6 +289,16 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
           <button class="btn btn-outline btn-sm" onclick="doUnregisterShortcut()">Unregister</button>
         </div>
         <div class="output" id="shortcutOutput" style="min-height:24px">Register a system-wide hotkey, then press it — even while another app is focused</div>
+      </div>
+      <div class="card full">
+        <h3><span class="icon">🔍</span> Main Page Zoom</h3>
+        <div class="row mb">
+          <button class="btn btn-outline btn-sm" onclick="doPageZoom(0.8)">80%</button>
+          <button class="btn btn-outline btn-sm" onclick="doPageZoom(1.0)">100%</button>
+          <button class="btn btn-outline btn-sm" onclick="doPageZoom(1.25)">125%</button>
+          <span id="pageZoomOutput" style="color:var(--muted)">100%</span>
+        </div>
+        <div class="output" style="min-height:24px">Zooms the host page while title-bar hit regions and pane bounds stay aligned.</div>
       </div>
       <div class="card full">
         <h3><span class="icon">🌐</span> WebView Pane</h3>
@@ -555,18 +568,34 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
     el.className = 'output success';
   });
 
+  // Main page zoom
+  async function doPageZoom(factor) {
+    await invoke('window.setPageZoom', { factor: factor });
+    document.getElementById('pageZoomOutput').textContent = Math.round(factor * 100) + '%';
+    if (paneId !== null) positionPane();
+  }
+
   // WebView pane
   var paneId = null;
   var paneZoom = 1.0;
 
+  function paneBounds() {
+    return {
+      x: 0, y: Math.round(window.innerHeight / 2),
+      width: Math.round(window.innerWidth), height: Math.round(window.innerHeight / 2)
+    };
+  }
+
+  async function positionPane() {
+    if (paneId === null) return;
+    var bounds = paneBounds();
+    await invoke('webviewPane.setBounds', { id: paneId, ...bounds });
+  }
+
   async function doOpenPane() {
     if (paneId !== null) { toast('Pane already open'); return; }
     var url = document.getElementById('paneUrl').value;
-    paneId = await invoke('webviewPane.open', { options: {
-      x: 0, y: Math.round(window.innerHeight / 2),
-      width: Math.round(window.innerWidth), height: Math.round(window.innerHeight / 2),
-      url: url
-    }});
+    paneId = await invoke('webviewPane.open', { options: { ...paneBounds(), url: url }});
     document.getElementById('paneOutput').textContent = 'Pane ' + paneId + ' opened';
   }
 
@@ -595,6 +624,7 @@ This text can be saved to disk and read back using the FileSystem plugin.</texta
   window.__ryn.on('webviewPane.navigated', function(e) {
     document.getElementById('paneUrl').value = e.url;
   });
+  window.addEventListener('resize', positionPane);
 
   // Shell
   async function doShell() {
@@ -626,6 +656,7 @@ var app = RynApplication.CreateBuilder()
         opts.Width = 960;
         opts.Height = 750;
         opts.Html = html;
+        opts.TitleBarStyle = TitleBarStyle.Overlay;
         opts.DevTools = true;
     })
     .ConfigureServices(services =>

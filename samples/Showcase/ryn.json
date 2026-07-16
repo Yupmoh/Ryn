@@ -1,6 +1,7 @@
 {
   "capabilities": {
     "app": true,
+    "window": true,
     "fs": {
       "allow": ["readTextFile", "writeTextFile", "readDir", "exists", "stat"]
     },
