@@ -363,6 +363,18 @@ const text = await window.__ryn.invoke('clipboard.readText', {});
 const hasText = await window.__ryn.invoke('clipboard.hasText', {});
 ```
 
+### Window page zoom
+
+Zoom the host UI without legacy CSS-zoom coordinate mismatches:
+
+```javascript
+await window.__ryn.invoke('window.setPageZoom', { factor: 0.8 });
+const factor = await window.__ryn.invoke('window.getPageZoom');
+```
+
+The factor is clamped to `0.25–5.0`. Title-bar drag regions and `webviewPane.setBounds` continue to
+use page CSS pixels; Ryn converts them to native coordinates automatically.
+
 ### Available plugins
 
 | Plugin | Package | Registration | Commands |

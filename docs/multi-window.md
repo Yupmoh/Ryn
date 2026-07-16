@@ -100,7 +100,22 @@ await window.__ryn.invoke('window.minimize');
 await window.__ryn.invoke('window.toggleMaximize');
 await window.__ryn.invoke('window.setTitle', { title: 'Renamed' });
 await window.__ryn.invoke('window.setSize', { width: 600, height: 400 });
+await window.__ryn.invoke('window.setPageZoom', { factor: 1.25 });
+await window.__ryn.invoke('window.getPageZoom'); // 1.25
 ```
+
+## Page zoom
+
+`IRynWindow.SetPageZoom(factor)` and `window.setPageZoom` zoom the calling window's primary page;
+`GetPageZoom()` / `window.getPageZoom` return the effective factor. Values are clamped to `0.25–5.0`,
+with `1.0` as 100%. The implementation is native page zoom on every supported engine: `WKWebView.pageZoom`
+on macOS, WebView2 controller `ZoomFactor` on Windows, and `webkit_web_view_set_zoom_level` on Linux.
+If a native handle or API is unavailable, Ryn falls back to document-element CSS zoom and re-applies it
+after navigation.
+
+Page zoom is separate from `webviewPane.setZoom`, which zooms content inside a child pane. Pane bounds
+remain expressed in the host page's CSS pixels; Ryn scales them into native coordinates. macOS custom
+title-bar drag/ignore rectangles follow the same rule.
 
 `window.open` accepts the optional named arguments `title`, `width`, `height`,
 `resizable`, `devTools`, and one of `url` / `html` / `contentDirectory`. Omitted
@@ -115,7 +130,7 @@ them in `ryn.json` (a missing file allows everything, for development):
 {
   "capabilities": {
     "window": {
-      "allow": ["open", "list", "current", "close", "minimize", "toggleMaximize", "setTitle", "setSize"]
+      "allow": ["open", "list", "current", "close", "minimize", "toggleMaximize", "setTitle", "setSize", "setPageZoom", "getPageZoom"]
     }
   }
 }

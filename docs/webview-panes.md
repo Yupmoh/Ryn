@@ -130,9 +130,16 @@ responds (e.g. a syntax error in the expression) rejects after 10 seconds.
 
 ## Zoom
 
-`setZoom` is native page zoom on macOS (`WKWebView.pageZoom` — crisp, survives
-navigation). On Windows and Linux it applies CSS zoom, re-applied automatically after
-each navigation; layout-affecting but universally supported.
+`webviewPane.setZoom` controls content inside the pane. It is native page zoom on macOS
+(`WKWebView.pageZoom` — crisp, survives navigation). On Windows and Linux it applies CSS zoom,
+re-applied automatically after each navigation.
+
+Host-page zoom is independent. Since 0.26.0, pane `open`/`setBounds` coordinates stay in the main
+page's CSS pixels, including values read from `getBoundingClientRect()`. Ryn scales them into native
+coordinates before placement and re-applies every open pane's logical bounds when `window.setPageZoom`
+changes. (Under native engine zoom the scale is the zoom factor; under the rare CSS-zoom fallback on
+Windows/Linux the engines return already-scaled rects, so Ryn applies no extra scaling.) On macOS that scaling happens before the AppKit Y-axis flip, so panes
+remain over their placeholders through zoom changes and vertical window resizes.
 
 ## Downloads
 

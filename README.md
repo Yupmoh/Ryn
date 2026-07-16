@@ -19,7 +19,7 @@ Ryn gives .NET developers the Tauri experience without leaving C#. You write the
 - **Cross-platform:** Windows, macOS, and Linux.
 - **Plugin system:** FileSystem, Dialog (native pickers), Clipboard, Shell (spawn/PTY streaming), Notification (with activation events), Audio, Tray, MenuBar (native menus + roles), Badge (dock/taskbar), GlobalShortcut (system-wide hotkeys), WebViewPane (embedded browser panes), and a signed Auto-updater.
 - **Embedded browser panes:** N real webviews per window (no bundled Chromium) with per-pane sessions, user agents, background colors, find-in-page, screenshots, downloads, permission prompts, crash recovery, suspension, and a CDP passthrough on Windows.
-- **Native chrome control:** overlay/hidden title bars driven by declarative `data-webview-*` attributes, traffic-light positioning, and window backdrop materials (blur / acrylic / mica).
+- **Native chrome control:** overlay/hidden title bars driven by declarative `data-webview-*` attributes, traffic-light positioning, window page zoom with coordinate-safe panes/drag regions, and backdrop materials (blur / acrylic / mica).
 - **Security model:** `ryn.json` capability scopes, deny-by-default.
 - **Branded by default:** every window and bundled `.app`/installer ships with the Ryn icon, overridable per app.
 

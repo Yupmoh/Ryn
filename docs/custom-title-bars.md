@@ -63,6 +63,15 @@ Window controls fire on `click`; drag and resize fire on left-button `mousedown`
 (the window-control attributes above are treated as ignore automatically). Place non-draggable controls
 outside the drag rectangle, or tag them `data-webview-ignore`.
 
+### Page zoom
+
+Since 0.26.0, `window.setPageZoom` keeps these regions aligned automatically. The
+`window.setTitleBarDragRegions` wire format is unchanged: `drag` and `ignore` are always raw page CSS
+pixels from `getBoundingClientRect()`. Ryn scales them to AppKit points internally. Hosts upgrading from
+an earlier workaround must remove any `window.__ryn.invoke` wrapper that pre-scales these arrays; the
+injected title-bar publisher captures Ryn's original bridge function, so an existing late-installed wrapper
+is harmless until it is removed.
+
 ## Traffic-light position (macOS)
 
 By default the macOS traffic lights hug the top edge, which looks off in a taller custom title bar. Set
