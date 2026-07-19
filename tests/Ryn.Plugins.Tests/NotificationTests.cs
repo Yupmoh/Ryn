@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Ryn.Core;
 using Ryn.Ipc;
 using Ryn.Plugins.Notification;
@@ -76,6 +77,27 @@ public sealed class NotificationServiceTests
         service.IsPermissionGranted().Should().BeFalse();   // query does not grant
         service.RequestPermission().Should().Be("granted");
         service.IsPermissionGranted().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Plugin_EmitsExactJsonForActivationAndDismissal()
+    {
+        using var backend = new FakeBackend();
+        using var service = new NotificationService(backend);
+        var webView = Substitute.For<IRynWebView>();
+        var services = new ServiceCollection()
+            .AddSingleton(service)
+            .AddSingleton(webView)
+            .BuildServiceProvider();
+        await using var provider = services;
+        var plugin = new NotificationPlugin(provider);
+
+        await plugin.InitializeAsync();
+        backend.RaiseActivated("order-42");
+        backend.RaiseDismissed("order-\"7\"\n");
+
+        webView.Received(1).EmitEvent("notification.activated", """{"id":"order-42"}""");
+        webView.Received(1).EmitEvent("notification.dismissed", """{"id":"order-\u00227\u0022\n"}""");
     }
 }
 

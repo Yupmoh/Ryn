@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Ryn.Core;
+using System.Text.Json;
 
 namespace Ryn.Plugins.Notification;
 
@@ -22,6 +23,10 @@ public sealed class NotificationPlugin : IRynPlugin
     private void Emit(string eventName, string id)
     {
         var webView = _services.GetService<IRynWebView>();
-        webView?.EmitEvent(eventName, $"{{\"id\":{System.Text.Json.JsonSerializer.Serialize(id)}}}");
+        webView?.EmitEvent(
+            eventName,
+            JsonSerializer.Serialize(
+                new NotificationEventPayload(id),
+                NotificationJsonContext.Default.NotificationEventPayload));
     }
 }

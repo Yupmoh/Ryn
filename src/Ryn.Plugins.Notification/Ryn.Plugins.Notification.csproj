@@ -7,7 +7,7 @@
     <!-- CA1003: backends use Action&lt;string&gt; events deliberately (simple id payload, matches the tray plugin).
          CA2216: backends are process-lifetime singletons owning ObjC/GLib state; a finalizer touching native
          objects on the finalizer thread would be unsafe, so teardown is Dispose-only. -->
-    <NoWarn>IL2026;IL3050;CA1062;CA1003;CA2216</NoWarn>
+    <NoWarn>CA1062;CA1003;CA2216</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
