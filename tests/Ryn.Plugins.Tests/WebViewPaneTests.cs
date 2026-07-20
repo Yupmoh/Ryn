@@ -282,6 +282,19 @@ public sealed class WebViewPaneBoundsTests
     [InlineData(400, 0, 400, 0)]     // full-height pane
     public void ToMacNativeY_FlipsTopLeftIntoBottomLeftSpace(int contentHeight, int y, int height, int expected)
         => WebViewPaneService.ToMacNativeY(contentHeight, y, height).Should().Be(expected);
+
+    [Theory]
+    [InlineData(100, 50, 400, 200, 96, 100, 50, 500, 250)]
+    [InlineData(100, 50, 400, 200, 120, 125, 62, 625, 312)]
+    [InlineData(3, 3, 5, 5, 144, 4, 4, 11, 11)]
+    [InlineData(-20, 10, 40, 30, 192, -40, 20, 40, 80)]
+    public void ScaleWindowsBounds_MatchesSaucerDpiConversion(
+        int x, int y, int width, int height, uint dpi,
+        int left, int top, int right, int bottom)
+    {
+        PaneEngineInterop.ScaleWindowsBounds(x, y, width, height, dpi)
+            .Should().Be(new PaneEngineInterop.WindowsRect(left, top, right, bottom));
+    }
 }
 
 public sealed class PaneColorTests

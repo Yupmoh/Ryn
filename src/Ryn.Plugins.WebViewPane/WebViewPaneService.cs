@@ -299,7 +299,12 @@ public sealed partial class WebViewPaneService : IDisposable
                 yNative = ToMacNativeY(contentHeight, bounds.Y, bounds.Height);
             }
         }
-        Saucer.saucer_webview_set_bounds((saucer_webview*)webview, bounds.X, yNative, bounds.Width, bounds.Height);
+        var nativeWebview = (saucer_webview*)webview;
+        Saucer.saucer_webview_set_bounds(nativeWebview, bounds.X, yNative, bounds.Width, bounds.Height);
+
+        if (OperatingSystem.IsWindows())
+            _ = PaneEngineInterop.ApplyWindowsBounds(nativeWebview, window?.GetNativeWindowHandle() ?? 0,
+                bounds.X, yNative, bounds.Width, bounds.Height);
     }
 
     internal static (int X, int Y, int Width, int Height) ScaleBounds(

@@ -44,16 +44,16 @@ internal static unsafe partial class PaneEngineInterop
         }
     }
 
-    /// <summary>Reads the first stable native pointer (idx 0) for a saucer webview; 0 if unavailable.</summary>
-    internal static nint GetNativeHandle(saucer_webview* webview)
+    /// <summary>Reads a stable native pointer for a saucer webview; 0 if unavailable.</summary>
+    internal static nint GetNativeHandle(saucer_webview* webview, nuint index = 0)
     {
         nuint size = 0;
-        Saucer.saucer_webview_native(webview, 0, null, &size);
+        Saucer.saucer_webview_native(webview, index, null, &size);
         if (size < (nuint)sizeof(nint) || size > 64) return 0;
         Span<byte> buf = stackalloc byte[(int)size];
         fixed (byte* ptr = buf)
         {
-            Saucer.saucer_webview_native(webview, 0, ptr, &size);
+            Saucer.saucer_webview_native(webview, index, ptr, &size);
             return MemoryMarshal.Read<nint>(buf);
         }
     }
@@ -65,8 +65,40 @@ internal static unsafe partial class PaneEngineInterop
 
     private const int SlotQueryInterface = 0;
     private const int SlotRelease = 2;
+    private const int SlotControllerPutBounds = 6;  // ICoreWebView2Controller::put_Bounds
     private const int SlotWebView2GetSettings = 3;   // ICoreWebView2::get_Settings
     private const int SlotSettings2PutUserAgent = 22; // IUnknown(3) + ICoreWebView2Settings(18) + put_UserAgent(1)
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly record struct WindowsRect(int Left, int Top, int Right, int Bottom);
+
+    /// <summary>
+    /// Applies pane bounds immediately on WebView2. Saucer 8.0.x stores <c>set_bounds</c> but defers its
+    /// controller update until the parent window resizes (saucer#69); keeping this beside the normal saucer
+    /// call preserves its state while avoiding a full-window pane until that resize occurs.
+    /// </summary>
+    internal static bool ApplyWindowsBounds(saucer_webview* webview, nint hwnd, int x, int y, int width, int height)
+    {
+        if (!OperatingSystem.IsWindows() || webview == null) return false;
+
+        var controller = GetNativeHandle(webview, 1);
+        if (controller == 0) return false;
+
+        var dpi = hwnd != 0 ? GetDpiForWindow(hwnd) : 0;
+        var bounds = ScaleWindowsBounds(x, y, width, height, dpi == 0 ? 96u : dpi);
+        var putBounds = (delegate* unmanaged[Stdcall]<nint, WindowsRect, int>)(*(nint**)controller)[SlotControllerPutBounds];
+        return putBounds(controller, bounds) >= 0;
+    }
+
+    internal static WindowsRect ScaleWindowsBounds(int x, int y, int width, int height, uint dpi)
+    {
+        var factor = dpi / 96f;
+        var left = (int)(x * factor);
+        var top = (int)(y * factor);
+        var scaledWidth = (int)(width * factor);
+        var scaledHeight = (int)(height * factor);
+        return new WindowsRect(left, top, left + scaledWidth, top + scaledHeight);
+    }
 
     // CA1508: the analyzer cannot model writes through out-pointers passed to native function pointers,
     // so it thinks the post-call null checks are dead. They are not.
@@ -124,6 +156,11 @@ internal static unsafe partial class PaneEngineInterop
         // Autoreleased; safe on the UI thread where AppKit's run loop drains the pool.
         return objc_msgSend_nint_str(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), value);
     }
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.U4)]
+    private static partial uint GetDpiForWindow(nint hwnd);
 
     [LibraryImport("libobjc.dylib")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
