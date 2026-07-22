@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -97,10 +96,11 @@ public sealed partial class RynApplication : IAsyncDisposable
         }
 
         // macOS AppKit and Linux GTK both require their event loop to run on the process main thread (the
-        // thread that entered main / thread 0). pthread_main_np() returns non-zero there on both platforms.
-        // Calling RunAsync off that thread otherwise faults deep inside the native toolkit with no actionable
-        // message; convert that undefined behavior into a clear throw, mirroring the Windows STA guard above.
-        if ((OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()) && NativeThread.pthread_main_np() == 0)
+        // thread that entered main / thread 0). macOS exposes pthread_main_np(); on Linux the initial thread's
+        // kernel thread ID equals the process ID. Calling RunAsync off that thread otherwise faults deep inside
+        // the native toolkit with no actionable message; convert that undefined behavior into a clear throw,
+        // mirroring the Windows STA guard above.
+        if ((OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()) && !NativeThread.IsInitialThread())
         {
             throw new InvalidOperationException(
                 "RunAsync must be called from the application's main thread (thread 0). " +
@@ -365,31 +365,6 @@ public sealed partial class RynApplication : IAsyncDisposable
         {
             serviceSyncDisposable.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Thin P/Invoke shim for the C runtime's main-thread predicate. <c>pthread_main_np</c> returns a non-zero
-    /// value on the process main thread and 0 elsewhere; it is exported from <c>libSystem</c> on macOS and from
-    /// <c>libc</c> on Linux (glibc). AOT-safe: a plain extern call with blittable return, no reflection.
-    /// </summary>
-    private static partial class NativeThread
-    {
-        internal static int pthread_main_np()
-        {
-            if (OperatingSystem.IsMacOS()) return MacMainNp();
-            if (OperatingSystem.IsLinux()) return LinuxMainNp();
-            return 0;
-        }
-
-        [LibraryImport("libSystem", EntryPoint = "pthread_main_np")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [System.Runtime.Versioning.SupportedOSPlatform("macos")]
-        private static partial int MacMainNp();
-
-        [LibraryImport("libc", EntryPoint = "pthread_main_np")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [System.Runtime.Versioning.SupportedOSPlatform("linux")]
-        private static partial int LinuxMainNp();
     }
 
     private static partial class Log
