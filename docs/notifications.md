@@ -53,7 +53,7 @@ notifications.Send("order-42", "Shipped", "Tap to view");
 | | Delivery | Activation (click → event) |
 |---|---|---|
 | macOS | ✅ always | ✅ when the app is **bundled** (a `.app` with a `CFBundleIdentifier`) via `UNUserNotificationCenter`; unbundled dev runs deliver via `osascript` with no activation |
-| Linux | ✅ (libnotify, else `notify-send`) | ✅ when libnotify is present (a clickable default action) |
+| Linux | ✅ (libnotify, else `notify-send`) | ✅ when libnotify is present (a clickable default action dispatched by Ryn's GTK loop) |
 | Windows | ✅ (WinRT toast) | ⚠️ requires a packaged app / a Start-menu shortcut carrying the app's AUMID and a registered COM activator — Ryn delivers the toast, but click-to-activate needs that packaging state |
 
 **Activation is a published-app feature.** In `dotnet run` / dev mode, notifications are delivered

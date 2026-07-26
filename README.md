@@ -75,35 +75,35 @@ To keep the comparison honest, Ryn deliberately does **not** try to be some thin
 
 ## Status
 
-**Alpha.** Ryn runs on **macOS** and **Windows**, both verified on real desktop apps. **Linux is the one platform whose GUI paths are not yet verified end-to-end** (it builds and unit-tests in CI; the window/tray/dialog code is written but unproven on a real desktop). Treat Linux as experimental.
+**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux**, all exercised by real third-party desktop apps. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4. Treat Linux as near-full support while the notification fix completes its downstream retest and the remaining capability-specific caveats below are validated.
 
 ### Platform support matrix
 
-Legend: ✅ verified on a real app · 🟡 implemented, not yet GUI-verified · ⚪ not implemented
+Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specific retest or caveat remaining · ⚪ not implemented
 
 | Capability | macOS | Windows | Linux |
 |---|:---:|:---:|:---:|
-| Window + WebView (saucer) | ✅ | ✅ | 🟡 |
-| IPC (`ryn://` scheme + local server) | ✅ | ✅ | 🟡 |
-| FileSystem plugin | ✅ | ✅ | 🟡 |
-| Dialogs / file pickers | ✅ (osascript) | ✅ (PowerShell+WinForms) | 🟡 (zenity/kdialog) |
-| Clipboard (text) | ✅ | ✅ | 🟡 (X11 via xclip, Wayland via wl-clipboard) |
-| Clipboard (image) | ✅ | ✅ | 🟡 |
-| Notifications | ✅ | ✅ | 🟡 (notify-send) |
-| Audio playback | 🟡 | 🟡 | 🟡 |
-| Shell / PTY | ✅ | ✅ | 🟡 |
-| Tray icon | ✅ | ✅ | 🟡 (menu-only; no icon-click event) |
+| Window + WebView (saucer) | ✅ | ✅ | ✅ |
+| IPC (`ryn://` scheme + local server) | ✅ | ✅ | ✅ |
+| FileSystem plugin | ✅ | ✅ | ✅ |
+| Dialogs / file pickers | ✅ (osascript) | ✅ (PowerShell+WinForms) | ✅ (zenity/kdialog) |
+| Clipboard (text) | ✅ | ✅ | ✅ (X11 via xclip, Wayland via wl-clipboard) |
+| Clipboard (image) | ✅ | ✅ | ✅ |
+| Notifications | ✅ | ✅ | 🟡 (v0.27.4 fix awaiting downstream retest) |
+| Audio playback | 🟡 | 🟡 | ✅ |
+| Shell / PTY | ✅ | ✅ | ✅ |
+| Tray icon | ✅ | ✅ | ✅ (menu-only; no icon-click event) |
 | Menu bar | ✅ | ✅ (accelerators display-only) | ❌ (header bars are the GTK norm) |
 | App badge | ✅ (Dock) | ✅ (taskbar overlay) | ❌ (no portable badge surface) |
 | Global shortcuts | ✅ | ✅ | ❌ (Wayland needs the portal API) |
-| WebView panes (embedded browser) | ✅ | ✅ (CSS zoom) | 🟡 (untested) |
-| Pane extras (find, screenshot, downloads, crash recovery, suspend) | ✅ | ✅ (+ CDP passthrough) | 🟡 |
-| Custom title bars (`data-webview-*`) | ✅ | ✅ | 🟡 |
+| WebView panes (embedded browser) | ✅ | ✅ (CSS zoom) | ✅ (CSS zoom) |
+| Pane extras (find, screenshot, downloads, crash recovery, suspend) | ✅ | ✅ (+ CDP passthrough) | ✅ |
+| Custom title bars (`data-webview-*`) | ✅ | ✅ | ✅ |
 | Window backdrop (blur / acrylic / mica) | ✅ (vibrancy) | ✅ (acrylic/mica) | ⚪ (degrades to solid) |
 | Auto-updater (signed) | ✅ | ✅ | 🟡 |
 | NativeAOT publish | ✅ | ✅ | 🟡 |
 
-Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Help verifying the Linux GUI paths is welcome.
+Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Linux's core GUI and plugin paths have now been exercised in Primal Launcher; the remaining yellow entries need focused validation rather than first-run platform bring-up.
 
 ## Installation
 

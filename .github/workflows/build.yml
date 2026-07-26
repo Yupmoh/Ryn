@@ -86,7 +86,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-1 libwebkitgtk-6.0-4 libadwaita-1-0
+          sudo apt-get install -y libgtk-4-1 libwebkitgtk-6.0-4 libadwaita-1-0 libnotify4 xvfb dbus-x11
 
       - name: Download native libraries
         env:
@@ -190,6 +190,28 @@ jobs:
       # situation fails the job loudly instead of silently skipping integration coverage.
       - name: Integration test
         run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category=Integration" --logger "trx;LogFileName=integration-results.trx"
+
+      # Regression for the v0.27.3 startup failure: the notification backend must not acquire GTK's
+      # process-wide default GLib context before saucer enters g_application_run(). Exit code alone is
+      # insufficient because GLib's acquisition failure returns cleanly, so require a marker emitted from
+      # work drained inside the native-ready callback.
+      - name: Linux notification startup smoke
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -o pipefail
+          OUTPUT=$(timeout 30s dbus-run-session -- xvfb-run -a \
+            dotnet run --no-build -c ${{ matrix.configuration }} \
+            --project tests/Ryn.NotificationLinuxSmoke/Ryn.NotificationLinuxSmoke.csproj 2>&1)
+          echo "$OUTPUT"
+          if ! grep -q 'RYN_NOTIFICATION_LINUX_READY' <<< "$OUTPUT"; then
+            echo "::error::Notification startup smoke never reached native-ready state."
+            exit 1
+          fi
+          if grep -q 'cannot acquire the default main context' <<< "$OUTPUT"; then
+            echo "::error::Notification backend competed with GTK for the default GLib context."
+            exit 1
+          fi
 
       # TST-02: the package smoke test (Ryn.PackageTests, [Trait Category=Package]) is the end-to-end
       # guard for the alpha.1 duplicate-generator regression — it packs Ryn + a plugin, restores from

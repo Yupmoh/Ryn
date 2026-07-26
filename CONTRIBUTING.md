@@ -17,8 +17,8 @@ bug reports, fixes, plugins, docs, and platform support (Windows/Linux especiall
 Prerequisites:
 
 - **.NET 10 SDK** (preview) — every project targets `net10.0`.
-- macOS, Windows, or Linux. Native webview support today is best on macOS;
-  Windows (WebView2) and Linux (WebKitGTK) are works in progress.
+- macOS, Windows, or Linux. Native webview support is exercised in real apps on
+  all three platforms; some capability-specific Linux and Windows caveats remain.
 - For building the native saucer libraries from source: `cmake` + `ninja`.
 
 ```bash

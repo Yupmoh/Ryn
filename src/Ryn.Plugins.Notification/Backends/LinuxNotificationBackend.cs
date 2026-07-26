@@ -6,17 +6,16 @@ using Ryn.Core.Internal;
 namespace Ryn.Plugins.Notification.Backends;
 
 /// <summary>
-/// Linux notifications over libnotify. When libnotify (and a GLib main loop) is available, notifications
-/// carry a default "activate" action whose <c>ActionInvoked</c> signal raises <see cref="Activated"/> and
-/// whose <c>closed</c> signal raises <see cref="Dismissed"/> — real click-to-focus. If libnotify can't be
-/// loaded it falls back to the <c>notify-send</c> CLI (delivery only, no activation).
+/// Linux notifications over libnotify. Ryn's GTK application loop dispatches the libnotify signals:
+/// notifications carry a default "activate" action whose <c>ActionInvoked</c> signal raises
+/// <see cref="Activated"/> and whose <c>closed</c> signal raises <see cref="Dismissed"/> — real
+/// click-to-focus. If libnotify can't be loaded it falls back to the <c>notify-send</c> CLI (delivery only,
+/// no activation).
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal sealed unsafe partial class LinuxNotificationBackend : INotificationBackend
 {
     private readonly bool _useLibnotify;
-    private Thread? _loopThread;
-    private volatile bool _running;
     private static nint s_backendHandle;
 
     public event Action<string>? Activated;
@@ -45,21 +44,10 @@ internal sealed unsafe partial class LinuxNotificationBackend : INotificationBac
         {
             if (notify_init("Ryn") == 0) return false;
             s_backendHandle = GCHandle.ToIntPtr(GCHandle.Alloc(this));
-            _running = true;
-            _loopThread = new Thread(RunGLibLoop) { IsBackground = true, Name = "RynNotify" };
-            _loopThread.Start();
             return true;
         }
         catch (DllNotFoundException) { return false; }
         catch (EntryPointNotFoundException) { return false; }
-    }
-
-    private void RunGLibLoop()
-    {
-        var loop = g_main_loop_new(0, 0);
-        while (_running)
-            _ = g_main_context_iteration(0, 1); // blocking, dispatches ActionInvoked/closed callbacks
-        g_main_loop_unref(loop);
     }
 
     private static void SendViaLibnotify(NotificationRequest request)
@@ -131,7 +119,6 @@ internal sealed unsafe partial class LinuxNotificationBackend : INotificationBac
 
     public void Dispose()
     {
-        _running = false;
         if (s_backendHandle != 0)
         {
             var handle = GCHandle.FromIntPtr(s_backendHandle);
@@ -172,13 +159,4 @@ internal sealed unsafe partial class LinuxNotificationBackend : INotificationBac
     [LibraryImport("gobject", StringMarshalling = StringMarshalling.Utf8)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial nuint g_signal_connect_data(nint instance, string signal, nint callback, nint data, nint destroy, int flags);
-    [LibraryImport("glib")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint g_main_loop_new(nint context, int isRunning);
-    [LibraryImport("glib")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void g_main_loop_unref(nint loop);
-    [LibraryImport("glib")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial int g_main_context_iteration(nint context, int mayBlock);
 }

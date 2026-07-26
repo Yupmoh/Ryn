@@ -44,5 +44,6 @@
     <Project Path="tests/Ryn.Plugins.Tests/Ryn.Plugins.Tests.csproj" />
     <Project Path="tests/Ryn.Cli.Tests/Ryn.Cli.Tests.csproj" />
     <Project Path="tests/Ryn.PackageTests/Ryn.PackageTests.csproj" />
+    <Project Path="tests/Ryn.NotificationLinuxSmoke/Ryn.NotificationLinuxSmoke.csproj" />
   </Folder>
 </Solution>

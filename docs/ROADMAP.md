@@ -50,17 +50,16 @@ Azure Trusted Signing on Windows, and a `.deb` via `dpkg-deb` on Linux,
 auto-downloading missing tools the way it already does for `appimagetool`.
 Status: **Planned** (Windows/Linux last mile). (tracks CMP-04)
 
-### Linux GUI end-to-end verification
+### Linux GUI hardening
 
-Linux is listed as cross-platform but its GUI paths (window, tray, dialog, file
-pickers) are written and unit-tested in CI yet never run on a real desktop, so the
-platform-support matrix marks them experimental. That unproven third leg
-undercuts the cross-platform headline. The plan is a CI job that opens a real
-window and runs an IPC round-trip smoke test under xvfb or weston with WebKitGTK
-on Ubuntu, followed by a manual pass over tray, dialogs, and pickers on one
-distribution, after which the README matrix can move Linux from experimental to
-verified. This adds a workflow under `.github/workflows` and a small smoke-test
-harness; it changes no public API. Status: **Planned**. (tracks CMP-05)
+Primal Launcher's first broad run on Pop!_OS exercised Ryn's core Linux GUI and
+plugin paths in a real third-party application. The only Ryn defect reported was
+the notification backend acquiring GTK's default GLib context before
+`g_application_run()`; v0.27.4 removes that competing loop and adds a Linux GTK
+startup smoke under Xvfb and a D-Bus session. Linux is therefore near-full support,
+with the notification fix awaiting downstream retest and focused validation still
+needed for the capability-specific yellow entries in the README matrix, notably
+the updater and NativeAOT publish path. Status: **In validation**. (tracks CMP-05)
 
 ## Mid-term
 

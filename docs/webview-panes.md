@@ -235,7 +235,7 @@ should share a session. Omitting it uses the engine's default (shared) session.
 
 | | macOS | Windows | Linux |
 |---|---|---|---|
-| Rendering | ✅ WKWebView | ✅ WebView2 | 🟡 WebKitGTK (untested interactively) |
+| Rendering | ✅ WKWebView | ✅ WebView2 | ✅ WebKitGTK |
 | Zoom | ✅ native page zoom | ✅ CSS zoom | ✅ CSS zoom |
 | DevTools | ✅ | ✅ | ✅ |
 | Per-pane session | ✅ | ✅ | ✅ |
