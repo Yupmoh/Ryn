@@ -200,7 +200,8 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout 30s dbus-run-session -- xvfb-run -a \
+          timeout 30s xvfb-run -a dbus-run-session -- env \
+            WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 GTK_A11Y=none \
             dotnet run --no-build -c ${{ matrix.configuration }} \
             --project tests/Ryn.NotificationLinuxSmoke/Ryn.NotificationLinuxSmoke.csproj \
             > /tmp/notification-smoke.log 2>&1
