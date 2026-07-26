@@ -199,11 +199,19 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          set -o pipefail
-          OUTPUT=$(timeout 30s dbus-run-session -- xvfb-run -a \
+          set +e
+          timeout 30s dbus-run-session -- xvfb-run -a \
             dotnet run --no-build -c ${{ matrix.configuration }} \
-            --project tests/Ryn.NotificationLinuxSmoke/Ryn.NotificationLinuxSmoke.csproj 2>&1)
+            --project tests/Ryn.NotificationLinuxSmoke/Ryn.NotificationLinuxSmoke.csproj \
+            > /tmp/notification-smoke.log 2>&1
+          STATUS=$?
+          set -e
+          OUTPUT=$(< /tmp/notification-smoke.log)
           echo "$OUTPUT"
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error::Notification startup smoke exited with status $STATUS."
+            exit "$STATUS"
+          fi
           if ! grep -q 'RYN_NOTIFICATION_LINUX_READY' <<< "$OUTPUT"; then
             echo "::error::Notification startup smoke never reached native-ready state."
             exit 1

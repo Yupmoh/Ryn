@@ -38,7 +38,11 @@ internal sealed class ReadyShutdownPlugin(
         dispatcher.Post(() =>
         {
             Console.WriteLine("RYN_NOTIFICATION_LINUX_READY");
-            lifetime.RequestShutdown();
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
+                lifetime.RequestShutdown();
+            });
         });
         return ValueTask.CompletedTask;
     }
