@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<node>
+  <interface name="org.kde.StatusNotifierWatcher">
+    <method name="RegisterStatusNotifierItem">
+      <arg name="service" type="s" direction="in" />
+    </method>
+  </interface>
+</node>

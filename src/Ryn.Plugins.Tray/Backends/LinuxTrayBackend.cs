@@ -1,134 +1,37 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Ryn.Core.Internal;
+using Ryn.Plugins.Tray.Backends.DBus;
+using Tmds.DBus.Protocol;
 
 namespace Ryn.Plugins.Tray.Backends;
 
 [SupportedOSPlatform("linux")]
-// IconClicked is intentionally never raised on Linux: the StatusNotifier/AppIndicator protocol used by
-// GNOME/KDE is menu-only by design — left-click opens the context menu and there is no portable
-// "icon clicked" signal. This is a documented platform limitation, not a missing feature; apps should
-// rely on menu items (MenuItemClicked) on Linux. Use tray.clicked only on Windows/macOS.
+// Saucer/WebKitGTK 6 runs on GTK 4. Loading the GTK 3 AppIndicator library in the same process corrupts
+// GObject's process-wide type registry, so Linux tray integration must stay toolkit-free over D-Bus.
 #pragma warning disable CS0067
-internal sealed partial class LinuxTrayBackend : ITrayBackend
+internal sealed class LinuxTrayBackend : ITrayBackend
 {
-    private nint _indicator;
-    private nint _menu;
+    private LinuxTrayItem? _item;
     private bool _disposed;
-    private bool _available;
-    private Thread? _glibThread;
-    private volatile bool _glibRunning;
-
-    private readonly List<TrayMenuItem> _menuItems = [];
-    private readonly Dictionary<int, string> _menuIdMap = [];
-    private readonly object _lock = new();
-    private readonly ManualResetEventSlim _readyEvent = new();
-
-    // Store delegate references to prevent GC collection of callbacks
-    private readonly List<GCallback> _callbackRefs = [];
-
-    // Pending g_idle_add delegates (rebuild/quit). Each idle source posts a fresh GSourceFunc whose marshaled
-    // function pointer GTK invokes later on the GTK thread; the delegate must stay rooted until then. PAP-16:
-    // a single overwritable field would let a rapid second SetMenu drop the still-pending first delegate and
-    // let it be collected mid-callback. We hold every pending delegate here and each removes itself once run.
-    private readonly List<GSourceFunc> _pendingIdle = [];
-    private readonly object _pendingIdleLock = new();
 
     public event Action? IconClicked;
     public event Action<string>? MenuItemClicked;
 
     public void Show(string? iconPath, string tooltip)
     {
-        if (_indicator != 0)
-        {
-            if (_available)
-                app_indicator_set_status(_indicator, AppIndicatorStatus.Active);
-            return;
-        }
-
-        if (!TryLoadLibraries())
-        {
-            _available = false;
-            _readyEvent.Set();
-            return;
-        }
-
-        _available = true;
-
-        _glibThread = new Thread(() => RunGLibLoop(iconPath, tooltip))
-        {
-            IsBackground = true,
-            Name = "RynTray",
-        };
-        _glibThread.Start();
-        _readyEvent.Wait();
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _item ??= LinuxTrayItem.Connect(iconPath, tooltip, () => IconClicked?.Invoke(), id => MenuItemClicked?.Invoke(id));
+        _item.SetVisible(true);
     }
 
-    public void Hide()
-    {
-        if (!_available || _indicator == 0) return;
-        app_indicator_set_status(_indicator, AppIndicatorStatus.Passive);
-    }
+    public void Hide() => _item?.SetVisible(false);
 
-    public void SetTooltip(string tooltip)
-    {
-        if (!_available || _indicator == 0) return;
-        app_indicator_set_title(_indicator, tooltip);
-    }
+    public void SetTooltip(string tooltip) => _item?.SetTooltip(tooltip);
 
-    public void SetMenu(IReadOnlyList<TrayMenuItem> items)
-    {
-        if (!_available) return;
-
-        lock (_lock)
-        {
-            _menuItems.Clear();
-            _menuItems.AddRange(items);
-        }
-
-        // RebuildMenu touches GTK widget APIs, which must only run on the GTK thread. SetMenu can be
-        // called from any thread, so marshal the rebuild onto the GTK loop via g_idle_add.
-        PostIdle(RebuildMenu);
-    }
-
-    // Queue work onto the GTK main loop and keep the marshaled delegate rooted until GTK has invoked it.
-    // The delegate removes itself from _pendingIdle inside the callback and returns G_SOURCE_REMOVE (0) so the
-    // idle source fires exactly once. NativeGuard fences the body so a managed throw never crosses into GLib.
-    private void PostIdle(Action work)
-    {
-        GSourceFunc? func = null;
-        func = userData => NativeGuard.Invoke("LinuxTrayBackend.idle", 0, () =>
-        {
-            try
-            {
-                work();
-            }
-            finally
-            {
-                lock (_pendingIdleLock)
-                {
-                    // func is captured before assignment but is non-null by the time the callback runs.
-                    _ = _pendingIdle.Remove(func!);
-                }
-            }
-
-            return 0; // G_SOURCE_REMOVE
-        });
-
-        lock (_pendingIdleLock)
-        {
-            _pendingIdle.Add(func);
-        }
-
-        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(func), nint.Zero);
-    }
+    public void SetMenu(IReadOnlyList<TrayMenuItem> items) => _item?.SetMenu(items);
 
     public void ShowNotification(string title, string message)
     {
-        var escapedTitle = EscapeShellArg(title);
-        var escapedMessage = EscapeShellArg(message);
-
         try
         {
             var psi = new ProcessStartInfo("notify-send")
@@ -138,329 +41,196 @@ internal sealed partial class LinuxTrayBackend : ITrayBackend
                 RedirectStandardError = true,
             };
             psi.ArgumentList.Add("--");
-            psi.ArgumentList.Add(escapedTitle);
-            psi.ArgumentList.Add(escapedMessage);
+            psi.ArgumentList.Add(title);
+            psi.ArgumentList.Add(message);
             Process.Start(psi)?.WaitForExit();
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }
     }
 
-    private void RunGLibLoop(string? iconPath, string tooltip)
-    {
-        var argc = 0;
-        gtk_init(ref argc, nint.Zero);
-
-        var iconName = "application-default-icon";
-        if (iconPath is not null && File.Exists(iconPath))
-            iconName = iconPath;
-
-        _indicator = app_indicator_new(
-            $"ryn-app-{Environment.ProcessId}",
-            iconName,
-            AppIndicatorCategory.ApplicationStatus);
-
-        app_indicator_set_status(_indicator, AppIndicatorStatus.Active);
-        app_indicator_set_title(_indicator, tooltip);
-
-        // Create an initial empty menu (required by AppIndicator)
-        _menu = gtk_menu_new();
-        gtk_widget_show_all(_menu);
-        app_indicator_set_menu(_indicator, _menu);
-
-        _glibRunning = true;
-        _readyEvent.Set();
-
-        // Event-driven GTK main loop — blocks efficiently until events arrive (no CPU busy-poll, no
-        // Thread.Sleep spin). Shutdown is requested from Dispose() via g_idle_add, which marshals
-        // gtk_main_quit onto THIS (the GTK) thread — calling GTK from another thread is unsafe.
-        gtk_main();
-        _glibRunning = false;
-    }
-
-    private void RebuildMenu()
-    {
-        if (_indicator == 0) return;
-
-        var newMenu = gtk_menu_new();
-
-        // Build the new menu's activate callbacks into a fresh list, then swap it in for the live one only
-        // after the new menu is installed. The previous menu's callbacks stay rooted (in _callbackRefs) until
-        // the swap, so a pending "activate" on the old menu can't invoke a collected delegate while GTK
-        // finishes tearing the old menu down.
-        var newCallbacks = new List<GCallback>();
-
-        lock (_lock)
-        {
-            _menuIdMap.Clear();
-
-            for (var i = 0; i < _menuItems.Count; i++)
-            {
-                var item = _menuItems[i];
-                var menuId = i;
-                _menuIdMap[menuId] = item.Id;
-
-                nint menuItem;
-                if (item.Separator)
-                {
-                    menuItem = gtk_separator_menu_item_new();
-                }
-                else
-                {
-                    menuItem = gtk_menu_item_new_with_label(item.Label);
-
-                    if (!item.Enabled)
-                        gtk_widget_set_sensitive(menuItem, false);
-
-                    var capturedId = item.Id;
-                    GCallback callback = (_, _) => OnMenuItemActivated(capturedId);
-                    newCallbacks.Add(callback);
-
-                    g_signal_connect_data(
-                        menuItem,
-                        "activate",
-                        Marshal.GetFunctionPointerForDelegate(callback),
-                        nint.Zero,
-                        nint.Zero,
-                        0);
-                }
-
-                gtk_menu_shell_append(newMenu, menuItem);
-            }
-        }
-
-        gtk_widget_show_all(newMenu);
-
-        _menu = newMenu;
-        app_indicator_set_menu(_indicator, _menu);
-
-        // The new menu is live; the old menu's callbacks can no longer be invoked, so replace the rooted set.
-        lock (_lock)
-        {
-            _callbackRefs.Clear();
-            _callbackRefs.AddRange(newCallbacks);
-        }
-    }
-
-    // GTK "activate" callback body — fenced so a managed throw never unwinds across the GLib boundary.
-    private void OnMenuItemActivated(string itemId)
-        => NativeGuard.Invoke("LinuxTrayBackend.OnMenuItemActivated",
-            () => MenuItemClicked?.Invoke(itemId));
-
-    private static string EscapeShellArg(string value)
-    {
-        return value.Replace("'", "'\\''", StringComparison.Ordinal);
-    }
-
-    private static bool TryLoadLibraries()
-    {
-        // Try ayatana (modern) first, then legacy appindicator
-        if (NativeLibrary.TryLoad("libayatana-appindicator3.so.1", out _))
-            return true;
-
-        if (NativeLibrary.TryLoad("libappindicator3.so.1", out _))
-            return true;
-
-        return false;
-    }
-
-    ~LinuxTrayBackend() => Dispose();
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        GC.SuppressFinalize(this);
-
-        if (_available && _glibThread is not null && _glibRunning)
-        {
-            // Marshal gtk_main_quit onto the GTK thread. PostIdle keeps the marshaled delegate rooted until
-            // GTK invokes it (it returns G_SOURCE_REMOVE so it runs once); the join below waits for the loop
-            // to actually exit, after which the delegate has already run and removed itself.
-            PostIdle(gtk_main_quit);
-        }
-        _glibRunning = false;
-
-        if (_glibThread is not null)
-        {
-            _glibThread.Join(TimeSpan.FromSeconds(2));
-            _glibThread = null;
-        }
-
-        lock (_lock)
-        {
-            _callbackRefs.Clear();
-        }
-
-        lock (_pendingIdleLock)
-        {
-            _pendingIdle.Clear();
-        }
-
-        _indicator = 0;
-        _menu = 0;
-
-        _readyEvent.Dispose();
+        _item?.Dispose();
+        _item = null;
     }
 
-    // --- Enums ---
-
-    private enum AppIndicatorCategory
+    private sealed class LinuxTrayItem : DBusHandler,
+        IStatusNotifierItemHandler, IStatusNotifierItemProperties, IDisposable
     {
-        ApplicationStatus = 0,
-    }
+        private const string ItemPathValue = "/StatusNotifierItem";
+        private const string MenuPathValue = "/MenuBar";
+        private static readonly ObjectPath ItemPath = new(ItemPathValue);
+        private static readonly ObjectPath MenuPath = new(MenuPathValue);
 
-    private enum AppIndicatorStatus
-    {
-        Passive = 0,
-        Active = 1,
-        Attention = 2,
-    }
+        private readonly DBusConnection _connection;
+        private readonly string _serviceName;
+        private readonly Action _activate;
+        private readonly Action<string> _menuActivated;
+        private readonly object _lock = new();
+        private IReadOnlyList<TrayMenuItem> _items = [];
+        private uint _revision = 1;
+        private bool _disposed;
 
-    // --- Callback delegate ---
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void GCallback(nint widget, nint userData);
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int GSourceFunc(nint userData);
-
-    // --- libayatana-appindicator3 / libappindicator3 P/Invoke ---
-    //
-    // LibraryImport uses the NativeLibrary resolver, so loading either
-    // libayatana-appindicator3.so.1 or libappindicator3.so.1 first
-    // satisfies the "appindicator3" name via the DllImportResolver below.
-
-    private static readonly string[] IndicatorLibNames =
-    [
-        "libayatana-appindicator3.so.1",
-        "libappindicator3.so.1",
-    ];
-
-    private static readonly string[] GtkLibNames =
-    [
-        "libgtk-3.so.0",
-        "libgtk-3.so",
-    ];
-
-    private static readonly string[] GLibLibNames =
-    [
-        "libglib-2.0.so.0",
-        "libglib-2.0.so",
-    ];
-
-    private static readonly string[] GObjectLibNames =
-    [
-        "libgobject-2.0.so.0",
-        "libgobject-2.0.so",
-    ];
-
-    static LinuxTrayBackend()
-    {
-        NativeLibrary.SetDllImportResolver(typeof(LinuxTrayBackend).Assembly, ResolveLibrary);
-    }
-
-    private static nint ResolveLibrary(string libraryName, System.Reflection.Assembly assembly,
-        DllImportSearchPath? searchPath)
-    {
-        var candidates = libraryName switch
+        public string Category => "ApplicationStatus";
+        public string Id => "ryn";
+        public string Title { get; private set; }
+        public string Status { get; private set; } = "Active";
+        public uint WindowId => 0;
+        public string IconThemePath { get; private set; }
+        public string IconName { get; private set; }
+        public string OverlayIconName => string.Empty;
+        public string AttentionIconName => string.Empty;
+        public string AttentionMovieName => string.Empty;
+        public ObjectPath Menu => MenuPath;
+        public bool ItemIsMenu => false;
+        private LinuxTrayItem(DBusConnection connection, string serviceName, string? iconPath, string tooltip,
+            Action activate, Action<string> menuActivated)
+            : base(connection, ItemPathValue, handlesChildPaths: false, handleOnCapturedContext: false)
         {
-            "appindicator3" => IndicatorLibNames,
-            "gtk-3" => GtkLibNames,
-            "glib-2.0" => GLibLibNames,
-            "gobject-2.0" => GObjectLibNames,
-            _ => null,
-        };
-
-        if (candidates is null)
-            return nint.Zero;
-
-        foreach (var candidate in candidates)
-        {
-            if (NativeLibrary.TryLoad(candidate, assembly, searchPath, out var handle))
-                return handle;
+            _connection = connection;
+            _serviceName = serviceName;
+            _activate = activate;
+            _menuActivated = menuActivated;
+            Title = tooltip;
+            IconName = System.IO.Path.GetFileNameWithoutExtension(iconPath) ?? "application-default-icon";
+            IconThemePath = System.IO.Path.GetDirectoryName(iconPath) ?? string.Empty;
         }
 
-        return nint.Zero;
+        public static LinuxTrayItem Connect(string? iconPath, string tooltip, Action activate, Action<string> menuActivated)
+            => ConnectAsync(iconPath, tooltip, activate, menuActivated).GetAwaiter().GetResult();
+
+        private static async Task<LinuxTrayItem> ConnectAsync(string? iconPath, string tooltip, Action activate, Action<string> menuActivated)
+        {
+            var connection = new DBusConnection(DBusAddress.Session!);
+            try
+            {
+                await connection.ConnectAsync().ConfigureAwait(false);
+                var serviceName = $"org.kde.StatusNotifierItem-{Environment.ProcessId}-1";
+                var item = new LinuxTrayItem(connection, serviceName, iconPath, tooltip, activate, menuActivated);
+                connection.AddMethodHandler(item);
+                connection.AddMethodHandler(new MenuHandler(item));
+                await connection.RequestNameAsync(serviceName, RequestNameOptions.ReplaceExisting).ConfigureAwait(false);
+                await new StatusNotifierWatcher(connection, "org.kde.StatusNotifierWatcher", new ObjectPath("/StatusNotifierWatcher"))
+                    .RegisterStatusNotifierItemAsync(serviceName).ConfigureAwait(false);
+                return item;
+            }
+            catch
+            {
+                connection.Dispose();
+                throw;
+            }
+        }
+
+        public void SetVisible(bool visible)
+        {
+            Status = visible ? "Active" : "Passive";
+            _connection.EmitNewStatus(ItemPath, Status);
+        }
+
+        public void SetTooltip(string tooltip)
+        {
+            Title = tooltip;
+            _connection.EmitNewTitle(ItemPath);
+            _connection.EmitNewToolTip(ItemPath);
+        }
+
+        public void SetMenu(IReadOnlyList<TrayMenuItem> items)
+        {
+            lock (_lock) _items = items.ToArray();
+            _revision++;
+            _connection.EmitLayoutUpdated(MenuPath, _revision, 0);
+        }
+
+        ValueTask IStatusNotifierItemHandler.HandleGetPropertyAsync(IStatusNotifierItemHandler.GetPropertyContext context) => context.Handle(this);
+        ValueTask IStatusNotifierItemHandler.HandleGetAllPropertiesAsync(IStatusNotifierItemHandler.GetAllPropertiesContext context) => context.Handle(this);
+        ValueTask IStatusNotifierItemHandler.ContextMenuAsync(int x, int y) => default;
+        ValueTask IStatusNotifierItemHandler.ActivateAsync(int x, int y) { _activate(); return default; }
+        ValueTask IStatusNotifierItemHandler.SecondaryActivateAsync(int x, int y) => default;
+        ValueTask IStatusNotifierItemHandler.ScrollAsync(int delta, string orientation) => default;
+
+        internal (uint Revision, (int, Dictionary<string, VariantValue>, VariantValue[]) Layout) GetLayout()
+        {
+            IReadOnlyList<TrayMenuItem> items;
+            lock (_lock) items = _items;
+            var children = new VariantValue[items.Count];
+            for (var i = 0; i < items.Count; i++)
+            {
+                var properties = new Dict<string, VariantValue>(GetProperties(i + 1, items[i]));
+                children[i] = VariantValue.Struct((VariantValue)(i + 1), properties, new Tmds.DBus.Protocol.Array<VariantValue>());
+            }
+            var root = new Dictionary<string, VariantValue> { ["children-display"] = "submenu" };
+            return (_revision, (0, root, children));
+        }
+
+        private static Dictionary<string, VariantValue> GetProperties(int id, TrayMenuItem item)
+        {
+            var properties = new Dictionary<string, VariantValue>();
+            if (item.Separator) properties["type"] = "separator";
+            else
+            {
+                properties["label"] = item.Label;
+                if (!item.Enabled) properties["enabled"] = false;
+            }
+            return properties;
+        }
+
+        internal (int, Dictionary<string, VariantValue>)[] GetGroupProperties(int[] ids)
+        {
+            IReadOnlyList<TrayMenuItem> items;
+            lock (_lock) items = _items;
+            var selected = ids.Length == 0 ? Enumerable.Range(1, items.Count) : ids;
+            return selected.Where(id => id > 0 && id <= items.Count)
+                .Select(id => (id, GetProperties(id, items[id - 1]))).ToArray();
+        }
+
+        internal VariantValue GetProperty(int id, string name)
+        {
+            IReadOnlyList<TrayMenuItem> items;
+            lock (_lock) items = _items;
+            if (id <= 0 || id > items.Count) return VariantValue.String(string.Empty);
+            return GetProperties(id, items[id - 1]).TryGetValue(name, out var value)
+                ? value : VariantValue.String(string.Empty);
+        }
+
+        internal void ActivateMenuItem(int id)
+        {
+            IReadOnlyList<TrayMenuItem> items;
+            lock (_lock) items = _items;
+            if (id <= 0 || id > items.Count) return;
+            var item = items[id - 1];
+            if (!item.Separator && item.Enabled) _menuActivated(item.Id);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _connection.RemoveMethodHandlers([ItemPathValue, MenuPathValue]);
+            _connection.ReleaseNameAsync(_serviceName).GetAwaiter().GetResult();
+            _connection.Dispose();
+        }
+
+        private sealed class MenuHandler : DBusHandler, IdbusmenuHandler, IdbusmenuProperties
+        {
+            private readonly LinuxTrayItem _owner;
+            public MenuHandler(LinuxTrayItem owner)
+                : base(owner._connection, MenuPathValue, handlesChildPaths: false, handleOnCapturedContext: false) => _owner = owner;
+            public uint Version => 4;
+            public string TextDirection => "ltr";
+            public string Status => "normal";
+            public string[] IconThemePath => [];
+            ValueTask IdbusmenuHandler.HandleGetPropertyAsync(IdbusmenuHandler.GetPropertyContext context) => context.Handle(this);
+            ValueTask IdbusmenuHandler.HandleGetAllPropertiesAsync(IdbusmenuHandler.GetAllPropertiesContext context) => context.Handle(this);
+            ValueTask<(uint Revision, (int, Dictionary<string, VariantValue>, VariantValue[]) Layout)> IdbusmenuHandler.GetLayoutAsync(int parentId, int recursionDepth, string[] propertyNames) => new(_owner.GetLayout());
+            ValueTask<(int, Dictionary<string, VariantValue>)[]> IdbusmenuHandler.GetGroupPropertiesAsync(int[] ids, string[] propertyNames) => new(_owner.GetGroupProperties(ids));
+            ValueTask<VariantValue> IdbusmenuHandler.GetPropertyAsync(int id, string name) => new(_owner.GetProperty(id, name));
+            ValueTask IdbusmenuHandler.EventAsync(int id, string eventId, VariantValue data, uint timestamp) { if (eventId == "clicked") _owner.ActivateMenuItem(id); return default; }
+            ValueTask<int[]> IdbusmenuHandler.EventGroupAsync((int, string, VariantValue, uint)[] events) { foreach (var e in events) if (e.Item2 == "clicked") _owner.ActivateMenuItem(e.Item1); return new([]); }
+            ValueTask<bool> IdbusmenuHandler.AboutToShowAsync(int id) => new(false);
+            ValueTask<(int[] UpdatesNeeded, int[] IdErrors)> IdbusmenuHandler.AboutToShowGroupAsync(int[] ids) => new(([], []));
+        }
     }
-
-    // --- appindicator ---
-
-    [LibraryImport("appindicator3", EntryPoint = "app_indicator_new",
-        StringMarshalling = StringMarshalling.Utf8)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint app_indicator_new(string id, string iconName,
-        AppIndicatorCategory category);
-
-    [LibraryImport("appindicator3", EntryPoint = "app_indicator_set_status")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void app_indicator_set_status(nint indicator, AppIndicatorStatus status);
-
-    [LibraryImport("appindicator3", EntryPoint = "app_indicator_set_menu")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void app_indicator_set_menu(nint indicator, nint menu);
-
-    [LibraryImport("appindicator3", EntryPoint = "app_indicator_set_icon",
-        StringMarshalling = StringMarshalling.Utf8)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void app_indicator_set_icon(nint indicator, string iconName);
-
-    [LibraryImport("appindicator3", EntryPoint = "app_indicator_set_title",
-        StringMarshalling = StringMarshalling.Utf8)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void app_indicator_set_title(nint indicator, string title);
-
-    // --- GTK 3 ---
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_init")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_init(ref int argc, nint argv);
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_main")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_main();
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_main_quit")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_main_quit();
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_menu_new")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint gtk_menu_new();
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_menu_item_new_with_label",
-        StringMarshalling = StringMarshalling.Utf8)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint gtk_menu_item_new_with_label(string label);
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_separator_menu_item_new")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nint gtk_separator_menu_item_new();
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_menu_shell_append")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_menu_shell_append(nint menuShell, nint child);
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_widget_show_all")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_widget_show_all(nint widget);
-
-    [LibraryImport("gtk-3", EntryPoint = "gtk_widget_set_sensitive")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial void gtk_widget_set_sensitive(nint widget,
-        [MarshalAs(UnmanagedType.Bool)] bool sensitive);
-
-    // --- GLib ---
-
-    [LibraryImport("glib-2.0", EntryPoint = "g_idle_add")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial uint g_idle_add(nint function, nint data);
-
-    // --- GObject ---
-
-    [LibraryImport("gobject-2.0", EntryPoint = "g_signal_connect_data",
-        StringMarshalling = StringMarshalling.Utf8)]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial nuint g_signal_connect_data(nint instance, string detailedSignal,
-        nint cHandler, nint data, nint destroyData, int connectFlags);
 }

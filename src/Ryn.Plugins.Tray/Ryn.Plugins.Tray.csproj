@@ -11,6 +11,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="Tmds.DBus.Generator" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="Backends\DBus\org.kde.StatusNotifierWatcher.xml"
+                     Namespace="Ryn.Plugins.Tray.Backends.DBus"
+                     DBusGeneratorMode="Proxy" />
+    <AdditionalFiles Include="Backends\DBus\org.kde.StatusNotifierItem.xml"
+                     Namespace="Ryn.Plugins.Tray.Backends.DBus"
+                     DBusGeneratorMode="Handler" />
+    <AdditionalFiles Include="Backends\DBus\com.canonical.dbusmenu.xml"
+                     Namespace="Ryn.Plugins.Tray.Backends.DBus"
+                     DBusGeneratorMode="Handler" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
     <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
     <ProjectReference Include="..\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
