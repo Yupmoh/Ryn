@@ -40,6 +40,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private int _normalHeight;
     private double _pageZoom = 1.0;
     private volatile bool _usesPageZoomFallback;
+    private nint _linuxResizeSurface;
+    private nuint _linuxResizeRealizeHandler;
+    private nuint _linuxResizeLayoutHandler;
     private volatile bool _disposed;
 
     /// <inheritdoc />
@@ -817,6 +820,36 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         Saucer.saucer_window_on(_window, saucer_window_event.SAUCER_WINDOW_EVENT_MINIMIZE, (void*)(delegate* unmanaged[Cdecl]<saucer_window*, byte, void*, void>)&OnWindowMinimize, 1, _selfHandle);
         Saucer.saucer_webview_on(_webview, saucer_webview_event.SAUCER_WEBVIEW_EVENT_DOM_READY,
             (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, void*, void>)&OnPageDomReady, 1, _selfHandle);
+
+        if (OperatingSystem.IsLinux() && _options.TitleBarStyle == TitleBarStyle.Frameless)
+        {
+            var gtkWindow = GetNativeWindowHandle();
+            _linuxResizeRealizeHandler = LinuxWindowResizeObserver.Install(gtkWindow, _selfHandle);
+        }
+    }
+
+    internal void AttachLinuxResizeSurface(nint surface, nuint layoutHandler)
+    {
+        _linuxResizeSurface = surface;
+        _linuxResizeLayoutHandler = layoutHandler;
+    }
+
+    internal void HandleNativeResize(int width, int height)
+    {
+        if (width <= 0 || height <= 0 || (_cachedWidth == width && _cachedHeight == height))
+            return;
+
+        _cachedWidth = width;
+        _cachedHeight = height;
+        if (_window != null && Saucer.saucer_window_maximized(_window) == 0)
+        {
+            _normalWidth = width;
+            _normalHeight = height;
+        }
+        Resized?.Invoke(this, new WindowResizedEventArgs { Width = width, Height = height });
+        _rynWebView?.EmitEvent("window.resized", $"{{\"width\":{width},\"height\":{height}}}");
+        if (_window != null)
+            CheckPositionChanged(_window);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -901,14 +934,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var self = NativeCallbackHelper.Resolve<RynWindow>(userdata);
         NativeGuard.Invoke("RynWindow.OnWindowResize", () =>
         {
-            self._cachedWidth = w;
-            self._cachedHeight = h;
-            // Only snapshot as the normal size when not maximized, so the persisted restore-size stays the
-            // user's real window size rather than the maximized rect (ARC-05).
-            if (Saucer.saucer_window_maximized(window) == 0) { self._normalWidth = w; self._normalHeight = h; }
-            self.Resized?.Invoke(self, new WindowResizedEventArgs { Width = w, Height = h });
-            self._rynWebView?.EmitEvent("window.resized", $"{{\"width\":{w},\"height\":{h}}}");
-            self.CheckPositionChanged(window);
+            if (OperatingSystem.IsLinux() && self._options.TitleBarStyle == TitleBarStyle.Frameless)
+                return;
+            self.HandleNativeResize(w, h);
         });
     }
 
@@ -1015,6 +1043,17 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // no-op; nulling the field makes that explicit.
         _themeDetector?.Dispose(); _themeDetector = null;
         _rynWebView?.Dispose(); _rynWebView = null;
+        if (_window != null && OperatingSystem.IsLinux())
+        {
+            LinuxWindowResizeObserver.Uninstall(
+                GetNativeWindowHandle(),
+                _linuxResizeRealizeHandler,
+                _linuxResizeSurface,
+                _linuxResizeLayoutHandler);
+            _linuxResizeRealizeHandler = 0;
+            _linuxResizeSurface = 0;
+            _linuxResizeLayoutHandler = 0;
+        }
         if (_webview != null) { Saucer.saucer_webview_free(_webview); _webview = null; }
         if (_window != null) { Saucer.saucer_window_free(_window); _window = null; }
         if (_selfHandle != null) { NativeCallbackHelper.Free(_selfHandle); _selfHandle = null; }
