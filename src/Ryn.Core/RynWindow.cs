@@ -419,13 +419,15 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _normalY = iy;
         _normalWidth = _cachedWidth;
         _normalHeight = _cachedHeight;
-        _rynWebView = new RynWebView(_webview, app);
+        _rynWebView = new RynWebView(_webview, app, _options.IpcCommandTimeout);
         // Stamp the webview with its owning window so an IPC command dispatched from this window's page routes
         // window.* operations back to THIS window (via the ambient CurrentWindow set in ExecuteCommandAsync).
         _rynWebView.SetOwningWindow(this);
         // Tell the webview which schemes were registered with the engine above, so RegisterCustomScheme can
         // attach handlers for them (and reject "ryn"/undeclared schemes). Mirrors the pre-creation loop.
         _rynWebView.SetDeclaredSchemes(_options.CustomSchemes);
+        foreach (var customScheme in _options.CustomSchemeHandlers)
+            _rynWebView.RegisterCustomScheme(customScheme.Scheme, customScheme.Handler);
         if (_commandHandler is not null) _rynWebView.SetCommandHandler(_commandHandler);
         if (_options.AllowedOrigins.Count > 0) _rynWebView.SetAllowedOrigins(_options.AllowedOrigins.ToList());
         else if (_options.Url is not null) _rynWebView.SetAllowedOrigins([_options.Url.GetLeftPart(UriPartial.Authority)]);
@@ -535,7 +537,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                 // relative /ipc POST would hit the dev server (404) and IPC would silently break. Start an
                 // IPC-only Ryn server and point the bridge at it (absolute URL) with CORS for the dev origin.
                 var devOrigin = url.GetLeftPart(UriPartial.Authority);
-                _localServer = new LocalWebServer(contentDirectory: null, _options.LocalServerPort, allowedCorsOrigin: devOrigin);
+                _localServer = new LocalWebServer(contentDirectory: null, _options.LocalServerPort, allowedCorsOrigin: devOrigin, maxBodyBytes: _options.MaxRequestBodyBytes);
                 _localServer.StartAsync().GetAwaiter().GetResult();
                 _localServer.SetWebView(_rynWebView);
                 var ipcBase = _localServer.Url.TrimEnd('/');
@@ -560,7 +562,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             // Local HTTP server: a real http://localhost origin (some scripts — e.g. Cloudflare Turnstile —
             // reject the ryn:// origin). Composes both content sources: it serves embedded content from memory
             // when bundled and falls back to the content directory on disk in dev.
-            _localServer = new LocalWebServer(_options.ContentDirectory, _options.LocalServerPort, crossOriginIsolation: _options.CrossOriginIsolation);
+            _localServer = new LocalWebServer(_options.ContentDirectory, _options.LocalServerPort, crossOriginIsolation: _options.CrossOriginIsolation, maxBodyBytes: _options.MaxRequestBodyBytes);
             if (_options.EmbeddedContent != null) _localServer.SetEmbeddedContent(_options.EmbeddedContent);
             _localServer.StartAsync().GetAwaiter().GetResult();
             _localServer.SetWebView(_rynWebView);

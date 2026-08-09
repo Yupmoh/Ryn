@@ -1,3 +1,4 @@
+using Ryn.Core;
 using Ryn.Core.Internal;
 using Ryn.Ipc;
 
@@ -15,24 +16,18 @@ namespace Ryn.Plugins.FileSystem;
 public sealed class PathValidator
 {
     private readonly FileSystemOptions _options;
+    private readonly IFileAccessGrants _grants;
 
-    /// <summary>
-    /// The host filesystem's case semantics, the single comparison used by every containment and
-    /// glob check in this assembly. Linux is case-sensitive; using a case-insensitive compare there
-    /// would be *over-permissive* (treat <c>/Allowed</c> and <c>/allowed</c> as the same scope when
-    /// they are genuinely different directories). Windows/macOS default volumes are case-insensitive,
-    /// where an ordinal compare would wrongly deny legitimate access. This is the same host case policy
-    /// the framework-wide containment helper uses (<see cref="RynPath.HostComparison"/>); it is aliased
-    /// here so this assembly's call sites read naturally without re-deriving the rule.
-    /// </summary>
+    /// <summary>The host filesystem's case semantics used by containment checks.</summary>
     internal static readonly StringComparison PathComparison = RynPath.HostComparison;
 
     private static readonly bool IgnoreCase = !OperatingSystem.IsLinux();
 
-    public PathValidator(FileSystemOptions options)
+    public PathValidator(FileSystemOptions options, IFileAccessGrants? grants = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
+        _grants = grants ?? new FileAccessGrants();
     }
 
     /// <summary>
@@ -71,61 +66,27 @@ public sealed class PathValidator
     /// to open atomically and re-verify the opened handle's real path against the scope (see PLG-03);
     /// that is a caller-side change and is tracked separately.
     /// </remarks>
-    internal string Resolve(string path)
+    internal string Resolve(string path) => Resolve(path, FileAccessOperation.Read);
+
+    internal string Resolve(string path, FileAccessOperation operation)
     {
         ArgumentNullException.ThrowIfNull(path);
-
-        if (_options.AccessDenied)
-            throw new UnauthorizedAccessException("File system access is denied by capability policy");
-
-        // Expand a leading ~ / $HOME to the user's home directory before anything else. This is a pure
-        // textual convenience: the expanded path is still canonicalized and checked against AllowedPaths
-        // below, so it grants nothing that an absolute home-relative path would not already grant.
-        var expanded = ExpandHome(path);
-
-        // Canonical real path (resolves '..' AND symlinks). This is the value we both authorize and
-        // hand back, so authorization is performed on the post-symlink-resolution path, not the lexical
-        // one. (A re-opened *string* cannot pin an inode, so a racing caller-side re-open is still a
-        // residual TOCTOU — see the <remarks> above.)
-        var canonical = Canonicalize(
-            Path.IsPathRooted(expanded)
-                ? expanded
-                : Path.Combine(AppContext.BaseDirectory, expanded));
-
+        if (_options.AccessDenied) throw new UnauthorizedAccessException("File system access is denied by capability policy");
+        var granted = path.StartsWith("ryn-grant-", StringComparison.Ordinal) ? _grants.Resolve(path, operation) : null;
+        var expanded = granted is null ? ExpandHome(path) : granted;
+        var canonical = Canonicalize(Path.IsPathRooted(expanded) ? expanded : Path.Combine(AppContext.BaseDirectory, expanded));
+        if (granted is not null) return canonical;
         if (_options.AllowedPaths.Count == 0)
         {
-            // Default: restrict to the app directory (also canonicalized so macOS /var->/private etc. match).
-            if (!RynPath.IsContainedIn(canonical, Canonicalize(AppContext.BaseDirectory), PathComparison))
-                throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside the application directory");
+            if (!RynPath.IsContainedIn(canonical, Canonicalize(AppContext.BaseDirectory), PathComparison)) throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside the application directory");
             return canonical;
         }
-
         foreach (var allowed in _options.AllowedPaths)
         {
-            if (GlobMatcher.IsGlob(allowed))
-            {
-                if (GlobMatcher.IsMatch(allowed, canonical.Replace('\\', '/'), IgnoreCase))
-                    return canonical;
-            }
-            else if (RynPath.IsContainedIn(canonical, Canonicalize(allowed), PathComparison))
-            {
-                return canonical;
-            }
+            if (GlobMatcher.IsGlob(allowed) ? GlobMatcher.IsMatch(allowed, canonical.Replace('\\', '/'), IgnoreCase) : RynPath.IsContainedIn(canonical, Canonicalize(allowed), PathComparison)) return canonical;
         }
-
         throw new UnauthorizedAccessException($"Access denied: path '{path}' is not within any allowed directory");
     }
-
-    /// <summary>
-    /// Expands a LEADING <c>~</c> or <c>$HOME</c> reference to the user's home directory. Handles
-    /// <c>~</c>, <c>~/rest</c>, <c>$HOME</c>, <c>$HOME/rest</c>, and the braced <c>${HOME}</c> forms
-    /// (a Windows backslash separator counts too). Deliberately does NOT expand <c>~user</c> (another
-    /// user's home — unresolved and a privilege concern), <c>$HOMER</c> or any other variable, or a
-    /// <c>~</c>/<c>$HOME</c> that is not the first segment, since the tilde only carries home meaning at
-    /// the start of a path. The expanded result is still canonicalized and scope-checked by the caller,
-    /// so this is purely a convenience and never widens access. If no home directory can be determined
-    /// the token is left literal, which then simply fails the scope check.
-    /// </summary>
     internal static string ExpandHome(string path)
     {
         if (string.IsNullOrEmpty(path))
@@ -172,73 +133,5 @@ public sealed class PathValidator
     /// every component. For a target that does not yet exist, the longest existing ancestor is
     /// canonicalized and the remaining (lexical) segments are appended.
     /// </summary>
-    internal static string Canonicalize(string path)
-    {
-        var full = Path.GetFullPath(path);
-
-        // Split into the longest existing prefix + non-existing remainder.
-        var existing = full;
-        var remainder = new Stack<string>();
-        while (!File.Exists(existing) && !Directory.Exists(existing))
-        {
-            var parent = Path.GetDirectoryName(existing);
-            if (string.IsNullOrEmpty(parent) || string.Equals(parent, existing, StringComparison.Ordinal))
-            {
-                existing = string.Empty; // nothing of the path exists
-                break;
-            }
-            remainder.Push(Path.GetFileName(existing));
-            existing = parent;
-        }
-
-        var real = string.IsNullOrEmpty(existing) ? full : ResolveAllLinks(existing);
-        while (remainder.Count > 0)
-            real = Path.Combine(real, remainder.Pop());
-
-        return Path.GetFullPath(real);
-    }
-
-    /// <summary>Walks each component from the root, following symlinks (including chains and relative targets).</summary>
-    private static string ResolveAllLinks(string existingAbsolutePath)
-    {
-        var root = Path.GetPathRoot(existingAbsolutePath);
-        if (string.IsNullOrEmpty(root))
-            return existingAbsolutePath;
-
-        var rest = existingAbsolutePath[root.Length..]
-            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
-
-        var current = root;
-        foreach (var component in rest)
-        {
-            current = Path.Combine(current, component);
-
-            // Follow a symlink chain at this component (guarded against cycles).
-            for (var hop = 0; hop < 40; hop++)
-            {
-                string? target;
-                try
-                {
-                    FileSystemInfo info = Directory.Exists(current)
-                        ? new DirectoryInfo(current)
-                        : new FileInfo(current);
-                    target = info.LinkTarget;
-                }
-                catch (IOException)
-                {
-                    break;
-                }
-
-                if (target is null)
-                    break;
-
-                var resolved = Path.IsPathRooted(target)
-                    ? target
-                    : Path.Combine(Path.GetDirectoryName(current) ?? root, target);
-                current = Path.GetFullPath(resolved);
-            }
-        }
-
-        return current;
-    }
+    internal static string Canonicalize(string path) => RynPath.Canonicalize(path);
 }

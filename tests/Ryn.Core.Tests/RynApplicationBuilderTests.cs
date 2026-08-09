@@ -86,6 +86,59 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_RegistersRynPathsSingleton()
+    {
+        await using var app = RynApplication.CreateBuilder().Build();
+
+        var first = app.Services.GetRequiredService<IRynPaths>();
+        var second = app.Services.GetRequiredService<IRynPaths>();
+
+        first.Should().BeSameAs(second);
+    }
+
+    [Fact]
+    public void RynPaths_ExposesAbsoluteStableDirectories()
+    {
+        var paths = new RynPaths();
+        var values = new[]
+        {
+            paths.LocalAppData,
+            paths.RoamingAppData,
+            paths.Documents,
+            paths.Cache,
+            paths.Temp,
+            paths.ResourceDirectory,
+            paths.InstallDirectory,
+        };
+
+        values.Should().OnlyContain(value => Path.IsPathRooted(value));
+        values.Should().OnlyContain(value => Path.GetFullPath(value) == value);
+        new RynPaths().InstallDirectory.Should().Be(paths.InstallDirectory);
+    }
+
+    [Theory]
+    [InlineData(Environment.SpecialFolder.LocalApplicationData, "AppData/Local")]
+    [InlineData(Environment.SpecialFolder.ApplicationData, "AppData/Roaming")]
+    [InlineData(Environment.SpecialFolder.MyDocuments, "Documents")]
+    public void RynPaths_UsesAbsoluteWindowsFallbackWhenSpecialFolderIsEmpty(
+        Environment.SpecialFolder specialFolder,
+        string relativeFallback)
+    {
+        ArgumentNullException.ThrowIfNull(relativeFallback);
+        var home = Path.Combine(Path.GetTempPath(), "ryn-paths-home");
+        var result = RynPaths.GetPlatformDirectory(
+            specialFolder,
+            Path.Combine(home, relativeFallback.Replace('/', Path.DirectorySeparatorChar)),
+            Path.Combine(home, "Library", "Application Support"),
+            isWindows: true,
+            isMacOS: false,
+            getFolderPath: _ => string.Empty);
+
+        result.Should().Be(Path.GetFullPath(Path.Combine(home, relativeFallback.Replace('/', Path.DirectorySeparatorChar))));
+        Path.IsPathRooted(result).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ConfigureServices_AddsServices()
     {
         var builder = RynApplication.CreateBuilder();

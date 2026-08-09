@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Ryn.Core;
 using Ryn.Plugins.FileSystem;
 using Xunit;
 
@@ -174,6 +175,18 @@ public sealed class FileSystemCommandsTests : IDisposable
         {
             try { Directory.Delete(outsideDir, true); } catch (IOException) { }
         }
+    }
+
+    [Fact]
+    public void MkDir_ReadGrant_IsRejected()
+    {
+        var grants = new FileAccessGrants();
+        var token = grants.Grant(_testDir, FileAccessOperation.Read);
+        var fs = new FileSystemCommands(new PathValidator(new FileSystemOptions(), grants));
+
+        FluentActions.Invoking(() => fs.MkDir(token + "/created"))
+            .Should().Throw<UnauthorizedAccessException>();
+        Directory.Exists(Path.Combine(_testDir, "created")).Should().BeFalse();
     }
 
     [Fact]

@@ -137,7 +137,7 @@ invoke('app.greet', {name:'W'})
   |
   +-- new Promise(resolve, reject)
   |   store in pending[id]
-  |   set 30s timeout
+  |   set IpcCommandTimeout guard (configurable; default 30s)
   |
   +-- XHR POST /ipc/cmd/{id}/app.greet
       body: {"name":"W"}
@@ -191,8 +191,9 @@ _resolve(1, true, data)       |
 **Immediate 200 response**: The scheme handler returns an empty 200 immediately after receiving the request. The actual result is delivered later by calling `saucer_webview_execute()` to run `window.__ryn._resolve()`. This avoids blocking the webview's resource loading thread.
 
 **Same-origin via ryn:// scheme**: Both content and IPC use the `ryn://app` origin. This eliminates CORS issues that arise when WebKit assigns a `null` origin to custom schemes.
+**Request limits**: `RynOptions.MaxRequestBodyBytes` bounds local-server request bodies (32 MiB by default). `RynOptions.IpcCommandTimeout` bounds how long JavaScript IPC waits for a host response.
 
-**30-second timeout**: Each pending invocation has a `setTimeout` guard. If the C# handler takes longer than 30 seconds, the promise rejects with an `IPC timeout` error.
+**Configurable IPC timeout**: Each pending invocation has a `setTimeout` guard using `RynOptions.IpcCommandTimeout` (30 seconds by default). Applications can choose a different positive `TimeSpan`; when it elapses, the promise rejects with an `IPC timeout` error.
 
 ### JavaScript eval (C# to JS)
 
@@ -434,7 +435,19 @@ if (filePath.StartsWith(canonicalBase, comparison) && File.Exists(filePath))
 }
 ```
 
-Path traversal is prevented by checking that the resolved path starts with the canonical content directory base. MIME types are determined by file extension.
+Path traversal is prevented by checking that the resolved path starts with the canonical content directory base. MIME types are determined by file extension. Built-in file reads run off the callback thread. Custom-scheme responses (including `RynSchemeResponse.File` and `FileRange`) are materialized into Saucer's required contiguous stash before native acceptance; this is not zero-copy. Range responses contain only the requested bytes (`206`), so partial loads bound materialized memory; malformed or unsatisfiable ranges return `416`.
+
+Applications can register their own scheme before navigation with `ConfigureCustomScheme`:
+
+```csharp
+var app = RynApplication.CreateBuilder()
+    .ConfigureOptions(opts => opts.Url = new Uri("myapp://app/index.html"))
+    .ConfigureCustomScheme("myapp", request =>
+        ValueTask.FromResult(RynSchemeResponse.Ok("<h1>Hello</h1>"u8.ToArray(), "text/html")))
+    .Build();
+```
+
+The scheme is declared and attached before the initial page navigation; `ryn` is reserved for Ryn's built-in transport.
 
 ### 4. Inline HTML (`opts.Html`)
 

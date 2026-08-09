@@ -11,6 +11,7 @@ public static class DialogServiceCollectionExtensions
         services.AddSingleton<IRynPlugin>(sp => sp.GetRequiredService<DialogPlugin>());
         services.AddDialogCommands(); // generated
         services.AddPickerCommands(); // generated
+        services.AddSecurePickerCommands(); // generated
         return services;
     }
 }

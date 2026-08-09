@@ -214,6 +214,72 @@ public sealed class LocalWebServerTests : IAsyncLifetime
         try { Directory.Delete(dir, true); } catch (IOException) { }
     }
 
+    [Fact]
+    public async Task RangeResponse_CopiesExactlySelectedLength()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/app.js");
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(2, 5);
+        using var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.PartialContent);
+        response.Content.Headers.ContentLength.Should().Be(4);
+        (await response.Content.ReadAsStringAsync()).Should().Be("nsol");
+    }
+
+    [Theory]
+    [InlineData("bytes=2-5,7-8")]
+    [InlineData("bytes=bad-5")]
+    [InlineData("bytes=5-2")]
+    [InlineData("items=2-5")]
+    public async Task MalformedRange_Returns416(string value)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/app.js");
+        request.Headers.TryAddWithoutValidation("Range", value).Should().BeTrue();
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.RequestedRangeNotSatisfiable);
+    }
+
+    [Fact]
+    public async Task SymlinkedAssetOutsideRoot_IsNotServed()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+        var outside = Path.Combine(Path.GetTempPath(), $"ryn-outside-{Guid.NewGuid():N}.txt");
+        var link = Path.Combine(_contentDir, "escape.txt");
+        await File.WriteAllTextAsync(outside, "OUTSIDE");
+        File.CreateSymbolicLink(link, outside);
+        try
+        {
+            var response = await _client.GetAsync("/escape.txt");
+            (await response.Content.ReadAsStringAsync()).Should().NotContain("OUTSIDE");
+        }
+        finally
+        {
+            File.Delete(link);
+            File.Delete(outside);
+        }
+    }
+
+    [Fact]
+    public async Task IntermediateSymlinkToOutsideExistingDirectory_IsNotServed()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var outside = Path.Combine(Path.GetTempPath(), $"ryn-outside-dir-{Guid.NewGuid():N}");
+        var link = Path.Combine(_contentDir, "link");
+        Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "secret"), "OUTSIDE-SECRET");
+        Directory.CreateSymbolicLink(link, outside);
+        try
+        {
+            var response = await _client.GetAsync("/link/secret");
+            (await response.Content.ReadAsStringAsync()).Should().NotContain("OUTSIDE-SECRET");
+        }
+        finally
+        {
+            Directory.Delete(link);
+            Directory.Delete(outside, true);
+        }
+    }
+
     private sealed class FakeHost : ILocalServerHost
     {
         public string IpcToken { get; } = Guid.NewGuid().ToString("N");

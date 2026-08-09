@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ryn.Ipc;
+using Ryn.Core;
 
 namespace Ryn.Plugins.FileSystem;
 
@@ -38,7 +39,7 @@ public sealed class FileSystemCommands
     {
         // Decode before opening so a malformed payload fails before any file is created/truncated.
         var bytes = Convert.FromBase64String(data);
-        var resolved = _validator.Resolve(path);
+        var resolved = _validator.Resolve(path, FileAccessOperation.CreateWrite);
         var dir = Path.GetDirectoryName(resolved);
         if (dir is not null) Directory.CreateDirectory(dir);
         using (var stream = OpenForWrite(path, resolved))
@@ -49,7 +50,7 @@ public sealed class FileSystemCommands
     [RynCommand("fs.writeTextFile")]
     public void WriteTextFile(string path, string text)
     {
-        var resolved = _validator.Resolve(path);
+        var resolved = _validator.Resolve(path, FileAccessOperation.CreateWrite);
         var dir = Path.GetDirectoryName(resolved);
         if (dir is not null) Directory.CreateDirectory(dir);
         using var stream = OpenForWrite(path, resolved);
@@ -67,14 +68,14 @@ public sealed class FileSystemCommands
     [RynCommand("fs.mkdir")]
     public void MkDir(string path)
     {
-        var resolved = _validator.Resolve(path);
+        var resolved = _validator.Resolve(path, FileAccessOperation.CreateWrite);
         Directory.CreateDirectory(resolved);
     }
 
     [RynCommand("fs.remove")]
     public void Remove(string path)
     {
-        var resolved = _validator.Resolve(path);
+        var resolved = _validator.Resolve(path, FileAccessOperation.Delete);
         if (File.Exists(resolved))
             File.Delete(resolved);
         else if (Directory.Exists(resolved))
@@ -84,7 +85,7 @@ public sealed class FileSystemCommands
     [RynCommand("fs.readDir")]
     public string ReadDir(string path)
     {
-        var resolved = _validator.Resolve(path);
+        var resolved = _validator.Resolve(path, FileAccessOperation.Enumerate);
         var entries = new List<FileEntry>();
 
         foreach (var entry in new DirectoryInfo(resolved).EnumerateFileSystemInfos())

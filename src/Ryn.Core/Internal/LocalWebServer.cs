@@ -21,7 +21,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
 {
     private const int DefaultPort = 7421;
     private const int MaxHeadBytes = 32 * 1024;            // request line + headers
-    private const long MaxBodyBytes = 32L * 1024 * 1024;   // matches the previous body cap
+    private readonly long _maxBodyBytes;
 
     private readonly string? _contentDirectory;
     private EmbeddedContentStore? _embeddedContent;
@@ -43,12 +43,13 @@ internal sealed class LocalWebServer : IAsyncDisposable
     /// <param name="preferredPort">Fixed loopback port to try first.</param>
     /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS.</param>
     /// <param name="crossOriginIsolation">When true, static responses send COOP/COEP/CORP so the page is crossOriginIsolated (SharedArrayBuffer).</param>
-    internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false)
+    internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false, long maxBodyBytes = 32L * 1024 * 1024)
     {
         _contentDirectory = contentDirectory is null ? null : Path.GetFullPath(contentDirectory);
         _preferredPort = preferredPort > 0 ? preferredPort : DefaultPort;
         _allowedCorsOrigin = allowedCorsOrigin?.TrimEnd('/');
         _crossOriginIsolation = crossOriginIsolation;
+        _maxBodyBytes = maxBodyBytes;
     }
 
     internal void SetWebView(ILocalServerHost webView) => _webView = webView;
@@ -125,7 +126,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
             var stream = client.GetStream();
             // One reader per connection so any bytes overread past a request's body (HTTP pipelining) carry
             // forward to the next request on the same keep-alive connection.
-            var reader = new RequestReader(stream);
+            var reader = new RequestReader(stream, _maxBodyBytes);
             try
             {
                 var keepAlive = true;
@@ -154,10 +155,11 @@ internal sealed class LocalWebServer : IAsyncDisposable
     /// next request on the same keep-alive connection parses without loss. Parsing/validation semantics
     /// (head/body caps, EOF→null, IOException→null) match the previous per-byte implementation exactly.
     /// </summary>
-    private sealed class RequestReader(NetworkStream stream)
+    private sealed class RequestReader(NetworkStream stream, long maxBodyBytes)
     {
         private const int ReadChunk = 8 * 1024;
         private readonly NetworkStream _stream = stream;
+        private readonly long _maxBodyBytes = maxBodyBytes;
         private readonly byte[] _readBuffer = new byte[ReadChunk];
 
         // Bytes already pulled off the socket but not yet consumed (head overread / pipelined request tails).
@@ -220,7 +222,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
                 return [];
             }
 
-            if (contentLength > MaxBodyBytes)
+            if (contentLength > _maxBodyBytes)
                 return null;
 
             var body = new byte[contentLength];
@@ -523,8 +525,24 @@ internal sealed class LocalWebServer : IAsyncDisposable
             }
             if (embeddedBytes is not null)
             {
-                var embeddedBody = request.Method == "HEAD" ? [] : embeddedBytes;
-                await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(servedPath)), embeddedBody, headers, keepAlive, ct).ConfigureAwait(false);
+                var range = ParseRange(request.Headers, embeddedBytes.LongLength);
+                if (range.Invalid)
+                {
+                    headers.Add(("Content-Range", $"bytes */{embeddedBytes.LongLength}"));
+                    await WriteAsync(stream, 416, "Range Not Satisfiable", null, [], headers, keepAlive, ct, request.Method == "HEAD").ConfigureAwait(false);
+                }
+                else if (range.HasValue)
+                {
+                    headers.Add(("Accept-Ranges", "bytes"));
+                    headers.Add(("Content-Range", $"bytes {range.Start}-{range.End}/{embeddedBytes.LongLength}"));
+                    var part = embeddedBytes.AsSpan((int)range.Start, (int)range.Length).ToArray();
+                    await WriteAsync(stream, 206, "Partial Content", GetMimeType(Path.GetExtension(servedPath)), part, headers, keepAlive, ct, request.Method == "HEAD").ConfigureAwait(false);
+                }
+                else
+                {
+                    headers.Add(("Accept-Ranges", "bytes"));
+                    await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(servedPath)), embeddedBytes, headers, keepAlive, ct, request.Method == "HEAD").ConfigureAwait(false);
+                }
                 return;
             }
         }
@@ -540,16 +558,33 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
             if (filePath is not null && File.Exists(filePath))
             {
-                byte[] content;
-                try { content = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false); }
+                try
+                {
+                    var length = new FileInfo(filePath).Length;
+                    var range = ParseRange(request.Headers, length);
+                    headers.Add(("Accept-Ranges", "bytes"));
+                    if (range.Invalid)
+                    {
+                        headers.Add(("Content-Range", $"bytes */{length}"));
+                        await WriteAsync(stream, 416, "Range Not Satisfiable", null, [], headers, keepAlive, ct).ConfigureAwait(false);
+                    }
+                    else if (range.HasValue)
+                    {
+                        headers.Add(("Content-Range", $"bytes {range.Start}-{range.End}/{length}"));
+                        using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                        file.Position = range.Start;
+                        await WriteStreamAsync(stream, 206, "Partial Content", GetMimeType(Path.GetExtension(filePath)), file, range.Length, headers, keepAlive, request.Method == "HEAD", ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                        await WriteStreamAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(filePath)), file, length, headers, keepAlive, request.Method == "HEAD", ct).ConfigureAwait(false);
+                    }
+                }
                 catch (IOException)
                 {
                     await WriteTextAsync(stream, 500, "Internal Server Error", "read error", keepAlive, ct).ConfigureAwait(false);
-                    return;
                 }
-
-                var body = request.Method == "HEAD" ? [] : content;
-                await WriteAsync(stream, 200, "OK", GetMimeType(Path.GetExtension(filePath)), body, headers, keepAlive, ct).ConfigureAwait(false);
                 return;
             }
         }
@@ -557,19 +592,58 @@ internal sealed class LocalWebServer : IAsyncDisposable
         await WriteTextAsync(stream, 404, "Not Found", "not found", keepAlive, ct).ConfigureAwait(false);
     }
 
+    private readonly record struct ByteRange(long Start, long End, bool Invalid)
+    {
+        public bool HasValue => !Invalid && End >= Start;
+        public long Length => End - Start + 1;
+    }
+
+    private static ByteRange ParseRange(Dictionary<string, string> requestHeaders, long length)
+    {
+        if (!requestHeaders.TryGetValue("Range", out var value))
+            return new(0, -1, false);
+        if (!value.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase) || value.Contains(',', StringComparison.Ordinal))
+            return new(0, 0, true);
+
+        var spec = value[6..];
+        var dash = spec.IndexOf('-', StringComparison.Ordinal);
+        if (dash < 0 || spec.IndexOf('-', dash + 1) >= 0 || length <= 0)
+            return new(0, 0, true);
+        var startText = spec[..dash];
+        var endText = spec[(dash + 1)..];
+        if (startText.Length == 0)
+        {
+            if (!long.TryParse(endText, NumberStyles.None, CultureInfo.InvariantCulture, out var suffix) || suffix <= 0)
+                return new(0, 0, true);
+            suffix = Math.Min(suffix, length);
+            return new(length - suffix, length - 1, false);
+        }
+        if (!long.TryParse(startText, NumberStyles.None, CultureInfo.InvariantCulture, out var start)
+            || start < 0 || start >= length)
+            return new(0, 0, true);
+        if (endText.Length == 0)
+            return new(start, length - 1, false);
+        if (!long.TryParse(endText, NumberStyles.None, CultureInfo.InvariantCulture, out var end) || end < start)
+            return new(0, 0, true);
+        return new(start, Math.Min(end, length - 1), false);
+    }
+
     /// <summary>Resolves a request-relative path under the content root, rejecting directory traversal.</summary>
     private string? ResolveWithinContent(string relative)
     {
         if (_contentDirectory is null) return null;
 
+        var root = RynPath.Canonicalize(_contentDirectory);
         var combined = Path.GetFullPath(Path.Combine(_contentDirectory, relative));
+        if (!RynPath.IsContainedIn(combined, _contentDirectory, RynPath.HostComparison))
+            return null;
 
-        // One canonical containment rule for the whole framework (PAP-23): exact-root OR child-with-sep,
-        // under the host case policy (ordinal on Linux, ordinal-ignore-case on macOS/Windows).
-        return RynPath.IsContainedIn(combined, _contentDirectory, RynPath.HostComparison)
+        var canonical = RynPath.Canonicalize(combined);
+        return RynPath.IsContainedIn(canonical, root, RynPath.HostComparison)
             ? combined
-            : null; // traversal attempt
+            : null;
     }
+
 
     private static string GetMimeType(string extension) => extension.ToUpperInvariant() switch
     {
@@ -603,22 +677,44 @@ internal sealed class LocalWebServer : IAsyncDisposable
         WriteAsync(stream, status, reason, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(text), [], keepAlive, ct);
 
     private static async Task WriteAsync(NetworkStream stream, int status, string reason, string? contentType,
-        byte[] body, IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct)
+        byte[] body, IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct, bool headOnly = false)
     {
         var sb = new StringBuilder(256);
         sb.Append("HTTP/1.1 ").Append(status.ToString(CultureInfo.InvariantCulture)).Append(' ').Append(reason).Append("\r\n");
-        if (contentType is not null)
-            sb.Append("Content-Type: ").Append(contentType).Append("\r\n");
+        if (contentType is not null) sb.Append("Content-Type: ").Append(contentType).Append("\r\n");
         sb.Append("Content-Length: ").Append(body.Length.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
         sb.Append("Connection: ").Append(keepAlive ? "keep-alive" : "close").Append("\r\n");
-        foreach (var (name, value) in headers)
-            sb.Append(name).Append(": ").Append(value).Append("\r\n");
+        foreach (var (name, value) in headers) sb.Append(name).Append(": ").Append(value).Append("\r\n");
         sb.Append("\r\n");
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString()), ct).ConfigureAwait(false);
+        if (!headOnly && body.Length > 0) await stream.WriteAsync(body, ct).ConfigureAwait(false);
+        await stream.FlushAsync(ct).ConfigureAwait(false);
+    }
 
-        var headerBytes = Encoding.ASCII.GetBytes(sb.ToString());
-        await stream.WriteAsync(headerBytes, ct).ConfigureAwait(false);
-        if (body.Length > 0)
-            await stream.WriteAsync(body, ct).ConfigureAwait(false);
+    private static async Task WriteStreamAsync(NetworkStream stream, int status, string reason, string? contentType,
+        Stream body, long contentLength, IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, bool headOnly,
+        CancellationToken ct)
+    {
+        var sb = new StringBuilder(256);
+        sb.Append("HTTP/1.1 ").Append(status.ToString(CultureInfo.InvariantCulture)).Append(' ').Append(reason).Append("\r\n");
+        if (contentType is not null) sb.Append("Content-Type: ").Append(contentType).Append("\r\n");
+        sb.Append("Content-Length: ").Append(contentLength.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
+        sb.Append("Connection: ").Append(keepAlive ? "keep-alive" : "close").Append("\r\n");
+        foreach (var (name, value) in headers) sb.Append(name).Append(": ").Append(value).Append("\r\n");
+        sb.Append("\r\n");
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString()), ct).ConfigureAwait(false);
+        if (!headOnly)
+        {
+            var buffer = new byte[64 * 1024];
+            var remaining = contentLength;
+            while (remaining > 0)
+            {
+                var read = await body.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), ct).ConfigureAwait(false);
+                if (read == 0) throw new EndOfStreamException("Response body ended before Content-Length");
+                await stream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                remaining -= read;
+            }
+        }
         await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 

@@ -217,7 +217,19 @@ opts.Html = "<html>...</html>";
 opts.Url = new Uri("http://localhost:5173");
 ```
 
-With `ContentDirectory`, files are read from disk on each request, so changes show up on browser refresh without restarting the app.
+With `ContentDirectory`, built-in file I/O runs off the scheme callback thread. Custom and built-in range responses materialize the selected response/range into Saucer's contiguous stash before native acceptance; this is not zero-copy. Ranges return only the requested bytes (`206`), bounding materialized memory for partial loads.
+
+Declare custom schemes and attach handlers before initial navigation:
+
+```csharp
+var app = RynApplication.CreateBuilder()
+    .ConfigureOptions(opts => opts.Url = new Uri("myapp://app/index.html"))
+    .ConfigureCustomScheme("myapp", request =>
+        ValueTask.FromResult(RynSchemeResponse.Ok("<h1>Hello</h1>"u8.ToArray(), "text/html")))
+    .Build();
+```
+
+`ConfigureCustomScheme` rejects the reserved `ryn` scheme. `RynOptions.MaxRequestBodyBytes` (32 MiB default) bounds local-server request bodies, and `RynOptions.IpcCommandTimeout` (30 seconds default) controls how long JavaScript IPC waits for a host response.
 
 ### Windows requirements
 

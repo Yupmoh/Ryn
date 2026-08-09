@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -11,7 +13,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 {
     private const string AppScheme = "ryn";
 
-    internal static string GetBridgeScriptText() => BuildBridgeScript("TEST_TOKEN");
+    internal static string GetBridgeScriptText() => GetBridgeScriptText(TimeSpan.FromSeconds(30));
+    internal static string GetBridgeScriptText(TimeSpan ipcCommandTimeout) => BuildBridgeScript("TEST_TOKEN", ipcCommandTimeout);
     internal static string GetConsoleForwardScriptText() => Encoding.UTF8.GetString(ConsoleForwardScript);
 
     /// <summary>
@@ -34,7 +37,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// breaking its <c>{{ }}</c> escaping, so this copy is kept in sync by hand. If a value in
     /// <see cref="Internal.IpcProtocol"/> changes, update the literals here (and the host-side parser) to match.
     /// </remarks>
-    private static string BuildBridgeScript(string token) =>
+    private static string BuildBridgeScript(string token, TimeSpan ipcCommandTimeout) =>
         $$"""
         (function(){
           var ryn = window.__ryn = window.__ryn || {};
@@ -57,7 +60,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
               var timer = setTimeout(function() {
                 try { x.abort(); } catch (e) {}
                 reject(new Error('IPC timeout: ' + command));
-              }, 30000);
+              }, {{(long)ipcCommandTimeout.TotalMilliseconds}});
               x.onload = function() {
                 clearTimeout(timer);
                 if (x.status >= 200 && x.status < 300) {
@@ -189,6 +192,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// has IPC reach cannot spoof an in-flight eval result by guessing the sequential id (IPC-04).
     /// </summary>
     private readonly ConcurrentDictionary<long, PendingEval> _pendingEvals = new();
+    private TimeSpan _ipcCommandTimeout = TimeSpan.FromSeconds(30);
     private long _nextEvalId;
 
     /// <summary>A pending host-initiated eval: the completion source plus the nonce gating its response.</summary>
@@ -246,10 +250,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// </summary>
     private int _inFlightResponses;
 
-    internal unsafe RynWebView(saucer_webview* webview, saucer_application* app)
+    internal unsafe RynWebView(saucer_webview* webview, saucer_application* app, TimeSpan? ipcCommandTimeout = null)
     {
         _webview = (nint)webview;
         _app = (nint)app;
+        _ipcCommandTimeout = ipcCommandTimeout ?? TimeSpan.FromSeconds(30);
         _selfHandle = (nint)NativeCallbackHelper.Alloc(this);
 
         RegisterAppScheme();
@@ -501,7 +506,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     private unsafe void InjectBridgeScript()
     {
-        var script = BuildBridgeScript(_ipcToken);
+        var script = BuildBridgeScript(_ipcToken, _ipcCommandTimeout);
         Span<byte> buf = stackalloc byte[256];
         var str = Utf8String.Create(script, buf); // falls back to a pooled buffer for the full script
         Saucer.saucer_webview_inject(
@@ -769,53 +774,73 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             }
         }
 
-        // Serve static files from content directory
+        // Resolve and read disk assets off saucer's callback/UI thread. Canonicalization and existence checks
+        // follow every symlink before the response is materialized, preserving the containment guard.
         if (_contentDirectory is not null)
         {
             var relativePath = (path is "/" or "") ? "index.html" : path.TrimStart('/');
             var filePath = Path.GetFullPath(Path.Combine(_contentDirectory, relativePath));
-
-            // One canonical containment rule for the whole framework (PAP-23): exact-root OR
-            // child-with-trailing-separator. Replaces a bare StartsWith(base + sep), which had no exact-root
-            // branch and could be fooled by a sibling-prefix path (e.g. /content-evil vs /content).
-            if (RynPath.IsContainedIn(filePath, _contentDirectory, RynPath.HostComparison) && File.Exists(filePath))
+            if (RynPath.IsContainedIn(filePath, _contentDirectory, RynPath.HostComparison)
+                && TryBeginNativeResponse(executor, out var fileExecutor))
             {
-                ServeFile(executor, filePath);
+                var range = ParseHeaderValue(headers, "Range");
+                _ = ServeFileAsync(filePath, _contentDirectory, method, range, fileExecutor, matchedOrigin);
                 return;
             }
         }
-
-        // Serve inline HTML content for /index.html or /
-        if (_htmlContent is not null && (path is "/" or "/index.html" or ""))
-        {
-            var htmlBytes = Encoding.UTF8.GetBytes(_htmlContent);
-            fixed (byte* ptr = htmlBytes)
-            {
-                var stash = Saucer.saucer_stash_new_from(ptr, (nuint)htmlBytes.Length);
-                Span<byte> mimeBuf = stackalloc byte[16];
-                var mime = Utf8String.Create("text/html", mimeBuf);
-                var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
-                AppendCrossOriginIsolationHeaders(response);
-                Saucer.saucer_scheme_executor_accept(executor, response);
-                // accept() copies the response; we still own (and must free) both native objects.
-                Saucer.saucer_scheme_response_free(response);
-                Saucer.saucer_stash_free(stash);
-                mime.Dispose();
-            }
-            return;
         }
 
-        // 404 for everything else
-        Saucer.saucer_scheme_executor_reject(executor, saucer_scheme_error.SAUCER_SCHEME_ERROR_NOT_FOUND);
+    private async Task ServeFileAsync(string filePath, string contentRoot, string method, string? range,
+        nint executorHandle, string? origin)
+    {
+        RynSchemeResponse response = default;
+        try
+        {
+            response = await Task.Run(() =>
+            {
+                var canonicalRoot = RynPath.Canonicalize(contentRoot);
+                var canonicalFile = RynPath.Canonicalize(filePath);
+                if (!RynPath.IsContainedIn(canonicalFile, canonicalRoot, RynPath.HostComparison)
+                    || !System.IO.File.Exists(canonicalFile))
+                    return RynSchemeResponse.NotFound();
+
+                var mime = GetMimeType(Path.GetExtension(canonicalFile));
+                if (range is not null)
+                {
+                    var ranged = RynSchemeResponse.FileRange(canonicalFile, range, mime);
+                    if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase) && ranged.Content is not null)
+                    {
+                        ranged.Content.Dispose();
+                        ranged = ranged with { Content = null };
+                    }
+                    return ranged;
+                }
+
+                var info = new FileInfo(canonicalFile);
+                if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
+                    return new RynSchemeResponse(200, mime, ReadOnlyMemory<byte>.Empty, null, info.Length,
+                        new Dictionary<string, string> { ["Accept-Ranges"] = "bytes" });
+                return RynSchemeResponse.File(canonicalFile, mime);
+            }).ConfigureAwait(false);
+
+            if (!_disposed)
+                unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, response, origin); }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (!_disposed)
+                unsafe { Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED); }
+        }
+        finally
+        {
+            if (response.Content is not null)
+                await response.Content.DisposeAsync().ConfigureAwait(false);
+            if (!_disposed)
+                unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
+            EndNativeResponse();
+        }
     }
 
-    // TODO(ARC-21, roadmap): this reads the whole file synchronously on saucer's UI thread and has no
-    // Range/206 support, so large assets block the UI and media scrubbing (mp4/webm/mp3) over ryn:// does not
-    // work. Move to the copied-executor async pattern used for commands (saucer_scheme_executor_copy + async
-    // accept, refcounted via TryBeginNativeResponse/EndNativeResponse) and add Range handling. Deferred: it is
-    // gated on the INT-03 executor-lifetime work landing first. Tracked in PLAN.md's performance backlog.
-    private unsafe void ServeFile(saucer_scheme_executor* executor, string filePath) =>
-        ServeBytes(executor, File.ReadAllBytes(filePath), GetMimeType(Path.GetExtension(filePath)));
 
     /// <summary>Serves a response body from memory over the app scheme — shared by the on-disk file path and the
     /// in-memory embedded-content path.</summary>
@@ -1077,15 +1102,18 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var method = SaucerStringReader.ReadRequestMethod(request);
         var headers = SaucerStringReader.ReadRequestHeaders(request);
         var body = ReadRequestBody(request);
+        var headerMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in headers.Split(HeaderSeparators, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
+            if (colon > 0) headerMap[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+        }
 
-        // Scope the response ACAO to the request's allowed origin instead of "*" (IPC-05): a same-origin or
-        // allowlisted origin gets reflected; anything else gets no ACAO header (engine default = same-origin).
+
+        // Scope the response ACAO to the request's allowed origin instead of "*" (IPC-05).
         var matchedOrigin = ResolveAllowedOrigin(ParseOriginHeader(headers));
 
-        var rynRequest = new RynSchemeRequest(
-            new Uri(urlString),
-            method,
-            Encoding.UTF8.GetBytes(body));
+        var rynRequest = new RynSchemeRequest(new Uri(urlString), method, Encoding.UTF8.GetBytes(body), headerMap);
 
         // Refcounted executor copy (INT-03): if disposal already began, reject and skip the async hop.
         if (TryBeginNativeResponse(executor, out var execCopy))
@@ -1098,6 +1126,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         nint executorHandle,
         string? origin)
     {
+        Stream? responseContent = null;
         try
         {
             RynSchemeResponse rynResponse;
@@ -1112,14 +1141,19 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
                 return;
             }
 
-            // Skip the native accept entirely once disposal began — the backing webview may be gone (INT-03).
+            // The handler transfers stream ownership to the serving path. If shutdown wins the race
+            // before native accept, dispose it here rather than relying on the native executor.
+            responseContent = rynResponse.Content;
             if (!_disposed)
+            {
                 unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, rynResponse, origin); }
+                responseContent = null;
+            }
         }
         finally
         {
-            // The free pairs with saucer_scheme_executor_copy and is itself skipped once disposed, since the
-            // copy's backing webview may already be gone; the leaked copy is harmless at process teardown.
+            if (responseContent is not null)
+                await responseContent.DisposeAsync().ConfigureAwait(false);
             if (!_disposed)
                 unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
             EndNativeResponse();
@@ -1129,29 +1163,45 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private static unsafe void AcceptSchemeResponse(saucer_scheme_executor* executor, RynSchemeResponse rynResponse, string? origin)
     {
         saucer_stash* stash;
-        if (rynResponse.Body.Length > 0)
+        long bodyLength;
+        if (rynResponse.Content is { } content)
         {
-            fixed (byte* bodyPtr = rynResponse.Body.Span)
+            using (content)
+            using (var ms = new MemoryStream())
             {
-                stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)rynResponse.Body.Length);
+                var remaining = rynResponse.ContentLength ?? long.MaxValue;
+                var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+                try
+                {
+                    while (remaining > 0)
+                    {
+                        var read = content.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                        if (read == 0) break;
+                        ms.Write(buffer, 0, read);
+                        remaining -= read;
+                    }
+                }
+                finally { ArrayPool<byte>.Shared.Return(buffer); }
+                bodyLength = ms.Length;
+                var bytes = ms.GetBuffer().AsSpan(0, checked((int)bodyLength));
+                fixed (byte* bodyPtr = bytes) stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)bytes.Length);
             }
         }
-        else
+        else if (rynResponse.Body.Length > 0)
         {
-            stash = Saucer.saucer_stash_new_empty();
+            bodyLength = rynResponse.Body.Length;
+            fixed (byte* bodyPtr = rynResponse.Body.Span) stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)rynResponse.Body.Length);
         }
-
+        else { bodyLength = 0; stash = Saucer.saucer_stash_new_empty(); }
         Span<byte> mimeBuf = stackalloc byte[256];
         var mime = Utf8String.Create(rynResponse.ContentType, mimeBuf);
         var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
         Saucer.saucer_scheme_response_set_status(response, rynResponse.StatusCode);
-        // Reflect ACAO only for an allowlisted/same-origin request (IPC-05); omit it otherwise so custom-scheme
-        // data is not blanket-readable cross-origin. A null origin means same-origin/no CORS — no header needed.
-        if (origin is not null)
-        {
-            AppendHeader(response, "Access-Control-Allow-Origin", origin);
-            AppendHeader(response, "Vary", "Origin");
-        }
+        if (rynResponse.Headers is not null)
+            foreach (var pair in rynResponse.Headers) AppendHeader(response, pair.Key, pair.Value);
+        if (rynResponse.Headers is null || !rynResponse.Headers.Keys.Any(x => x.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)))
+            AppendHeader(response, "Content-Length", bodyLength.ToString(CultureInfo.InvariantCulture));
+        if (origin is not null) { AppendHeader(response, "Access-Control-Allow-Origin", origin); AppendHeader(response, "Vary", "Origin"); }
         Saucer.saucer_scheme_executor_accept(executor, response);
         Saucer.saucer_scheme_response_free(response);
         Saucer.saucer_stash_free(stash);
@@ -1211,7 +1261,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private static readonly char[] HeaderSeparators = ['\0', '\n', '\r'];
 
     /// <summary>Reads a single header value out of saucer's NUL/newline-separated <c>Name: value</c> header blob.</summary>
-    private static string? ParseHeaderValue(string headers, string name)
+    internal static string? ParseHeaderValue(string headers, string name)
     {
         foreach (var line in headers.Split(HeaderSeparators, StringSplitOptions.RemoveEmptyEntries))
         {

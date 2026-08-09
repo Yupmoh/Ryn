@@ -4,8 +4,9 @@ Ryn is alpha software. The current focus is correctness and hardening: fixing
 defects, tightening the security model, and making the existing single-window,
 plugin-based feature set dependable across macOS, Windows, and Linux.
 
-This document tracks the larger capabilities that are deliberately out of scope
-for that pass. They are recorded here so they are planned rather than forgotten.
+This document tracks larger capabilities and delivery status. Items that remain out of
+scope are recorded here so they are planned rather than forgotten; delivered entries
+remain as a short record of the capability and its implementation boundary.
 Listing an item here is not a commitment to a date, and ordering within a section
 is not a strict sequence. Each entry ends with a parenthetical referencing the
 internal review finding it maps back to.
@@ -14,6 +15,7 @@ Status legend:
 
 - **Planned** — intended for a future release; the shape of the work is understood.
 - **Under consideration** — wanted, but not yet committed; design or trade-offs are still open.
+- **Delivered** — implemented in the current public API; behavior and boundaries are described in the entry.
 
 ## Near-term
 
@@ -91,17 +93,9 @@ auto-start a configured frontend dev server (a `devCommand` / `devUrl` in
 the CLI dev command and the webview's file-watching path. Status: **Planned**.
 (tracks CMP-07)
 
-### Off-thread static file serving with HTTP Range support
+### Off-thread static file serving with HTTP Range support — **delivered**
 
-The `ryn://` scheme handler reads whole files synchronously on the UI thread with
-`File.ReadAllBytes`, which blocks the UI for large assets and holds entire files
-in memory, and it has no Range / 206 handling. WebKit needs Range responses for
-media seeking, so even though the MIME table advertises mp4, webm, and mp3, audio
-and video scrubbing over `ryn://` does not work correctly. The IPC command path
-already hops off-thread via the copied-executor pattern; static file serving
-should do the same and add Range request handling, with streaming or chunked
-writes for large files. This is scoped to the webview's scheme handler in
-`Ryn.Core`. Status: **Planned**. (tracks ARC-21)
+The `ryn://` scheme handler serves built-in files off the callback thread and supports custom and built-in file ranges. A range response contains only the selected bytes (`206`), bounding materialized memory for partial loads; malformed or unsatisfiable ranges return `416`. Saucer requires a contiguous stash, so the selected response or range is materialized before native acceptance rather than streamed zero-copy. (tracks ARC-21)
 
 ### Framework scaffold templates
 
@@ -147,18 +141,7 @@ third-party participation story is still being shaped, so that part is
 
 ### Desktop integration set (single-instance, autostart, sidecars, runtime scope grants)
 
-Ryn has no single-instance mechanism, no autostart support, no sidecar concept for
-bundling and resolving companion binaries, and no runtime capability grants, so a
-file the user picks through a native dialog is still denied by the filesystem
-plugin unless its path was statically allowlisted. That gap pushes apps toward
-over-broad static scopes, the exact anti-pattern the capability system exists to
-prevent. The plan is a single-instance facility (with argument and deep-link
-forwarding to the running instance), an autostart plugin (LaunchAgent on macOS,
-the Run key on Windows, XDG autostart on Linux), a sidecar convention in the
-`ryn.json` bundle config, and an option for the dialog plugin to grant a picked
-path into the filesystem scope for the session, with opt-in persistence. This
-spans `Ryn.Core`, the dialog and filesystem plugins, and the bundler. Status:
-**Planned**. (tracks CMP-11)
+Ryn still has no single-instance mechanism, autostart support, or sidecar concept. Runtime filesystem grants are now available for native picker results through the `dialog.openFileSecure`, `dialog.openFilesSecure`, `dialog.openFolderSecure`, and `dialog.saveSecure` commands; grants are scoped to an operation and can be resolved by the host through `IFileAccessGrants`. Browser `FileDrop` remains names-only, so it cannot securely grant native filesystem paths. The remaining desktop integration work spans `Ryn.Core`, the dialog plugin, and the bundler. Status: **Planned**. (tracks CMP-11)
 
 ## Under consideration
 

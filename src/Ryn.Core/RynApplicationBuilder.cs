@@ -47,6 +47,23 @@ public sealed class RynApplicationBuilder
         _configureOptionsActions.Add(configure);
         return this;
     }
+    /// <summary>Declares a custom URL scheme and attaches its handler before the initial page navigation.</summary>
+    /// <exception cref="ArgumentException">Thrown for an invalid, reserved, or duplicate scheme.</exception>
+    public RynApplicationBuilder ConfigureCustomScheme(
+        string scheme, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>> handler)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scheme);
+        ArgumentNullException.ThrowIfNull(handler);
+        if (string.Equals(scheme, "ryn", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The 'ryn' scheme is reserved.", nameof(scheme));
+        var options = Options;
+        if (options.CustomSchemes.Any(s => string.Equals(s, scheme, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"Scheme '{scheme}' is already declared.", nameof(scheme));
+        options.CustomSchemes.Add(scheme);
+        options.CustomSchemeHandlers.Add(new RynCustomScheme(scheme, handler));
+        return this;
+    }
+
 
     /// <summary>Registers a plugin by type. The plugin is resolved from DI and initialized before the window opens.</summary>
     public RynApplicationBuilder AddPlugin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPlugin>()
@@ -134,6 +151,8 @@ public sealed class RynApplicationBuilder
         }
 
         _services.AddSingleton(options);
+        _services.AddSingleton<IRynPaths, RynPaths>();
+        _services.AddSingleton<IFileAccessGrants, FileAccessGrants>();
 
         // 4. Window accessor + interface factories
         _services.AddSingleton<RynWindowAccessor>();
@@ -245,6 +264,12 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.CrossOriginIsolation)] is { } coi && bool.TryParse(coi, out var ci))
             options.CrossOriginIsolation = ci;
 
+        if (section[nameof(RynOptions.MaxRequestBodyBytes)] is { } maxBody && long.TryParse(maxBody, NumberStyles.Integer, CultureInfo.InvariantCulture, out var mb))
+            options.MaxRequestBodyBytes = mb;
+
+        if (section[nameof(RynOptions.IpcCommandTimeout)] is { } ipcTimeout && TimeSpan.TryParse(ipcTimeout, CultureInfo.InvariantCulture, out var it))
+            options.IpcCommandTimeout = it;
+
         // Url intentionally excluded — Uri binding needs TypeConverter reflection, keep code-only
     }
 
@@ -280,6 +305,8 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.CaptureUnhandledExceptions), static (t, s) => t.CaptureUnhandledExceptions = s.CaptureUnhandledExceptions);
         CopyIfSet(target, source, nameof(RynOptions.DisableDefaultLogging), static (t, s) => t.DisableDefaultLogging = s.DisableDefaultLogging);
         CopyIfSet(target, source, nameof(RynOptions.CrossOriginIsolation), static (t, s) => t.CrossOriginIsolation = s.CrossOriginIsolation);
+        CopyIfSet(target, source, nameof(RynOptions.MaxRequestBodyBytes), static (t, s) => t.MaxRequestBodyBytes = s.MaxRequestBodyBytes);
+        CopyIfSet(target, source, nameof(RynOptions.IpcCommandTimeout), static (t, s) => t.IpcCommandTimeout = s.IpcCommandTimeout);
 
         // Get-only collections aren't config-bound, so a non-empty programmatic collection simply replaces
         // the (empty) target. An empty programmatic collection is treated as "not configured" and left alone.
@@ -299,6 +326,8 @@ public sealed class RynApplicationBuilder
         {
             target.CustomSchemes.Clear();
             foreach (var scheme in source.CustomSchemes) target.CustomSchemes.Add(scheme);
+            target.CustomSchemeHandlers.Clear();
+            foreach (var handler in source.CustomSchemeHandlers) target.CustomSchemeHandlers.Add(handler);
         }
 
         if (source.BrowserFlags.Count > 0)
@@ -329,6 +358,27 @@ public sealed class RynApplicationBuilder
         if (options.LocalServerPort is < 1 or > 65535)
             throw new InvalidOperationException(
                 $"RynOptions.LocalServerPort must be in the range 1..65535 (was {options.LocalServerPort.ToString(CultureInfo.InvariantCulture)}).");
+        if (options.MaxRequestBodyBytes <= 0)
+            throw new InvalidOperationException($"RynOptions.MaxRequestBodyBytes must be greater than 0 (was {options.MaxRequestBodyBytes.ToString(CultureInfo.InvariantCulture)}).");
+
+        if (options.IpcCommandTimeout <= TimeSpan.Zero)
+            throw new InvalidOperationException($"RynOptions.IpcCommandTimeout must be greater than 0 (was {options.IpcCommandTimeout}).");
+
+        var schemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var scheme in options.CustomSchemes)
+        {
+            if (string.IsNullOrWhiteSpace(scheme) || !Uri.CheckSchemeName(scheme) || string.Equals(scheme, "ryn", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"RynOptions.CustomSchemes contains invalid or reserved scheme '{scheme}'.");
+            if (!schemes.Add(scheme))
+                throw new InvalidOperationException($"RynOptions.CustomSchemes contains duplicate scheme '{scheme}'.");
+        }
+
+        var handlers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var customScheme in options.CustomSchemeHandlers)
+        {
+            if (!schemes.Contains(customScheme.Scheme) || !handlers.Add(customScheme.Scheme))
+                throw new InvalidOperationException($"RynOptions.CustomSchemeHandlers contains an undeclared or duplicate scheme '{customScheme.Scheme}'.");
+        }
     }
 }
 

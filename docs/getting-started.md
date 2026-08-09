@@ -380,7 +380,7 @@ use page CSS pixels; Ryn converts them to native coordinates automatically.
 | Plugin | Package | Registration | Commands |
 |--------|---------|-------------|----------|
 | FileSystem | `Ryn.Plugins.FileSystem` | `AddRynFileSystem(opts => ...)` | `fs.readTextFile`, `fs.writeTextFile`, `fs.readDir`, `fs.stat`, `fs.exists`, `fs.mkdir`, `fs.remove` |
-| Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save` |
+| Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`, plus secure picker commands below |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
 | Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptyMetrics`, `shell.ptyKill` |
 | Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.sendWithSound`, `notification.sendWithIcon`, `notification.sendWithId`, `notification.isSupported`, `notification.isPermissionGranted`, `notification.requestPermission` |
@@ -389,16 +389,12 @@ use page CSS pixels; Ryn converts them to native coordinates automatically.
 | MenuBar | `Ryn.Plugins.MenuBar` | `AddRynMenuBar(opts => ...)` | `menubar.setMenu`, `menubar.reset` |
 | Badge | `Ryn.Plugins.Badge` | `AddRynBadge()` | `badge.set`, `badge.setCount`, `badge.clear` |
 | GlobalShortcut | `Ryn.Plugins.GlobalShortcut` | `AddRynGlobalShortcut()` | `globalShortcut.register`, `globalShortcut.unregister`, `globalShortcut.isRegistered`, `globalShortcut.unregisterAll` |
-| WebViewPane | `Ryn.Plugins.WebViewPane` | `AddRynWebViewPane()` | `webviewPane.open`, `webviewPane.close`, `webviewPane.setBounds`, `webviewPane.setBackground`, `webviewPane.navigate`, `webviewPane.back`, `webviewPane.forward`, `webviewPane.reload`, `webviewPane.setZoom`, `webviewPane.setDevTools`, `webviewPane.setUserAgent`, `webviewPane.setSuspended`, `webviewPane.reloadFromCrash`, `webviewPane.screenshot`, `webviewPane.find`, `webviewPane.findNext`, `webviewPane.findStop`, `webviewPane.resolvePermission`, `webviewPane.resolveDownload`, `webviewPane.cdpCall`, `webviewPane.cdpSubscribe`, `webviewPane.execute`, `webviewPane.eval`, `webviewPane.url`, `webviewPane.list` |
+| WebViewPane | `Ryn.Plugins.WebViewPane` | `AddRynWebViewPane()` | `webviewPane.open`, `webviewPane.close`, `webviewPane.setBounds`, `webviewPane.navigate`, `webviewPane.reload`, `webviewPane.resolvePermission`, `webviewPane.resolveDownload`, `webviewPane.screenshot`, `webviewPane.execute`, `webviewPane.eval`, `webviewPane.list` |
 | Updater | `Ryn.Plugins.Updater` | `AddRynUpdater(opts => ...)` | `updater.check`, `updater.download`, `updater.apply` |
 
-The file pickers (`dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`) resolve to
-the picked path (`openFiles`: a JSON array of paths), `null` when the user cancels, and reject with an
-error when the dialog itself fails. The initial path is best-effort: a leading `~` expands, a file path
-means its directory, and unusable paths (relative or nonexistent) fall back to the platform's default
-location instead of failing.
+The picker commands accept an options object with `Title`, `Filters` (each filter has `Name` and `Extensions`), `Multiple`, `InitialPath`, and `SuggestedFileName` (save only). `dialog.openFile`, `dialog.openFolder`, and `dialog.save` return one path; `dialog.openFiles` returns a JSON array. All return `null` on cancellation and reject when the native dialog fails. `InitialPath` is best-effort.
 
-> **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
+For a scoped filesystem capability, use `dialog.openFileSecure`, `dialog.openFilesSecure`, `dialog.openFolderSecure`, or `dialog.saveSecure`. These return opaque `ryn-grant-...` tokens rather than native paths; the corresponding grants authorize read, enumerate, or create/write access for the selected entry. Resolve tokens in host code through `IFileAccessGrants`. The browser `FileDrop` event intentionally exposes names only, not native paths, so browser drops cannot produce secure filesystem grants.
 
 Plugins that access the filesystem or shell require configuration for safety:
 
@@ -409,6 +405,18 @@ services.AddRynFileSystem(fs =>
 services.AddRynShell(shell =>
     shell.AllowedCommands.AddRange(["echo", "git", "ls"]));
 ```
+
+`IRynPaths` is available from DI for stable absolute directories such as `LocalAppData`, `RoamingAppData`, `Documents`, `Cache`, `Temp`, `ResourceDirectory`, and `InstallDirectory`:
+
+```csharp
+public sealed class PathsService(IRynPaths paths)
+{
+    public string CacheDirectory => paths.Cache;
+}
+```
+
+> **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
+
 
 ## 7. Build for Production
 
@@ -509,7 +517,7 @@ opts.Html = "<html><body><h1>Hello</h1></body></html>";
 opts.Url = new Uri("http://localhost:5173");
 ```
 
-With `ContentDirectory`, files are served through the `ryn://` custom scheme, keeping IPC same-origin. Changes to files on disk are reflected on browser refresh without restarting the app.
+With `ContentDirectory`, files are served through the `ryn://` custom scheme, keeping IPC same-origin. Built-in file I/O runs off the scheme callback thread. Custom and built-in file ranges return only the selected bytes (`206`) and bound materialized memory for partial loads; Saucer's contiguous stash means the selected response or range is materialized before native acceptance rather than streamed zero-copy. Changes to files on disk are reflected on browser refresh without restarting the app.
 
 ## 10. Windows Compatibility Note
 

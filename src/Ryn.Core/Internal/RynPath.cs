@@ -50,4 +50,74 @@ internal static class RynPath
         return candidate.Equals(root, comparison)
             || candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
+    /// <summary>
+    /// Returns the fully canonical absolute form of <paramref name="path"/>, following symlinks at
+    /// every existing component. For a target that does not yet exist, the longest existing ancestor
+    /// is canonicalized and the remaining lexical segments are appended.
+    /// </summary>
+    /// <remarks>Relative link targets are resolved against the link's parent, with a hop cap to avoid cycles.</remarks>
+    internal static string Canonicalize(string path)
+    {
+        var full = Path.GetFullPath(path);
+
+        var existing = full;
+        var remainder = new Stack<string>();
+        while (!File.Exists(existing) && !Directory.Exists(existing))
+        {
+            var parent = Path.GetDirectoryName(existing);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, existing, StringComparison.Ordinal))
+            {
+                existing = string.Empty;
+                break;
+            }
+
+            remainder.Push(Path.GetFileName(existing));
+            existing = parent;
+        }
+
+        var real = string.IsNullOrEmpty(existing) ? full : ResolveAllLinks(existing);
+        while (remainder.Count > 0)
+            real = Path.Combine(real, remainder.Pop());
+
+        return Path.GetFullPath(real);
+    }
+
+    private static string ResolveAllLinks(string existingAbsolutePath)
+    {
+        var root = Path.GetPathRoot(existingAbsolutePath);
+        if (string.IsNullOrEmpty(root))
+            return existingAbsolutePath;
+
+        var components = existingAbsolutePath[root.Length..]
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var current = root;
+        foreach (var component in components)
+        {
+            current = Path.Combine(current, component);
+            for (var hop = 0; hop < 40; hop++)
+            {
+                string? target;
+                try
+                {
+                    FileSystemInfo info = Directory.Exists(current)
+                        ? new DirectoryInfo(current)
+                        : new FileInfo(current);
+                    target = info.LinkTarget;
+                }
+                catch (IOException)
+                {
+                    break;
+                }
+
+                if (target is null)
+                    break;
+
+                current = Path.GetFullPath(Path.IsPathRooted(target)
+                    ? target
+                    : Path.Combine(Path.GetDirectoryName(current) ?? root, target));
+            }
+        }
+
+        return current;
+    }
 }

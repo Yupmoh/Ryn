@@ -43,6 +43,8 @@ public sealed class RynOptions
     private bool _captureUnhandledExceptions;
     private bool _disableDefaultLogging;
     private bool _crossOriginIsolation;
+    private long _maxRequestBodyBytes = 32L * 1024 * 1024;
+    private TimeSpan _ipcCommandTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Reverse-DNS application identifier (e.g. "com.example.myapp").</summary>
     public string ApplicationId { get => _applicationId; set => Set(ref _applicationId, value); }
@@ -193,6 +195,12 @@ public sealed class RynOptions
     /// </summary>
     public bool CrossOriginIsolation { get => _crossOriginIsolation; set => Set(ref _crossOriginIsolation, value); }
 
+    /// <summary>Maximum number of bytes accepted in a local-server request body. Default is 32 MiB.</summary>
+    public long MaxRequestBodyBytes { get => _maxRequestBodyBytes; set => Set(ref _maxRequestBodyBytes, value); }
+
+    /// <summary>Maximum time JavaScript IPC commands may wait for a host response. Default is 30 seconds.</summary>
+    public TimeSpan IpcCommandTimeout { get => _ipcCommandTimeout; set => Set(ref _ipcCommandTimeout, value); }
+
     /// <summary>Custom URL schemes to register for deep linking (e.g., "myapp").</summary>
     public IList<string> DeepLinkSchemes { get; } = new List<string>();
 
@@ -207,6 +215,8 @@ public sealed class RynOptions
     /// the engine before the webview exists.
     /// </summary>
     public IList<string> CustomSchemes { get; } = new List<string>();
+    /// <summary>Handlers attached to the declared custom schemes before initial navigation.</summary>
+    internal IList<RynCustomScheme> CustomSchemeHandlers { get; } = new List<RynCustomScheme>();
 
     /// <summary>
     /// Engine-specific flags passed to the underlying webview before it is created — the lever for opting into
