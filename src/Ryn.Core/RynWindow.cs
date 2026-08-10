@@ -307,7 +307,16 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (Saucer.saucer_window_maximized(_window) == 0) { _normalX = x; _normalY = y; }
     }
 
-    public void StartDrag() => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_drag(_window); });
+    public void StartDrag() => RunOnUi(() =>
+    {
+        if (_window == null) return;
+        if (OperatingSystem.IsWindows())
+        {
+            WindowsWindowDrag.Start(GetNativeWindowHandle());
+            return;
+        }
+        Saucer.saucer_window_start_drag(_window);
+    });
 
     public void StartResize(WindowEdge edge) => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); });
 
