@@ -81,7 +81,7 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y clang-20 libc++-20-dev libc++abi-20-dev ninja-build python3-venv libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libjson-glib-dev
+          DEBIAN_FRONTEND=noninteractive apt-get install -y clang-20 libc++-20-dev libc++abi-20-dev gcc ninja-build python3-venv libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libjson-glib-dev
           python3 -m venv /opt/cmake
           /opt/cmake/bin/pip install 'cmake>=3.31,<4'
           echo /opt/cmake/bin >> "$GITHUB_PATH"
