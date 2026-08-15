@@ -48,7 +48,7 @@ jobs:
           - os: ubuntu-latest
             backend: WebKitGtk
             rid: linux-x64
-            cmake-args: ""
+            cmake-args: -Dsaucer_no_compiler_version_check=ON
             lib-prefix: lib
             lib-ext: .so
             archive-ext: .tar.gz
