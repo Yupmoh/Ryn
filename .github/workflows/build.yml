@@ -13,7 +13,7 @@ permissions:
 # redundant 9-job matrices. Pushes to main keep their own group per-SHA so main builds aren't
 # cancelled by a follow-up commit racing in.
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
