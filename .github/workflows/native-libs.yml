@@ -93,7 +93,7 @@ jobs:
       # its co-located siblings at runtime ($ORIGIN / @loader_path) instead of the build path.
       - name: Configure
         run: >
-          cmake -S vendor/saucer-bindings -B build/native
+          cmake -S vendor/saucer-bindings -B build/native -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -Dsaucer_backend=${{ matrix.backend }}
           -Dsaucer_bindings_modules="${{ env.SAUCER_MODULES }}"
