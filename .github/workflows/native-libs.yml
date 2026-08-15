@@ -73,7 +73,7 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates
 
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -186,7 +186,7 @@ jobs:
       contents: write   # create/update the native-v* GitHub release with the built libs
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
