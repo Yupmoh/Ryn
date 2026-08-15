@@ -52,7 +52,7 @@ jobs:
             lib-prefix: lib
             lib-ext: .so
             archive-ext: .tar.gz
-            container: archlinux:base-devel
+            container: ubuntu:24.04
             rpath: "$ORIGIN"
 
           - os: windows-latest
@@ -71,7 +71,7 @@ jobs:
     steps:
       - name: Install git (Linux container)
         if: matrix.rid == 'linux-x64'
-        run: pacman --noconfirm -Syu git
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -79,7 +79,7 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.rid == 'linux-x64'
-        run: pacman --noconfirm -Syu cmake gcc ninja gtk4 libadwaita webkitgtk-6.0
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y cmake g++ ninja-build libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
 
       # Note: no CMAKE_*_OUTPUT_DIRECTORY override — in the Linux container job that path
       # (${{ github.workspace }}) resolves to the host mount, not the in-container workdir, so
