@@ -9,7 +9,7 @@
 #
 # To (re)generate from the authoritative GitHub release archives:
 #   ./build/download-native.sh pin            # all RIDs
-#   ./build/download-native.sh pin osx-arm64  # one RID
+#   ./build/download-native.sh pin osx-x64    # one RID
 # then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}
 # from the latest native-v* release and run  shasum -a 256 <archive>.)
 c6dfb9ec8fad68d9968fed65c0ca94704d9e1137fd4cc50b9b3ba6be5141b083  saucer-bindings-osx-arm64.tar.gz

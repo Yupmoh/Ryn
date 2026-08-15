@@ -7,7 +7,7 @@ set -euo pipefail
 # Usage:
 #   ./build/download-native.sh              # download for current platform
 #   ./build/download-native.sh all          # download for all platforms
-#   ./build/download-native.sh osx-arm64    # download for specific RID
+#   ./build/download-native.sh osx-x64      # download for specific RID
 #   ./build/download-native.sh pin [rid...] # (re)pin native-checksums.txt from the release archives
 #
 # Downloads are verified against build/native-checksums.txt and fail CLOSED: a checksum mismatch or a
@@ -174,7 +174,7 @@ pin_checksums() {
         echo "#"
         echo "# To (re)generate from the authoritative GitHub release archives:"
         echo "#   ./build/download-native.sh pin            # all RIDs"
-        echo "#   ./build/download-native.sh pin osx-arm64  # one RID"
+        echo "#   ./build/download-native.sh pin osx-x64    # one RID"
         echo "# then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}"
         echo "# from the latest native-v* release and run  shasum -a 256 <archive>.)"
     } > "$tmp_pins"
@@ -236,7 +236,7 @@ download_rid() {
     echo "    Done: $(ls "$dest")"
 }
 
-ALL_RIDS=(osx-arm64 linux-x64 win-x64)
+ALL_RIDS=(osx-arm64 osx-x64 linux-x64 win-x64)
 
 case "${1:-}" in
     pin|--update-checksums)

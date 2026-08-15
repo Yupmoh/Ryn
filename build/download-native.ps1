@@ -14,7 +14,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Repo = "Yupmoh/Ryn"
 $InteropDir = Join-Path (Join-Path $RepoRoot "src") "Ryn.Interop"
 
-$AllRids = @("osx-arm64", "linux-x64", "win-x64")
+$AllRids = @("osx-arm64", "osx-x64", "linux-x64", "win-x64")
 
 function Get-GitHubToken {
     if ($env:GITHUB_TOKEN) { return $env:GITHUB_TOKEN }

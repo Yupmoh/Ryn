@@ -35,10 +35,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15
             rid: osx-arm64
             binary: Ryn.Cli
             asset: ryn-osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
+            binary: Ryn.Cli
+            asset: ryn-osx-x64
           - os: ubuntu-latest
             rid: linux-x64
             binary: Ryn.Cli
@@ -108,7 +112,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RIDS="osx-arm64 linux-x64 win-x64"
+          RIDS="osx-arm64 osx-x64 linux-x64 win-x64"
 
           # Resolve the native-libs release by tag (don't rely on "latest" — version releases are
           # prereleases too, so GitHub may report no latest). --json/--jq avoids tab-capture bugs.
@@ -194,6 +198,7 @@ jobs:
           rid_files() {
             case "$1" in
               osx-arm64) echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
+              osx-x64)   echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
               linux-x64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so" ;;
               win-x64)   echo "saucer.dll saucer-bindings.dll saucer-bindings-desktop.dll WebView2Loader.dll" ;;
             esac
@@ -204,7 +209,7 @@ jobs:
             echo "== native assets in $(basename "$pkg") =="
             local contents; contents=$(unzip -l "$pkg")
             local rid f
-            for rid in osx-arm64 linux-x64 win-x64; do
+            for rid in osx-arm64 osx-x64 linux-x64 win-x64; do
               for f in $(rid_files "$rid"); do
                 if echo "$contents" | grep -qF "runtimes/${rid}/native/${f}"; then
                   echo "  OK: ${rid}/${f}"

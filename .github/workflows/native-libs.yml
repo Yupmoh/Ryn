@@ -7,6 +7,7 @@ on:
     paths:
       - "vendor/saucer-bindings"
       - ".github/workflows/native-libs.yml"
+      - "build/saucer-macos13.patch"
 
 permissions:
   contents: read
@@ -24,10 +25,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15
             backend: WebKit
             rid: osx-arm64
-            cmake-args: -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+            cmake-args: -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+            cc-args: -arch arm64 -mmacosx-version-min=13.3
+            lib-prefix: lib
+            lib-ext: .dylib
+            archive-ext: .tar.gz
+            rpath: "@loader_path"
+
+          - os: macos-15-intel
+            backend: WebKit
+            rid: osx-x64
+            cmake-args: -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+            cc-args: -arch x86_64 -mmacosx-version-min=13.3
             lib-prefix: lib
             lib-ext: .dylib
             archive-ext: .tar.gz
@@ -85,6 +97,18 @@ jobs:
           -DCMAKE_INSTALL_RPATH='${{ matrix.rpath }}'
           ${{ matrix.cmake-args }}
 
+      - name: Patch Saucer for macOS 13
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          SAUCER_SRC=$(find build/native/_deps -maxdepth 1 -type d -name 'saucer-src' -print -quit)
+          if [ -z "$SAUCER_SRC" ]; then
+            echo "::error::Saucer source directory was not created during configure."
+            exit 1
+          fi
+          git -C "$SAUCER_SRC" apply --check "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
+          git -C "$SAUCER_SRC" apply "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
+
       - name: Build
         run: cmake --build build/native --config Release
 
@@ -117,7 +141,21 @@ jobs:
         run: |
           PTY_SRC="src/Ryn.Plugins.Shell/native/ryn_pty.c"
           PTY_LIB="${{ matrix.lib-prefix }}ryn-pty${{ matrix.lib-ext }}"
-          cc -shared -fPIC -O2 -lutil -o "staging/$PTY_LIB" "$PTY_SRC"
+          cc -shared -fPIC -O2 ${{ matrix.cc-args }} -lutil -o "staging/$PTY_LIB" "$PTY_SRC"
+
+      - name: Verify native compatibility (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          EXPECTED="${{ matrix.rid == 'osx-x64' && 'x86_64' || 'arm64' }}"
+          test "$(uname -m)" = "$EXPECTED"
+          for LIB in staging/*.dylib; do
+            lipo "$LIB" -verify_arch "$EXPECTED"
+            MIN_OS=$(otool -l "$LIB" | awk '/minos / { print $2; exit }')
+            test "$MIN_OS" = "13.3"
+            file "$LIB"
+            echo "  deployment target: macOS $MIN_OS"
+          done
 
       - name: Package (tar.gz)
         if: matrix.archive-ext == '.tar.gz'

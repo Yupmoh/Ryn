@@ -1,0 +1,23 @@
+diff --git a/src/wk.webview.mm b/src/wk.webview.mm
+index 2fb5f79..51e45f0 100644
+--- a/src/wk.webview.mm
++++ b/src/wk.webview.mm
+@@ -42,8 +42,17 @@ namespace saucer
+         [platform->web_view.get() setNavigationDelegate:platform->navigation_delegate.get()];
+ 
+         auto *const uuid  = native::data_store_id(opts, parent->native<false>()->platform->id);
+-        auto *const store = [WKWebsiteDataStore dataStoreForIdentifier:uuid];
++        WKWebsiteDataStore *store;
++
++        if (@available(macOS 14.0, *))
++        {
++            store = [WKWebsiteDataStore dataStoreForIdentifier:uuid];
++        }
++        else
++        {
++            store = opts.persistent_cookies ? [WKWebsiteDataStore defaultDataStore] : [WKWebsiteDataStore nonPersistentDataStore];
++        }
+ 
+         [uuid autorelease];
+ 
+         [platform->config.get() setWebsiteDataStore:store];

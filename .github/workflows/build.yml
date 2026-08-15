@@ -46,12 +46,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
         configuration: [Debug, Release]
 
         include:
-          - os: macos-latest
+          - os: macos-15
             rid: osx-arm64
+            archive-ext: .tar.gz
+          - os: macos-15-intel
+            rid: osx-x64
             archive-ext: .tar.gz
           - os: ubuntu-latest
             rid: linux-x64
@@ -160,7 +163,7 @@ jobs:
       # dependency. Runs once (macOS/Release leg) since the package graph is identical across the
       # matrix; needs network to reach the advisory DB.
       - name: NuGet vulnerability audit
-        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        if: matrix.os == 'macos-15' && matrix.configuration == 'Release'
         shell: bash
         run: |
           echo "Auditing restored packages against the GitHub Advisory Database..."
@@ -230,7 +233,7 @@ jobs:
       # graph is platform-independent so a single leg is sufficient. It builds its own consumer project,
       # so no --no-build here.
       - name: Package smoke test
-        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        if: matrix.os == 'macos-15' && matrix.configuration == 'Release'
         run: dotnet test tests/Ryn.PackageTests/Ryn.PackageTests.csproj -c ${{ matrix.configuration }} --filter "Category=Package" --logger "trx;LogFileName=package-results.trx"
 
       # Pack guard: `dotnet pack` runs only at release time (release.yml), so packaging regressions slip past
@@ -242,7 +245,7 @@ jobs:
       # package graph is platform-independent. No --no-build: the Ryn bundle resolves project references during
       # pack (NETSDK1085 under --no-build).
       - name: Pack guard (solution packs, every snupkg non-empty)
-        if: matrix.os == 'macos-latest' && matrix.configuration == 'Release'
+        if: matrix.os == 'macos-15' && matrix.configuration == 'Release'
         shell: bash
         run: |
           rm -rf ./pack-guard-out

@@ -29,8 +29,10 @@ jobs:
             rid: linux-x64
           - os: windows-latest
             rid: win-x64
-          - os: macos-latest
+          - os: macos-15
             rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
 
     runs-on: ${{ matrix.os }}
 
