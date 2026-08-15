@@ -79,7 +79,12 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.rid == 'linux-x64'
-        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y cmake g++ ninja-build libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y g++ ninja-build python3-venv libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libjson-glib-dev
+          python3 -m venv /opt/cmake
+          /opt/cmake/bin/pip install 'cmake>=3.31,<4'
+          echo /opt/cmake/bin >> "$GITHUB_PATH"
 
       # Note: no CMAKE_*_OUTPUT_DIRECTORY override — in the Linux container job that path
       # (${{ github.workspace }}) resolves to the host mount, not the in-container workdir, so
