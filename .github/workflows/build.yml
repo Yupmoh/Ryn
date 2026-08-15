@@ -185,9 +185,10 @@ jobs:
         shell: bash
         run: |
           SRC="src/Ryn.Interop/runtimes/${{ matrix.rid }}/native"
-          DEST="tests/Ryn.Integration.Tests/bin/${{ matrix.configuration }}/net10.0/runtimes/${{ matrix.rid }}/native"
-          mkdir -p "$DEST"
+          DEST="tests/Ryn.Integration.Tests/bin/${{ matrix.configuration }}/net10.0"
           cp "$SRC"/* "$DEST/"
+          mkdir -p "$DEST/runtimes/${{ matrix.rid }}/native"
+          cp "$SRC"/* "$DEST/runtimes/${{ matrix.rid }}/native/"
 
       # Always runs — native libs are guaranteed present by the verify step above, so a missing-lib
       # situation fails the job loudly instead of silently skipping integration coverage.
