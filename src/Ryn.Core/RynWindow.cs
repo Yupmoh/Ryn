@@ -493,6 +493,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                     Saucer.saucer_window_set_maximized(_window, 1);
                 }
             }
+            else
+            {
+                ApplyInitialPlacement();
+            }
+        }
+        else
+        {
+            ApplyInitialPlacement();
         }
 
         SubscribeWindowEvents();
@@ -676,6 +684,31 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             ApplyDefaultIcon();
         }
         if (_options.DevTools) { Saucer.saucer_webview_set_dev_tools(_webview, 1); Saucer.saucer_webview_set_context_menu(_webview, 1); }
+    }
+
+    /// <summary>
+    /// Applies create-time origin / maximize from <see cref="RynOptions"/> after the HWND exists and
+    /// before <c>saucer_window_show</c>, so the first paint is already at the saved/centered position.
+    /// Unset X/Y keep saucer's default (typically centered). Persist restore still overrides this later.
+    /// </summary>
+    private void ApplyInitialPlacement()
+    {
+        if (_options.IsSet(nameof(RynOptions.X)) || _options.IsSet(nameof(RynOptions.Y)))
+        {
+            int currentX, currentY;
+            Saucer.saucer_window_position(_window, &currentX, &currentY);
+            var x = _options.IsSet(nameof(RynOptions.X)) ? _options.X : currentX;
+            var y = _options.IsSet(nameof(RynOptions.Y)) ? _options.Y : currentY;
+            var (clampedX, clampedY) = ClampToScreen(x, y, _cachedWidth, _cachedHeight);
+            Saucer.saucer_window_set_position(_window, clampedX, clampedY);
+            _cachedX = clampedX;
+            _cachedY = clampedY;
+            _normalX = clampedX;
+            _normalY = clampedY;
+        }
+
+        if (_options.IsSet(nameof(RynOptions.IsMaximized)) && _options.IsMaximized)
+            Saucer.saucer_window_set_maximized(_window, 1);
     }
 
     private static byte[]? _defaultIconBytes;
@@ -1001,12 +1034,17 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     }
 
     /// <summary>
-    /// Clamps a restored window's top-left so it stays on the window's current screen (ARC-05). A state file
-    /// saved on a larger or now-disconnected monitor would otherwise place the window partly or wholly
-    /// off-screen. Falls back to the requested coordinates if the screen bounds can't be read.
+    /// Clamps a create-time or restored origin onto a visible monitor. Prefers the monitor that
+    /// contains the origin (or intersects the window); origins that miss every screen — including
+    /// the Windows <c>-32000</c> sentinel — fall back to the first connected display. Falls back
+    /// to the window's current screen, then the requested coordinates, if the display list is empty.
     /// </summary>
     private (int X, int Y) ClampToScreen(int x, int y, int width, int height)
     {
+        var screens = WindowPlacement.ReadScreens(_host?.App);
+        if (screens.Length > 0)
+            return WindowPlacement.ClampToVisibleMonitor(x, y, width, height, screens);
+
         var screen = Saucer.saucer_window_screen(_window);
         if (screen == null) return (x, y);
         int sx, sy, sw, sh;
@@ -1014,11 +1052,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         Saucer.saucer_screen_size(screen, &sw, &sh);
         Saucer.saucer_screen_free(screen);
         if (sw <= 0 || sh <= 0) return (x, y);
-        // Keep the whole window on screen where it fits; if it's wider/taller than the screen, pin to the
-        // top-left so the title bar / window controls stay reachable.
-        var maxX = sx + Math.Max(0, sw - width);
-        var maxY = sy + Math.Max(0, sh - height);
-        return (Math.Clamp(x, sx, maxX), Math.Clamp(y, sy, maxY));
+        return new WindowPlacement.ScreenBounds(sx, sy, sw, sh).Clamp(x, y, width, height);
     }
 
     /// <summary>Computes the top-left that centers the window on its current screen. Returns false (leaving the

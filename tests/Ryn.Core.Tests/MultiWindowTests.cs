@@ -29,6 +29,9 @@ public sealed class MultiWindowTests
         options.TitleBarStyle.Should().Be(TitleBarStyle.Native);
         options.AllowedOrigins.Should().BeEmpty();
         options.CustomSchemes.Should().BeEmpty();
+        options.X.Should().BeNull();
+        options.Y.Should().BeNull();
+        options.IsMaximized.Should().BeNull();
     }
 
     [Fact]
@@ -39,6 +42,9 @@ public sealed class MultiWindowTests
             Title = "Second",
             Width = 321,
             Height = 222,
+            X = 200,
+            Y = 120,
+            IsMaximized = true,
             MinWidth = 200,
             MinHeight = 150,
             MaxWidth = 1920,
@@ -65,6 +71,12 @@ public sealed class MultiWindowTests
         projected.Title.Should().Be("Second");
         projected.Width.Should().Be(321);
         projected.Height.Should().Be(222);
+        projected.X.Should().Be(200);
+        projected.Y.Should().Be(120);
+        projected.IsMaximized.Should().BeTrue();
+        projected.IsSet(nameof(RynOptions.X)).Should().BeTrue();
+        projected.IsSet(nameof(RynOptions.Y)).Should().BeTrue();
+        projected.IsSet(nameof(RynOptions.IsMaximized)).Should().BeTrue();
         projected.MinWidth.Should().Be(200);
         projected.MinHeight.Should().Be(150);
         projected.MaxWidth.Should().Be(1920);
@@ -93,6 +105,16 @@ public sealed class MultiWindowTests
 
         projected.Html.Should().Be("<h1>hi</h1>");
         projected.Url.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToRynOptions_OmitsUnsetPlacement()
+    {
+        var projected = new RynWindowOptions().ToRynOptions();
+
+        projected.IsSet(nameof(RynOptions.X)).Should().BeFalse();
+        projected.IsSet(nameof(RynOptions.Y)).Should().BeFalse();
+        projected.IsSet(nameof(RynOptions.IsMaximized)).Should().BeFalse();
     }
 
     // ---- Ambient current-window routing (the per-window dispatch seam) -------------------------------

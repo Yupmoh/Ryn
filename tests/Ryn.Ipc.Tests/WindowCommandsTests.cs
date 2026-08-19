@@ -102,6 +102,54 @@ public sealed class WindowCommandsTests
         window.Received(1).Move(10, 20);
     }
 
+    [Fact]
+    public async Task Open_ForwardsPlacementToWindowOptions()
+    {
+        var window = Substitute.For<IRynWindow>();
+        window.Id.Returns(7);
+        var manager = new CapturingWindowManager(window);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(new CurrentWindowAccessor(new NativeApplicationAccessor()));
+        services.AddSingleton<IRynWindowManager>(manager);
+        services.AddWindowCommands();
+        var provider = services.BuildServiceProvider();
+        var dispatcher = new RynCommandDispatcher(
+            provider.GetServices<ICommandRouter>().ToArray(), provider, RynCapabilities.AllowAll());
+
+        CurrentWindow.Value = window;
+        string result;
+        try
+        {
+            result = await dispatcher.DispatchAsync(
+                "window.open",
+                JsonArgs("{\"title\":\"Panel\",\"x\":200,\"y\":120,\"isMaximized\":true,\"html\":\"<h1>hi</h1>\"}"));
+        }
+        finally { CurrentWindow.Value = null; }
+
+        result.Should().Be("\"7\"");
+        manager.Last.Should().NotBeNull();
+        manager.Last!.Title.Should().Be("Panel");
+        manager.Last.X.Should().Be(200);
+        manager.Last.Y.Should().Be(120);
+        manager.Last.IsMaximized.Should().BeTrue();
+        manager.Last.Html.Should().Be("<h1>hi</h1>");
+    }
+
+    private sealed class CapturingWindowManager(IRynWindow window) : IRynWindowManager
+    {
+        public RynWindowOptions? Last { get; private set; }
+        public IReadOnlyList<IRynWindow> Windows => [window];
+        public IRynWindow OpenWindow(RynWindowOptions options)
+        {
+            Last = options;
+            return window;
+        }
+
+        public Task<IRynWindow> OpenWindowAsync(RynWindowOptions options) =>
+            Task.FromResult(OpenWindow(options));
+    }
+
     private static (RynCommandDispatcher Dispatcher, IRynWindow Window) BuildWindowDispatcher()
     {
         var window = Substitute.For<IRynWindow>();

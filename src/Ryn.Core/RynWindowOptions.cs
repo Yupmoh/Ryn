@@ -17,6 +17,15 @@ public sealed class RynWindowOptions
     /// <summary>Initial window height in pixels.</summary>
     public int Height { get; set; } = 600;
 
+    /// <summary>Initial windowed origin X. <c>null</c> keeps the platform default (typically centered).</summary>
+    public int? X { get; set; }
+
+    /// <summary>Initial windowed origin Y. <c>null</c> keeps the platform default (typically centered).</summary>
+    public int? Y { get; set; }
+
+    /// <summary>When <c>true</c>, map the window maximized on first show. <c>null</c> keeps the windowed default.</summary>
+    public bool? IsMaximized { get; set; }
+
     /// <summary>Minimum width in pixels the user can resize to (0 = no minimum). Enforced natively.</summary>
     public int MinWidth { get; set; }
 
@@ -128,6 +137,10 @@ public sealed class RynWindowOptions
         };
         foreach (var origin in AllowedOrigins) options.AllowedOrigins.Add(origin);
         foreach (var scheme in CustomSchemes) options.CustomSchemes.Add(scheme);
+        if (X is { } x) options.X = x;
+        if (Y is { } y) options.Y = y;
+        if (IsMaximized is { } maximized) options.IsMaximized = maximized;
+
         foreach (var flag in BrowserFlags) options.BrowserFlags.Add(flag);
         return options;
     }

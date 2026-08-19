@@ -18,6 +18,9 @@ public sealed class RynOptions
     private string _title = "Ryn Application";
     private int _width = 800;
     private int _height = 600;
+    private int _x;
+    private int _y;
+    private bool _isMaximized;
     private int _minWidth;
     private int _minHeight;
     private int _maxWidth;
@@ -57,6 +60,29 @@ public sealed class RynOptions
 
     /// <summary>Initial window height in pixels.</summary>
     public int Height { get => _height; set => Set(ref _height, value); }
+
+    /// <summary>
+    /// Initial windowed origin X, in screen coordinates. Unset keeps the platform default
+    /// (typically centered). Applied when the native window is created, before the first paint.
+    /// Off-screen or invalid values (including the Windows <c>-32000</c> sentinel) are clamped
+    /// onto a visible monitor.
+    /// </summary>
+    public int X { get => _x; set => Set(ref _x, value); }
+
+    /// <summary>
+    /// Initial windowed origin Y, in screen coordinates. Unset keeps the platform default
+    /// (typically centered). Applied when the native window is created, before the first paint.
+    /// Off-screen or invalid values (including the Windows <c>-32000</c> sentinel) are clamped
+    /// onto a visible monitor.
+    /// </summary>
+    public int Y { get => _y; set => Set(ref _y, value); }
+
+    /// <summary>
+    /// When true, the window is mapped maximized on first show with no windowed flash.
+    /// Unset keeps today's restored (windowed) default. After first map,
+    /// <see cref="IRynWindow.ToggleMaximize"/> still controls maximize.
+    /// </summary>
+    public bool IsMaximized { get => _isMaximized; set => Set(ref _isMaximized, value); }
 
     /// <summary>Minimum width in pixels the user can resize the window to (0 = no minimum). Enforced natively by
     /// the OS, so the window simply can't be dragged smaller.</summary>

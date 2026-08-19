@@ -63,8 +63,9 @@ A per-window subset of `RynOptions` (the app-global fields — `ApplicationId`,
 
 | Property | Default | Notes |
 |---|---|---|
-| `Title` | `"Ryn Window"` | |
 | `Width` / `Height` | `800` / `600` | |
+| `X` / `Y` | unset | windowed origin used on first map; omitted keeps the platform default (typically centered). Off-screen / `-32000` origins clamp onto a visible monitor |
+| `IsMaximized` | unset | `true` maps maximized on first show with no windowed flash |
 | `Resizable` | `true` | |
 | `TitleBarStyle` | `Native` | |
 | `Transparent` | `false` | |
@@ -118,8 +119,8 @@ remain expressed in the host page's CSS pixels; Ryn scales them into native coor
 title-bar drag/ignore rectangles follow the same rule.
 
 `window.open` accepts the optional named arguments `title`, `width`, `height`,
-`resizable`, `devTools`, and one of `url` / `html` / `contentDirectory`. Omitted
-fields fall back to the window defaults.
+`x`, `y`, `isMaximized`, `resizable`, `devTools`, and one of `url` / `html` /
+`contentDirectory`. Omitted fields fall back to the window defaults.
 
 ## Capabilities
 

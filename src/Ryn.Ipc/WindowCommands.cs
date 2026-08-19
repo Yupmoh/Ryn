@@ -129,6 +129,9 @@ internal sealed class WindowCommands
         string? title = null,
         int? width = null,
         int? height = null,
+        int? x = null,
+        int? y = null,
+        bool? isMaximized = null,
         bool? resizable = null,
         bool? devTools = null,
         string? url = null,
@@ -139,6 +142,9 @@ internal sealed class WindowCommands
         if (title is not null) options.Title = title;
         if (width is { } w) options.Width = w;
         if (height is { } h) options.Height = h;
+        if (x is { } originX) options.X = originX;
+        if (y is { } originY) options.Y = originY;
+        if (isMaximized is { } maximized) options.IsMaximized = maximized;
         if (resizable is { } r) options.Resizable = r;
         if (devTools is { } d) options.DevTools = d;
         if (url is not null && Uri.TryCreate(url, UriKind.Absolute, out var parsed)) options.Url = parsed;

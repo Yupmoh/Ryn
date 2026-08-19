@@ -199,6 +199,28 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_BindsPlacementFromConfiguration()
+    {
+        var builder = RynApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Ryn:X"] = "200",
+            ["Ryn:Y"] = "120",
+            ["Ryn:IsMaximized"] = "true",
+        });
+
+        await using var app = builder.Build();
+
+        var options = app.Services.GetRequiredService<RynOptions>();
+        options.X.Should().Be(200);
+        options.Y.Should().Be(120);
+        options.IsMaximized.Should().BeTrue();
+        options.IsSet(nameof(RynOptions.X)).Should().BeTrue();
+        options.IsSet(nameof(RynOptions.Y)).Should().BeTrue();
+        options.IsSet(nameof(RynOptions.IsMaximized)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Build_ProgrammaticOptionsOverrideConfig()
     {
         var builder = RynApplication.CreateBuilder(new RynOptions { Title = "Programmatic" });

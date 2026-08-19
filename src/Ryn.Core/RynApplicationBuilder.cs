@@ -231,6 +231,15 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.Height)] is { } height && int.TryParse(height, CultureInfo.InvariantCulture, out var h))
             options.Height = h;
 
+        if (section[nameof(RynOptions.X)] is { } originX && int.TryParse(originX, CultureInfo.InvariantCulture, out var ox))
+            options.X = ox;
+
+        if (section[nameof(RynOptions.Y)] is { } originY && int.TryParse(originY, CultureInfo.InvariantCulture, out var oy))
+            options.Y = oy;
+
+        if (section[nameof(RynOptions.IsMaximized)] is { } isMaximized && bool.TryParse(isMaximized, out var maximized))
+            options.IsMaximized = maximized;
+
         if (section[nameof(RynOptions.MinWidth)] is { } minWidth && int.TryParse(minWidth, CultureInfo.InvariantCulture, out var minW))
             options.MinWidth = minW;
 
@@ -283,6 +292,9 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.Title), static (t, s) => t.Title = s.Title);
         CopyIfSet(target, source, nameof(RynOptions.Width), static (t, s) => t.Width = s.Width);
         CopyIfSet(target, source, nameof(RynOptions.Height), static (t, s) => t.Height = s.Height);
+        CopyIfSet(target, source, nameof(RynOptions.X), static (t, s) => t.X = s.X);
+        CopyIfSet(target, source, nameof(RynOptions.Y), static (t, s) => t.Y = s.Y);
+        CopyIfSet(target, source, nameof(RynOptions.IsMaximized), static (t, s) => t.IsMaximized = s.IsMaximized);
         CopyIfSet(target, source, nameof(RynOptions.MinWidth), static (t, s) => t.MinWidth = s.MinWidth);
         CopyIfSet(target, source, nameof(RynOptions.MinHeight), static (t, s) => t.MinHeight = s.MinHeight);
         CopyIfSet(target, source, nameof(RynOptions.MaxWidth), static (t, s) => t.MaxWidth = s.MaxWidth);

@@ -57,6 +57,26 @@ public sealed class OptionsLayeringRegressionTests
         resolved.Width.Should().Be(800, "an explicitly-assigned programmatic value wins even if it equals the default");
     }
 
+    [Fact]
+    public async Task ConfigPlacement_PlusProgrammaticTitleOnly_KeepsBoth()
+    {
+        var builder = RynApplication.CreateBuilder(new RynOptions { Title = "X" });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Ryn:X"] = "200",
+            ["Ryn:Y"] = "120",
+            ["Ryn:IsMaximized"] = "true",
+        });
+
+        await using var app = builder.Build();
+        var resolved = app.Services.GetRequiredService<RynOptions>();
+
+        resolved.X.Should().Be(200);
+        resolved.Y.Should().Be(120);
+        resolved.IsMaximized.Should().BeTrue();
+        resolved.Title.Should().Be("X");
+    }
+
     // ---- PAP-04: stable cached Options instance ----
 
     [Fact]
