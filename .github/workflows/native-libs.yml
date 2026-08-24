@@ -196,18 +196,19 @@ jobs:
       - name: Get saucer version
         id: version
         run: |
-          cd vendor/saucer-bindings
-          COMMIT=$(git rev-parse --short HEAD)
           # TST-05: read the PROJECT version, not the first "VERSION" token in the file. The naive
           # `grep -oP 'VERSION \K[0-9.]+' | head -1` matched `cmake_minimum_required(VERSION 3.21)`,
           # so every release was tagged native-v3.21-<sha> and the constant prefix made the random
           # short SHA the sole lexicographic sort key. Anchor on the project(...) declaration so the
           # tag carries the real saucer version (e.g. 8.0.4).
-          VERSION=$(grep -oP 'project\s*\([^)]*VERSION\s+\K[0-9]+(\.[0-9]+)*' CMakeLists.txt | head -1)
+          VERSION=$(grep -oP 'project\s*\([^)]*VERSION\s+\K[0-9]+(\.[0-9]+)*' vendor/saucer-bindings/CMakeLists.txt | head -1)
           if [ -z "$VERSION" ]; then
             echo "::error::Could not parse project VERSION from vendor/saucer-bindings/CMakeLists.txt"
             exit 1
           fi
+          # Ryn-owned patches alter the native output without changing the saucer-bindings submodule.
+          # Key the release by this repository commit so patched artifacts never replace an older tag.
+          COMMIT=$(git rev-parse --short HEAD)
           echo "tag=native-v${VERSION}-${COMMIT}" >> "$GITHUB_OUTPUT"
           echo "name=Native Libraries v${VERSION} (${COMMIT})" >> "$GITHUB_OUTPUT"
 
