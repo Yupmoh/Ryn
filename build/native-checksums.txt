@@ -12,7 +12,7 @@
 #   ./build/download-native.sh pin osx-x64    # one RID
 # then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}
 # from the latest native-v* release and run  shasum -a 256 <archive>.)
-38d8b4472d401ff7f10b62bc0e0599faf686b9712093f68bd14a75de790a0a1c  saucer-bindings-osx-arm64.tar.gz
-ec9f8eb60bd2e511684b656affa77406bc44f3e3ecec8c00e07195bc9cff1fe0  saucer-bindings-osx-x64.tar.gz
-03821b803bfd0369d735778c689ad692047213dd8d1d3b8e881abc1116772d04  saucer-bindings-linux-x64.tar.gz
-c220d886c67ab1163f78c56f9b215adf8974ac1a50187c4be37c79e57fb09d3d  saucer-bindings-win-x64.zip
+b41d2653e951eff1c19d0aaebfdc9e91b1346fac8053bcb650dd8f293add2264  saucer-bindings-osx-arm64.tar.gz
+f646f7a05f52c4d0886203ce43f7d3970648edd1cca37c6731cc7da984ee2645  saucer-bindings-osx-x64.tar.gz
+a74aa12eb240748db9ca51e69b7c03abed674883a9e7dcf6deb17facf6828dbf  saucer-bindings-linux-x64.tar.gz
+43450dbec625eb6509a9ff332bc918a9f6cabbd90383b3692f01e066566fdfb5  saucer-bindings-win-x64.zip
