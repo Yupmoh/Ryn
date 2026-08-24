@@ -1,25 +1,32 @@
 using Microsoft.Extensions.DependencyInjection;
 using Ryn.Core;
 
-var app = RynApplication.CreateBuilder()
-    .ConfigureOptions(options =>
+internal static class Program
+{
+    [STAThread]
+    public static void Main()
     {
-        options.ApplicationId = "com.yupmoh.ryn.lifecycle-smoke";
-        options.Title = "Ryn Lifecycle Smoke";
-        options.Html = "<html><body>ready</body></html>";
-        options.PersistWindowState = false;
-    })
-    .ConfigureServices(services => services.AddSingleton<IRynPlugin, ReadyShutdownPlugin>())
-    .Build();
+        var app = RynApplication.CreateBuilder()
+            .ConfigureOptions(options =>
+            {
+                options.ApplicationId = "com.yupmoh.ryn.lifecycle-smoke";
+                options.Title = "Ryn Lifecycle Smoke";
+                options.Html = "<html><body>ready</body></html>";
+                options.PersistWindowState = false;
+            })
+            .ConfigureServices(services => services.AddSingleton<IRynPlugin, ReadyShutdownPlugin>())
+            .Build();
 
-try
-{
-    app.Run();
-    Console.WriteLine("RYN_LIFECYCLE_STOPPED");
-}
-finally
-{
-    app.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        try
+        {
+            app.Run();
+            Console.WriteLine("RYN_LIFECYCLE_STOPPED");
+        }
+        finally
+        {
+            app.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
 }
 
 internal sealed class ReadyShutdownPlugin(
