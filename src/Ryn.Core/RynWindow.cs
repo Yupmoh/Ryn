@@ -1041,7 +1041,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// </summary>
     private (int X, int Y) ClampToScreen(int x, int y, int width, int height)
     {
-        var screens = WindowPlacement.ReadScreens(_host?.App);
+        var screens = _host is null
+            ? Array.Empty<WindowPlacement.ScreenBounds>()
+            : WindowPlacement.ReadScreens(_host.App);
         if (screens.Length > 0)
             return WindowPlacement.ClampToVisibleMonitor(x, y, width, height, screens);
 
