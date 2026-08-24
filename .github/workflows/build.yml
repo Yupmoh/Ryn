@@ -195,6 +195,59 @@ jobs:
       - name: Integration test
         run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category=Integration" --logger "trx;LogFileName=integration-results.trx"
 
+      # IRynApplicationLifetime promises that a background-thread shutdown request closes the native window,
+      # unwinds the platform event loop, and returns from Run. macOS needs a synthetic AppKit event after
+      # NSApplication.stop; without it an idle hosted runner blocks forever despite closing the window.
+      - name: Native lifecycle shutdown smoke
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        timeout-minutes: 1
+        env:
+          GDK_BACKEND: ${{ runner.os == 'Linux' && 'x11' || '' }}
+          GSK_RENDERER: ${{ runner.os == 'Linux' && 'cairo' || '' }}
+          LIBGL_ALWAYS_SOFTWARE: ${{ runner.os == 'Linux' && '1' || '' }}
+          WEBKIT_DISABLE_COMPOSITING_MODE: ${{ runner.os == 'Linux' && '1' || '' }}
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: ${{ runner.os == 'Linux' && '1' || '' }}
+          GTK_A11Y: ${{ runner.os == 'Linux' && 'none' || '' }}
+        run: |
+          $stdoutPath = Join-Path $env:RUNNER_TEMP 'ryn-lifecycle-${{ matrix.rid }}-stdout.txt'
+          $stderrPath = Join-Path $env:RUNNER_TEMP 'ryn-lifecycle-${{ matrix.rid }}-stderr.txt'
+          Remove-Item $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+          $arguments = @(
+            'run', '--no-build', '--configuration', '${{ matrix.configuration }}',
+            '--project', 'tests/Ryn.LifecycleSmoke/Ryn.LifecycleSmoke.csproj'
+          )
+          if ('${{ runner.os }}' -eq 'Linux') {
+            $filePath = 'xvfb-run'
+            $arguments = @('-a', 'dbus-run-session', '--', 'dotnet') + $arguments
+          } else {
+            $filePath = 'dotnet'
+          }
+          $process = Start-Process `
+            -FilePath $filePath `
+            -ArgumentList $arguments `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath
+          if (-not $process.WaitForExit(45000)) {
+            $process.Kill($true)
+            $process.WaitForExit(5000) | Out-Null
+            Get-Content $stdoutPath, $stderrPath -ErrorAction SilentlyContinue | Write-Host
+            throw 'Native lifecycle smoke did not exit within 45 seconds.'
+          }
+          $process.Refresh()
+          $exitCode = $process.ExitCode
+          $output = Get-Content $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+          $output | Write-Host
+          if ($exitCode -ne 0) {
+            throw "Native lifecycle smoke exited with code $exitCode."
+          }
+          $outputText = $output -join "`n"
+          if ($outputText -notmatch 'RYN_LIFECYCLE_READY' -or $outputText -notmatch 'RYN_LIFECYCLE_STOPPED') {
+            throw 'Native lifecycle smoke did not complete the ready-to-stopped contract.'
+          }
+
       # Regression for the v0.27.3 startup failure: the notification backend must not acquire GTK's
       # process-wide default GLib context before saucer enters g_application_run(). Exit code alone is
       # insufficient because GLib's acquisition failure returns cleanly, so require a marker emitted from

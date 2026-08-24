@@ -8,6 +8,7 @@ on:
       - "vendor/saucer-bindings"
       - ".github/workflows/native-libs.yml"
       - "build/saucer-macos13.patch"
+      - "build/saucer-cocoa-quit.patch"
 
 permissions:
   contents: read
@@ -102,7 +103,7 @@ jobs:
           -DCMAKE_INSTALL_RPATH='${{ matrix.rpath }}'
           ${{ matrix.cmake-args }}
 
-      - name: Patch Saucer for macOS 13
+      - name: Patch Saucer for macOS
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -111,8 +112,10 @@ jobs:
             echo "::error::Saucer source directory was not created during configure."
             exit 1
           fi
-          git -C "$SAUCER_SRC" apply --check "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
-          git -C "$SAUCER_SRC" apply "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
+          for PATCH in saucer-macos13.patch saucer-cocoa-quit.patch; do
+            git -C "$SAUCER_SRC" apply --check "$GITHUB_WORKSPACE/build/$PATCH"
+            git -C "$SAUCER_SRC" apply "$GITHUB_WORKSPACE/build/$PATCH"
+          done
 
       - name: Build
         run: cmake --build build/native --config Release

@@ -1,0 +1,24 @@
+diff --git a/src/cocoa.app.mm b/src/cocoa.app.mm
+index c9b6efb..104164e 100644
+--- a/src/cocoa.app.mm
++++ b/src/cocoa.app.mm
+@@ -57,5 +57,19 @@ namespace saucer
+     void impl::quit() // NOLINT(*-static)
+     {
+         [NSApp stop:nil];
++
++        // NSApplication observes its stop flag only after processing an event. A quit requested
++        // from a dispatch callback can otherwise leave an idle event loop blocked indefinitely.
++        auto *const event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
++                                               location:NSZeroPoint
++                                          modifierFlags:0
++                                              timestamp:0
++                                           windowNumber:0
++                                                context:nil
++                                                subtype:0
++                                                  data1:0
++                                                  data2:0];
++
++        [NSApp postEvent:event atStart:YES];
+     }
+ } // namespace saucer
