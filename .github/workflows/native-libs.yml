@@ -162,10 +162,11 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          EXPECTED="${{ matrix.rid == 'linux-arm64' && 'AArch64' || 'X86-64' }}"
+          EXPECTED="${{ matrix.rid == 'linux-arm64' && 'AArch64' || 'Advanced Micro Devices X86-64' }}"
           for LIB in staging/*.so; do
             file "$LIB"
-            readelf -h "$LIB" | grep -F "Machine:                           $EXPECTED"
+            MACHINE=$(readelf -h "$LIB" | sed -n 's/^[[:space:]]*Machine:[[:space:]]*//p')
+            test "$MACHINE" = "$EXPECTED"
           done
 
 

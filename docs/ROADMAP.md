@@ -54,14 +54,14 @@ Status: **Planned** (Windows/Linux last mile). (tracks CMP-04)
 
 ### Linux GUI hardening
 
-Primal Launcher's first broad run on Pop!_OS exercised Ryn's core Linux GUI and
-plugin paths in a real third-party application. The only Ryn defect reported was
-the notification backend acquiring GTK's default GLib context before
+Primal Launcher's broad run on Pop!_OS exercised Ryn's core Linux GUI and plugin
+paths in a real third-party application. The only Ryn defect reported was the
+notification backend acquiring GTK's default GLib context before
 `g_application_run()`; v0.27.4 removes that competing loop and adds a Linux GTK
-startup smoke under Xvfb and a D-Bus session. Linux is therefore near-full support,
-with the notification fix awaiting downstream retest and focused validation still
-needed for the capability-specific yellow entries in the README matrix, notably
-the updater and NativeAOT publish path. Status: **In validation**. (tracks CMP-05)
+startup smoke under Xvfb and a D-Bus session. Audio, the signed auto-updater, and
+NativeAOT publishing are now confirmed cross-platform through CI and third-party
+apps, including ZK Andy's production Ryn app. Linux notification activation still
+awaits its downstream retest. Status: **In validation**. (tracks CMP-05)
 
 ## Mid-term
 
