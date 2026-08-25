@@ -47,6 +47,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public int Width { get => Live.Width; set => Live.Width = value; }
     public int Height { get => Live.Height; set => Live.Height = value; }
     public bool Resizable { get => Live.Resizable; set => Live.Resizable = value; }
+    public bool IsMaximized => Live.IsMaximized;
     public AppTheme Theme => Live.Theme;
 
     public ValueTask ShowAsync(CancellationToken cancellationToken = default) => Live.ShowAsync(cancellationToken);

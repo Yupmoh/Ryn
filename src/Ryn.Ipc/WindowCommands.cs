@@ -25,6 +25,10 @@ internal sealed class WindowCommands
     [RynCommand("window.toggleMaximize")]
     public void ToggleMaximize() => _windows.Current.ToggleMaximize();
 
+    /// <summary>Returns whether the current window is maximized.</summary>
+    [RynCommand("window.isMaximized")]
+    public bool IsMaximized() => _windows.Current.IsMaximized;
+
     /// <summary>Programmatic window drag. For title bars, prefer the <c>data-webview-drag</c> attribute, which
     /// drags natively inside the mousedown with no IPC lag (see docs/custom-title-bars.md).</summary>
     [RynCommand("window.startDrag")]
