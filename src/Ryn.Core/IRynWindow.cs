@@ -13,6 +13,10 @@ public interface IRynWindow
     public int Height { get; set; }
     /// <summary>Whether the window can be resized by the user.</summary>
     public bool Resizable { get; set; }
+    /// <summary>Gets a value indicating whether the window is currently maximized.
+    /// The value tracks native maximize/restore events (and the startup
+    /// <c>IsMaximized</c> option), so it is safe to read from any thread.</summary>
+    public bool IsMaximized { get; }
     /// <summary>Occurs before the window closes.</summary>
     public event EventHandler<WindowClosingEventArgs>? Closing;
     /// <summary>Occurs after the window has been confirmed closed.</summary>
