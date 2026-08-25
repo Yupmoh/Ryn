@@ -361,6 +361,22 @@ namespace Ryn.Interop
         public static extern void saucer_webview_native(saucer_webview* param0, [NativeTypeName("size_t")] nuint param1, void* param2, [NativeTypeName("size_t *")] nuint* param3);
 
         [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern int saucer_webview_create_shared_buffer(saucer_webview* param0, [NativeTypeName("uint64_t")] ulong size, void** out_buffer, [NativeTypeName("uint64_t *")] ulong* out_size);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void* saucer_webview_shared_buffer_buffer(void* shared_buffer);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: NativeTypeName("uint64_t")]
+        public static extern ulong saucer_webview_shared_buffer_size(void* shared_buffer);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern int saucer_webview_post_shared_buffer(saucer_webview* param0, void* shared_buffer, int access, [NativeTypeName("const char *")] sbyte* additional_data_json);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        public static extern void saucer_webview_shared_buffer_close(void* shared_buffer);
+
+        [DllImport("saucer-bindings", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: NativeTypeName("bool")]
         public static extern byte saucer_icon_empty(saucer_icon* param0);
 

@@ -211,7 +211,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// saucer always drains posted callbacks. Tracking them lets <see cref="Dispose"/> reclaim any that were
     /// never executed (e.g. the app quit with callbacks still queued) instead of leaking them.
     /// </summary>
-    private readonly ConcurrentDictionary<nint, byte> _postedCallbacks = new();
+    private readonly ConcurrentDictionary<nint, PostedAction> _postedCallbacks = new();
 
     private readonly ConcurrentDictionary<string, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>>> _schemeHandlers = new();
 
@@ -488,6 +488,81 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         var json = System.Text.Json.JsonSerializer.Serialize(payload, typeInfo);
         var escapedEvent = EscapeForJs(eventName);
         ExecuteOnUiThread($"window.__ryn._emit('{escapedEvent}',{json})");
+    }
+
+    /// <inheritdoc />
+    public ValueTask<RynSharedBuffer> CreateSharedBufferAsync(ulong size, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentOutOfRangeException.ThrowIfZero(size);
+        cancellationToken.ThrowIfCancellationRequested();
+#pragma warning disable CA2000 // Ownership transfers to the caller, which disposes the returned buffer.
+        return new ValueTask<RynSharedBuffer>(CreateSharedBufferCoreAsync(size, cancellationToken));
+#pragma warning restore CA2000
+    }
+
+    private async Task<RynSharedBuffer> CreateSharedBufferCoreAsync(ulong size, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        nint pointer = 0;
+        ulong actualSize = 0;
+        nint bufferAddress = 0;
+        await ExecuteOnUiThreadAsync(() =>
+            CreateSharedBufferOnUiThread(size, cancellationToken, ref pointer, ref actualSize, ref bufferAddress))
+            .ConfigureAwait(false);
+#pragma warning disable CA2000 // Ownership transfers to the caller, which is responsible for disposing the buffer.
+        return new RynSharedBuffer(pointer, actualSize, bufferAddress);
+#pragma warning restore CA2000
+    }
+
+    private unsafe void CreateSharedBufferOnUiThread(
+        ulong size, CancellationToken cancellationToken, ref nint pointer, ref ulong actualSize, ref nint bufferAddress)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        void* buffer = null;
+        ulong sizeOut = 0;
+        var rc = Saucer.saucer_webview_create_shared_buffer((saucer_webview*)_webview, size, &buffer, &sizeOut);
+        if (rc != 0)
+            throw new InvalidOperationException($"CreateSharedBuffer failed (saucer error {rc}).");
+
+        pointer = (nint)buffer;
+        actualSize = sizeOut;
+        bufferAddress = (nint)Saucer.saucer_webview_shared_buffer_buffer(buffer);
+    }
+
+    /// <inheritdoc />
+    public ValueTask PostSharedBufferToScriptAsync(RynSharedBuffer buffer, RynSharedBufferAccess access, string? additionalDataAsJson = null, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (buffer.IsDisposed)
+            throw new ObjectDisposedException(nameof(RynSharedBuffer), "The shared buffer has already been released.");
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (additionalDataAsJson is { Length: > 0 })
+        {
+            try
+            {
+                _ = System.Text.Json.JsonDocument.Parse(additionalDataAsJson);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new ArgumentException("additionalDataAsJson must be a valid JSON value.", nameof(additionalDataAsJson), ex);
+            }
+        }
+
+        return new ValueTask(ExecuteOnUiThreadAsync(() => PostSharedBufferOnUiThread(buffer, access, additionalDataAsJson)));
+    }
+
+    private unsafe void PostSharedBufferOnUiThread(RynSharedBuffer buffer, RynSharedBufferAccess access, string? additionalDataAsJson)
+    {
+        fixed (byte* json = additionalDataAsJson is null ? null : Encoding.UTF8.GetBytes(additionalDataAsJson))
+        {
+            var rc = Saucer.saucer_webview_post_shared_buffer(
+                (saucer_webview*)_webview, (void*)buffer.Native, (int)access, (sbyte*)json);
+            if (rc != 0)
+                throw new InvalidOperationException($"PostSharedBufferToScript failed (saucer error {rc}).");
+        }
     }
 
     private unsafe void RegisterAppScheme()
@@ -1040,12 +1115,41 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             str.Dispose();
         });
         var callbackData = (nint)NativeCallbackHelper.Alloc(payload);
-        _postedCallbacks[callbackData] = 0;
+        _postedCallbacks[callbackData] = payload;
 
         Saucer.saucer_application_post(
             (saucer_application*)app,
             (delegate* unmanaged[Cdecl]<void*, void>)&ExecutePostedAction,
             (void*)callbackData);
+    }
+
+    /// <summary>
+    /// Posts <paramref name="action"/> to saucer's UI thread and returns a task that completes once it has
+    /// run (or faults if it throws). Unlike <see cref="ExecuteOnUiThread(string)"/> this is safe to await:
+    /// exceptions are captured into the returned task instead of escaping into the native callback.
+    /// </summary>
+    private unsafe Task ExecuteOnUiThreadAsync(Action action)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (_disposed || _app == 0 || _webview == 0)
+        {
+            tcs.TrySetException(new ObjectDisposedException(nameof(RynWebView)));
+            return tcs.Task;
+        }
+
+        var payload = new PostedAction(this, () =>
+        {
+            try { action(); tcs.TrySetResult(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { tcs.TrySetException(ex); }
+        }, tcs);
+        var callbackData = (nint)NativeCallbackHelper.Alloc(payload);
+        _postedCallbacks[callbackData] = payload;
+
+        Saucer.saucer_application_post(
+            (saucer_application*)_app,
+            (delegate* unmanaged[Cdecl]<void*, void>)&ExecutePostedAction,
+            (void*)callbackData);
+        return tcs.Task;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -1070,8 +1174,9 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     }
 
     /// <summary>Pairs an action posted to the UI thread with its owning webview, so the static native
-    /// callback can deregister the GCHandle before freeing it.</summary>
-    private sealed record PostedAction(RynWebView Owner, Action Run);
+    /// callback can deregister the GCHandle before freeing it. <see cref="Completion"/> is set for awaited
+    /// posts so a shutdown that drops the action can fault the waiter instead of hanging it.</summary>
+    private sealed record PostedAction(RynWebView Owner, Action Run, TaskCompletionSource? Completion = null);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void OnSchemeRequest(saucer_scheme_request* request, saucer_scheme_executor* executor, void* userdata)
@@ -1375,10 +1480,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         // The saucer run loop has stopped by the time Dispose runs (RynWindow.DisposeNative is invoked after
         // saucer_application_run returns), so no posted callback can still fire. Reclaim any GCHandles saucer
         // never executed — ExecutePostedAction is what normally frees them, so without this they would leak.
-        foreach (var handle in _postedCallbacks.Keys)
+        foreach (var kvp in _postedCallbacks)
         {
-            if (_postedCallbacks.TryRemove(handle, out _))
-                NativeCallbackHelper.Free(handle);
+            if (_postedCallbacks.TryRemove(kvp.Key, out var payload))
+            {
+                payload.Completion?.TrySetException(new ObjectDisposedException(nameof(RynWebView)));
+                NativeCallbackHelper.Free(kvp.Key);
+            }
         }
 
         if (_selfHandle != 0)

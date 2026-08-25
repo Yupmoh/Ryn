@@ -28,6 +28,21 @@ public interface IRynWebView
     /// <summary>Emits a strongly-typed event payload serialized via a source-generated JsonTypeInfo (AOT- and injection-safe).</summary>
     public void EmitEvent<T>(string eventName, T payload, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo);
 
+    /// <summary>
+    /// Creates a shared-memory buffer that can be posted to the page and read there as an
+    /// <c>ArrayBuffer</c> without serialization. Only supported on Windows (WebView2); other platforms throw
+    /// <see cref="PlatformNotSupportedException"/>.
+    /// </summary>
+    public ValueTask<RynSharedBuffer> CreateSharedBufferAsync(ulong size, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Posts <paramref name="buffer"/> to the page; script receives it through <c>chrome.webview</c>'s
+    /// <c>sharedbufferreceived</c> event. Only supported on Windows (WebView2). If
+    /// <paramref name="additionalDataAsJson"/> is non-empty it must be valid JSON and is surfaced to script
+    /// as <c>event.additionalData</c> (a convenient place for per-frame metadata such as row counts).
+    /// </summary>
+    public ValueTask PostSharedBufferToScriptAsync(RynSharedBuffer buffer, RynSharedBufferAccess access, string? additionalDataAsJson = null, CancellationToken cancellationToken = default);
+
     /// <summary>Fires when files are dropped onto the webview (names only, not full paths).</summary>
     public event EventHandler<FileDropEventArgs>? FileDrop;
 }

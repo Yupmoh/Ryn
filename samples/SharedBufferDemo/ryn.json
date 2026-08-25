@@ -1,0 +1,6 @@
+{
+  "capabilities": {
+    "app": true,
+    "window": true
+  }
+}

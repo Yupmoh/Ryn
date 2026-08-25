@@ -78,6 +78,8 @@ internal sealed class DeferredRynWebView : IRynWebView
     public void RegisterCustomScheme(string scheme, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>> handler) => Live.RegisterCustomScheme(scheme, handler);
     public void EmitEvent(string eventName, string jsonData) => Live.EmitEvent(eventName, jsonData);
     public void EmitEvent<T>(string eventName, T payload, JsonTypeInfo<T> typeInfo) => Live.EmitEvent(eventName, payload, typeInfo);
+    public ValueTask<RynSharedBuffer> CreateSharedBufferAsync(ulong size, CancellationToken cancellationToken = default) => Live.CreateSharedBufferAsync(size, cancellationToken);
+    public ValueTask PostSharedBufferToScriptAsync(RynSharedBuffer buffer, RynSharedBufferAccess access, string? additionalDataAsJson = null, CancellationToken cancellationToken = default) => Live.PostSharedBufferToScriptAsync(buffer, access, additionalDataAsJson, cancellationToken);
 
     public event EventHandler<FileDropEventArgs>? FileDrop
     {
