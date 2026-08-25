@@ -29,6 +29,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private int _cachedWidth;
     private int _cachedHeight;
     private volatile bool _cachedResizable;
+    // Tracks native maximize/restore events plus the startup IsMaximized option, so the
+    // IRynWindow.IsMaximized getter stays lock-free and thread-safe (mirrors _cachedResizable).
+    private volatile bool _isMaximized;
     private int _cachedX;
     private int _cachedY;
     // Last known NON-maximized geometry, tracked separately from the live caches above so a maximized close
@@ -108,6 +111,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _cachedWidth = options.Width;
         _cachedHeight = options.Height;
         _cachedResizable = options.Resizable;
+        _isMaximized = options.IsMaximized == true;
     }
 
     /// <summary>Stable per-application window identifier, assigned by the host when the window is created.</summary>
@@ -325,6 +329,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// window/AppKit calls are not thread-safe, so mutating operations are posted to the application loop
     /// (a no-op deferral when already on the UI thread). Safe to call from any thread; inert without a host.
     /// </summary>
+    /// <inheritdoc />
+    public bool IsMaximized => _isMaximized;
+
     private void RunOnUi(Action action)
     {
         if (_disposed)
@@ -503,6 +510,10 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             ApplyInitialPlacement();
         }
 
+        // Sync the cache with the native window now that initial placement and persisted-state restoration have
+        // settled — either path can leave the window maximized without a MAXIMIZE event reaching us. Reading the
+        // native state here gives the subscription below a correct baseline.
+        _isMaximized = Saucer.saucer_window_maximized(_window) != 0;
         SubscribeWindowEvents();
         // The main window is created during AppKit's launch display cycle and loads before it is shown. A
         // secondary window is created after the loop is already running: show it FIRST, then load on the next
@@ -1002,6 +1013,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         NativeGuard.Invoke("RynWindow.OnWindowMaximize", () =>
         {
             var state = maximized != 0 ? WindowState.Maximized : WindowState.Normal;
+            self._isMaximized = maximized != 0;
             self.StateChanged?.Invoke(self, new WindowStateChangedEventArgs { State = state });
             var stateName = state == WindowState.Maximized ? "maximized" : "normal";
             self._rynWebView?.EmitEvent("window.stateChanged", $"{{\"state\":\"{stateName}\"}}");
