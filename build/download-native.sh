@@ -236,7 +236,7 @@ download_rid() {
     echo "    Done: $(ls "$dest")"
 }
 
-ALL_RIDS=(osx-arm64 osx-x64 linux-x64 win-x64)
+ALL_RIDS=(osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64)
 
 case "${1:-}" in
     pin|--update-checksums)

@@ -54,6 +54,10 @@ jobs:
             rid: linux-x64
             binary: Ryn.Cli
             asset: ryn-linux-x64
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            binary: Ryn.Cli
+            asset: ryn-linux-arm64
           - os: windows-latest
             rid: win-x64
             binary: Ryn.Cli.exe
@@ -75,7 +79,7 @@ jobs:
           cache-dependency-path: Directory.Packages.props
 
       - name: Install AOT prerequisites (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Publish the ryn CLI (NativeAOT, self-contained)
@@ -120,7 +124,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          RIDS="osx-arm64 osx-x64 linux-x64 win-x64"
+          RIDS="osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64"
 
           # Resolve the native-libs release by tag (don't rely on "latest" — version releases are
           # prereleases too, so GitHub may report no latest). --json/--jq avoids tab-capture bugs.
@@ -208,6 +212,7 @@ jobs:
               osx-arm64) echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
               osx-x64)   echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
               linux-x64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so" ;;
+              linux-arm64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so" ;;
               win-x64)   echo "saucer.dll saucer-bindings.dll saucer-bindings-desktop.dll WebView2Loader.dll" ;;
             esac
           }
@@ -217,7 +222,7 @@ jobs:
             echo "== native assets in $(basename "$pkg") =="
             local contents; contents=$(unzip -l "$pkg")
             local rid f
-            for rid in osx-arm64 osx-x64 linux-x64 win-x64; do
+            for rid in osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64; do
               for f in $(rid_files "$rid"); do
                 if echo "$contents" | grep -qF "runtimes/${rid}/native/${f}"; then
                   echo "  OK: ${rid}/${f}"

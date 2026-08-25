@@ -54,6 +54,16 @@ jobs:
             archive-ext: .tar.gz
             container: ubuntu:24.04
             rpath: "$ORIGIN"
+          - os: ubuntu-24.04-arm
+            backend: WebKitGtk
+            rid: linux-arm64
+            cmake-args: -G Ninja -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++
+            lib-prefix: lib
+            lib-ext: .so
+            archive-ext: .tar.gz
+            container: ubuntu:24.04
+            rpath: "$ORIGIN"
+
 
           - os: windows-latest
             backend: WebView2
@@ -70,7 +80,7 @@ jobs:
 
     steps:
       - name: Install git (Linux container)
-        if: matrix.rid == 'linux-x64'
+        if: startsWith(matrix.rid, 'linux-')
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,10 +88,10 @@ jobs:
           submodules: recursive
 
       - name: Install Linux dependencies
-        if: matrix.rid == 'linux-x64'
+        if: startsWith(matrix.rid, 'linux-')
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y clang-20 libc++-20-dev libc++abi-20-dev gcc ninja-build python3-venv libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libjson-glib-dev
+          DEBIAN_FRONTEND=noninteractive apt-get install -y binutils file clang-20 libc++-20-dev libc++abi-20-dev gcc ninja-build python3-venv libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libjson-glib-dev
           python3 -m venv /opt/cmake
           /opt/cmake/bin/pip install 'cmake>=3.31,<4'
           echo /opt/cmake/bin >> "$GITHUB_PATH"
@@ -147,6 +157,17 @@ jobs:
           PTY_SRC="src/Ryn.Plugins.Shell/native/ryn_pty.c"
           PTY_LIB="${{ matrix.lib-prefix }}ryn-pty${{ matrix.lib-ext }}"
           cc -shared -fPIC -O2 ${{ matrix.cc-args }} -lutil -o "staging/$PTY_LIB" "$PTY_SRC"
+
+      - name: Verify native compatibility (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          EXPECTED="${{ matrix.rid == 'linux-arm64' && 'AArch64' || 'X86-64' }}"
+          for LIB in staging/*.so; do
+            file "$LIB"
+            readelf -h "$LIB" | grep -F "Machine:                           $EXPECTED"
+          done
+
 
       - name: Verify native compatibility (macOS)
         if: runner.os == 'macOS'

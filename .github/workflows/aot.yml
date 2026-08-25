@@ -27,6 +27,8 @@ jobs:
         include:
           - os: ubuntu-latest
             rid: linux-x64
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
           - os: windows-latest
             rid: win-x64
           - os: macos-15
@@ -50,7 +52,7 @@ jobs:
           cache-dependency-path: Directory.Packages.props
 
       - name: Install AOT prerequisites (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Publish Ryn.Cli with NativeAOT

@@ -75,7 +75,7 @@ To keep the comparison honest, Ryn deliberately does **not** try to be some thin
 
 ## Status
 
-**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux**, all exercised by real third-party desktop apps. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4. Treat Linux as near-full support while the notification fix completes its downstream retest and the remaining capability-specific caveats below are validated.
+**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux** on both x64 and ARM64, all exercised by real third-party desktop apps or native CI. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4. Treat Linux as near-full support while the notification fix completes its downstream retest and the remaining capability-specific caveats below are validated.
 
 ### Platform support matrix
 
@@ -103,7 +103,7 @@ Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specif
 | Auto-updater (signed) | ✅ | ✅ | 🟡 |
 | NativeAOT publish | ✅ | ✅ | 🟡 |
 
-Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Linux's core GUI and plugin paths have now been exercised in Primal Launcher; the remaining yellow entries need focused validation rather than first-run platform bring-up.
+Native libraries are committed for `osx-arm64`; `osx-x64`, `linux-x64`, `linux-arm64`, and `win-x64` are built in CI. Linux's core GUI and plugin paths have now been exercised in Primal Launcher on x64; ARM64 is built and executed natively in CI. The remaining yellow entries need focused validation rather than first-run platform bring-up.
 
 ## Installation
 
