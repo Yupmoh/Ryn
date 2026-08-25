@@ -25,7 +25,7 @@
 
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <!-- FluentAssertions is pinned to the last Apache-2.0 release (7.x). The 8.x line moved to
