@@ -510,6 +510,10 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
             ApplyInitialPlacement();
         }
 
+        // Sync the cache with the native window now that initial placement and persisted-state restoration have
+        // settled — either path can leave the window maximized without a MAXIMIZE event reaching us. Reading the
+        // native state here gives the subscription below a correct baseline.
+        _isMaximized = Saucer.saucer_window_maximized(_window) != 0;
         SubscribeWindowEvents();
         // The main window is created during AppKit's launch display cycle and loads before it is shown. A
         // secondary window is created after the loop is already running: show it FIRST, then load on the next
