@@ -307,6 +307,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     internal void SetHtmlContent(string html) => _htmlContent = html;
 
+    internal static InlineHtmlResponse? TryGetInlineHtmlResponse(string? htmlContent, string path) =>
+        htmlContent is not null && path is "/" or "/index.html" or ""
+            ? new InlineHtmlResponse(Encoding.UTF8.GetBytes(htmlContent), "text/html")
+            : null;
+
+    internal sealed record InlineHtmlResponse(byte[] Body, string MimeType);
+
     internal void SetContentDirectory(string path) => _contentDirectory = Path.GetFullPath(path);
 
     internal void SetCrossOriginIsolation(bool enabled) => _crossOriginIsolation = enabled;
@@ -774,23 +781,9 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             }
         }
 
-        // Serve inline HTML content set via opts.Html / NavigateToStringAsync.
-        if (_htmlContent is not null && (path is "/" or "/index.html" or ""))
+        if (TryGetInlineHtmlResponse(_htmlContent, path) is { } inlineHtml)
         {
-            var htmlBytes = Encoding.UTF8.GetBytes(_htmlContent);
-            fixed (byte* ptr = htmlBytes)
-            {
-                var stash = Saucer.saucer_stash_new_from(ptr, (nuint)htmlBytes.Length);
-                Span<byte> mimeBuf = stackalloc byte[16];
-                var mime = Utf8String.Create("text/html", mimeBuf);
-                var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);
-                AppendCrossOriginIsolationHeaders(response);
-                Saucer.saucer_scheme_executor_accept(executor, response);
-                // accept() copies the response; we still own (and must free) both native objects.
-                Saucer.saucer_scheme_response_free(response);
-                Saucer.saucer_stash_free(stash);
-                mime.Dispose();
-            }
+            ServeBytes(executor, inlineHtml.Body, inlineHtml.MimeType);
             return;
         }
 
