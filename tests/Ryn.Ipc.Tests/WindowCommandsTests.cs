@@ -17,6 +17,18 @@ namespace Ryn.Ipc.Tests;
 public sealed class WindowCommandsTests
 {
     [Fact]
+    public async Task SetMaximized_ForwardsExplicitStateToCurrentWindow()
+    {
+        var (dispatcher, window) = BuildWindowDispatcher();
+
+        CurrentWindow.Value = window;
+        try { await dispatcher.DispatchAsync("window.setMaximized", JsonArgs("{\"maximized\":true}")); }
+        finally { CurrentWindow.Value = null; }
+
+        window.Received(1).SetMaximized(true);
+    }
+
+    [Fact]
     public async Task SetFullscreen_ForwardsToCurrentWindow()
     {
         var (dispatcher, window) = BuildWindowDispatcher();

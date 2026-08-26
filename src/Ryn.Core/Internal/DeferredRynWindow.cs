@@ -59,6 +59,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public void Close() => Live.Close();
     public void Minimize() => Live.Minimize();
     public void ToggleMaximize() => Live.ToggleMaximize();
+    public void SetMaximized(bool maximized) => Live.SetMaximized(maximized);
     public void Move(int x, int y) => Live.Move(x, y);
     public void SetFullscreen(bool fullscreen) => Live.SetFullscreen(fullscreen);
     public void SetAlwaysOnTop(bool alwaysOnTop) => Live.SetAlwaysOnTop(alwaysOnTop);

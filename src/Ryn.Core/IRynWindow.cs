@@ -53,6 +53,9 @@ public interface IRynWindow
     public void Minimize();
     /// <summary>Toggles between maximized and restored window states.</summary>
     public void ToggleMaximize();
+    /// <summary>Sets whether the window is maximized. Unlike <see cref="ToggleMaximize"/>, the target state is
+    /// explicit, so callers can safely request the same state more than once.</summary>
+    public void SetMaximized(bool maximized);
     /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
     public void Move(int x, int y);
     /// <summary>Enters or leaves fullscreen mode.</summary>

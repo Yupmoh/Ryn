@@ -232,6 +232,14 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
     });
 
+    /// <inheritdoc />
+    public void SetMaximized(bool maximized) => RunOnUi(() =>
+    {
+        // Direct native set: the target state is explicit, so no cached-state read is involved.
+        // The MAXIMIZE/RESTORE event keeps the _isMaximized mirror in sync (same as ToggleMaximize).
+        if (_window != null) Saucer.saucer_window_set_maximized(_window, (byte)(maximized ? 1 : 0));
+    });
+
     public void Move(int x, int y) => RunOnUi(() => { if (_window != null) ApplyPosition(x, y); });
 
     public void SetFullscreen(bool fullscreen) =>
