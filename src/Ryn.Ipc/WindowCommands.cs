@@ -25,6 +25,10 @@ internal sealed class WindowCommands
     [RynCommand("window.toggleMaximize")]
     public void ToggleMaximize() => _windows.Current.ToggleMaximize();
 
+    /// <summary>Sets whether the current window is maximized.</summary>
+    [RynCommand("window.setMaximized")]
+    public void SetMaximized(bool maximized) => _windows.Current.SetMaximized(maximized);
+
     /// <summary>Returns whether the current window is maximized.</summary>
     [RynCommand("window.isMaximized")]
     public bool IsMaximized() => _windows.Current.IsMaximized;

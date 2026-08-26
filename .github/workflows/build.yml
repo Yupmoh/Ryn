@@ -46,22 +46,48 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
-        configuration: [Debug, Release]
-
         include:
-          - os: macos-15
-            rid: osx-arm64
-            archive-ext: .tar.gz
-          - os: macos-15-intel
-            rid: osx-x64
-            archive-ext: .tar.gz
           - os: ubuntu-latest
             rid: linux-x64
             archive-ext: .tar.gz
+            configuration: Debug
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive-ext: .tar.gz
+            configuration: Release
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            archive-ext: .tar.gz
+            configuration: Debug
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            archive-ext: .tar.gz
+            configuration: Release
           - os: windows-latest
             rid: win-x64
             archive-ext: .zip
+            configuration: Debug
+          - os: windows-latest
+            rid: win-x64
+            archive-ext: .zip
+            configuration: Release
+          - os: macos-15
+            rid: osx-arm64
+            archive-ext: .tar.gz
+            configuration: Debug
+          - os: macos-15
+            rid: osx-arm64
+            archive-ext: .tar.gz
+            configuration: Release
+          - os: macos-15-intel
+            rid: osx-x64
+            archive-ext: .tar.gz
+            configuration: Debug
+          - os: macos-15-intel
+            rid: osx-x64
+            archive-ext: .tar.gz
+            configuration: Release
+
 
     runs-on: ${{ matrix.os }}
 

@@ -75,7 +75,7 @@ To keep the comparison honest, Ryn deliberately does **not** try to be some thin
 
 ## Status
 
-**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux**, all exercised by real third-party desktop apps. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4. Treat Linux as near-full support while the notification fix completes its downstream retest and the remaining capability-specific caveats below are validated.
+**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux** on both x64 and ARM64. Its cross-platform windowing, audio, signed auto-updater, and NativeAOT paths are exercised by CI and third-party desktop apps, including ZK Andy's production Ryn app. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4; notification activation remains the one Linux retest still called out below.
 
 ### Platform support matrix
 
@@ -90,7 +90,7 @@ Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specif
 | Clipboard (text) | ✅ | ✅ | ✅ (X11 via xclip, Wayland via wl-clipboard) |
 | Clipboard (image) | ✅ | ✅ | ✅ |
 | Notifications | ✅ | ✅ | 🟡 (v0.27.4 fix awaiting downstream retest) |
-| Audio playback | 🟡 | 🟡 | ✅ |
+| Audio playback | ✅ | ✅ | ✅ |
 | Shell / PTY | ✅ | ✅ | ✅ |
 | Tray icon | ✅ | ✅ | ✅ (menu-only; no icon-click event) |
 | Menu bar | ✅ | ✅ (accelerators display-only) | ❌ (header bars are the GTK norm) |
@@ -100,10 +100,10 @@ Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specif
 | Pane extras (find, screenshot, downloads, crash recovery, suspend) | ✅ | ✅ (+ CDP passthrough) | ✅ |
 | Custom title bars (`data-webview-*`) | ✅ | ✅ | ✅ |
 | Window backdrop (blur / acrylic / mica) | ✅ (vibrancy) | ✅ (acrylic/mica) | ⚪ (degrades to solid) |
-| Auto-updater (signed) | ✅ | ✅ | 🟡 |
-| NativeAOT publish | ✅ | ✅ | 🟡 |
+| Auto-updater (signed) | ✅ | ✅ | ✅ |
+| NativeAOT publish | ✅ | ✅ | ✅ |
 
-Native libraries are committed for `osx-arm64`; `win-x64`/`linux-x64` are built in CI. Linux's core GUI and plugin paths have now been exercised in Primal Launcher; the remaining yellow entries need focused validation rather than first-run platform bring-up.
+Native libraries are committed for `osx-arm64`; `osx-x64`, `linux-x64`, `linux-arm64`, and `win-x64` are built in CI. Linux's core GUI and plugin paths have been exercised in Primal Launcher on x64; ARM64 is built and executed natively in CI.
 
 ## Installation
 

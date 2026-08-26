@@ -586,7 +586,9 @@ public sealed class UpdaterService : IDisposable
             return ["win-x64", "windows-x64", "win64", "windows"];
 
         if (OperatingSystem.IsLinux())
-            return ["linux-x64", "linux-amd64", "linux"];
+            return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+                ? ["linux-arm64", "linux-aarch64", "linux"]
+                : ["linux-x64", "linux-amd64", "linux"];
 
         return [];
     }

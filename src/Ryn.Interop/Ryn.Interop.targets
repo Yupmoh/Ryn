@@ -4,8 +4,8 @@
        buildTransitive consumers get nothing, yet NativeLibraryResolver probes
        runtimes/{rid}/native/{lib} under AppContext.BaseDirectory. This targets file fills that gap.
 
-       It used to glob runtimes/**/* unconditionally, which copied EVERY RID's natives (osx-arm64 +
-       linux-x64 + win-x64 dylib/so/dll) into every consumer's build AND publish — including the
+       It used to glob runtimes/**/* unconditionally, which copied EVERY RID's natives (macOS +
+       Linux + Windows dylib/so/dll) into every consumer's build AND publish — including the
        single-RID AOT publish that `ryn bundle` wraps into the .app, bloating it with foreign-platform
        payloads (CLI-05). We now copy only the consumer's target RID:
          - explicit publish/build (-r <rid>): $(RuntimeIdentifier)

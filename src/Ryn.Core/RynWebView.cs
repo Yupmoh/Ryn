@@ -307,6 +307,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     internal void SetHtmlContent(string html) => _htmlContent = html;
 
+    internal static InlineHtmlResponse? TryGetInlineHtmlResponse(string? htmlContent, string path) =>
+        htmlContent is not null && path is "/" or "/index.html" or ""
+            ? new InlineHtmlResponse(Encoding.UTF8.GetBytes(htmlContent), "text/html")
+            : null;
+
+    internal sealed record InlineHtmlResponse(byte[] Body, string MimeType);
+
     internal void SetContentDirectory(string path) => _contentDirectory = Path.GetFullPath(path);
 
     internal void SetCrossOriginIsolation(bool enabled) => _crossOriginIsolation = enabled;
@@ -772,6 +779,12 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
                 ServeBytes(executor, embeddedBytes, GetMimeType(Path.GetExtension(embeddedRelative)));
                 return;
             }
+        }
+
+        if (TryGetInlineHtmlResponse(_htmlContent, path) is { } inlineHtml)
+        {
+            ServeBytes(executor, inlineHtml.Body, inlineHtml.MimeType);
+            return;
         }
 
         // Resolve and read disk assets off saucer's callback/UI thread. Canonicalization and existence checks

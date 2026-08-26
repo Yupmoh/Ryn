@@ -12,6 +12,12 @@ sure you are actually on the GPU and not silently falling back to software.
 > **PixiJS** — so the work goes to the GPU as a handful of draw calls instead of
 > thousands. That is what closes the gap with a native engine like Godot.
 
+This is proven in a real Ryn workload, not just inferred from backend support: a
+three.js scene has sustained **240+ rendered frames per second** in Ryn with the
+default hardware-acceleration path. Treat that as field evidence that Ryn does not
+impose a low frame-rate ceiling, not as a portable benchmark—scene complexity,
+display refresh, engine, GPU, and power state all affect the result.
+
 ---
 
 ## 1. The mental model: who does the drawing?
