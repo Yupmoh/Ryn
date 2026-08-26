@@ -53,10 +53,8 @@ public interface IRynWindow
     public void Minimize();
     /// <summary>Toggles between maximized and restored window states.</summary>
     public void ToggleMaximize();
-    /// <summary>Maximizes or restores the window. Unlike <see cref="ToggleMaximize"/>, the target state is
-    /// explicit, so repeated calls with the same argument are idempotent and a stale cached
-    /// <see cref="IsMaximized"/> value can never invert the request — safe to call unconditionally
-    /// (e.g. re-maximizing on recall from tray or before the window is shown).</summary>
+    /// <summary>Sets whether the window is maximized. Unlike <see cref="ToggleMaximize"/>, the target state is
+    /// explicit, so callers can safely request the same state more than once.</summary>
     public void SetMaximized(bool maximized);
     /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
     public void Move(int x, int y);

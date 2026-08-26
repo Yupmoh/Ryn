@@ -25,8 +25,7 @@ internal sealed class WindowCommands
     [RynCommand("window.toggleMaximize")]
     public void ToggleMaximize() => _windows.Current.ToggleMaximize();
 
-    /// <summary>Maximizes or restores the current window. Idempotent: repeated calls with the same
-    /// argument are no-ops at the native layer, unlike a toggle which inverts on every call.</summary>
+    /// <summary>Sets whether the current window is maximized.</summary>
     [RynCommand("window.setMaximized")]
     public void SetMaximized(bool maximized) => _windows.Current.SetMaximized(maximized);
 
