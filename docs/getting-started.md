@@ -307,6 +307,40 @@ window.__ryn.on('dataUpdated', (data) => {
 window.__ryn.off('dataUpdated', handler);
 ```
 
+### Handle or block webview navigation
+
+The `Ryn` metapackage includes `Ryn.Callbacks` and its source generator. Define static callback methods when the host needs to observe or synchronously block top-level navigation:
+
+```csharp
+using Ryn.Callbacks;
+using Ryn.Core;
+
+public static class NavigationCallbacks
+{
+    [RynCallback(RynCallbackKind.WebViewNavigating)]
+    public static NavigationDecision OnNavigating(WebViewNavigatingContext context) =>
+        context.Url.Scheme is "ryn" or "https"
+            ? NavigationDecision.Allow
+            : NavigationDecision.Block;
+
+    [RynCallback(RynCallbackKind.WebViewNavigated)]
+    public static void OnNavigated(WebViewNavigatedContext context) =>
+        Console.WriteLine($"Navigated to {context.Url}");
+}
+```
+
+Register the dispatcher and generated handler group with DI:
+
+```csharp
+.ConfigureServices(services =>
+{
+    services.AddRynCallbacks();
+    services.AddNavigationCallbacks();
+})
+```
+
+`WebViewNavigating` handlers run synchronously because the native webview needs the decision before navigation continues. Handler groups run in registration order and the first `Block` decision stops dispatch. `WebViewNavigated` notifies every registered group after navigation completes.
+
 ## 6. Use a Plugin
 
 Ryn includes built-in plugins for common native operations. Here is how to add the Clipboard plugin.

@@ -204,6 +204,16 @@ jobs:
           fi
           echo "No vulnerable packages found."
 
+      # The PTY live test loads the shim by bare P/Invoke name, so place the RID-specific library
+      # beside the test host before the main suite runs. The same file remains under runtimes/ for packing.
+      - name: Copy PTY shim to plugin test output
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SRC="src/Ryn.Interop/runtimes/${{ matrix.rid }}/native"
+          DEST="tests/Ryn.Plugins.Tests/bin/${{ matrix.configuration }}/net10.0"
+          cp "$SRC"/*ryn-pty* "$DEST/"
+
       - name: Test
         run: dotnet test --no-build -c ${{ matrix.configuration }} --filter "Category!=Integration&Category!=Package" --logger "trx;LogFileName=results.trx"
 

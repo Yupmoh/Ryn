@@ -371,7 +371,7 @@ Output:
 | [HelloWindow](samples/HelloWindow) | Minimal IPC demo | `dotnet run --project samples/HelloWindow` |
 | [Showcase](samples/Showcase) | Full-featured demo with all plugins | `dotnet run --project samples/Showcase` |
 | [ViteApp](samples/ViteApp) | URL-backed frontend for Vite dev servers | `dotnet run --project samples/ViteApp` |
-| [TerminalApp](samples/TerminalApp) | Terminal with shell.execute and streaming metrics | `dotnet run --project samples/TerminalApp` |
+| [TerminalApp](samples/TerminalApp) | Interactive streaming PTY with resize, signals, metrics, and lifecycle handling | `dotnet run --project samples/TerminalApp` |
 | [FileManager](samples/FileManager) | File browser with breadcrumb nav and preview | `dotnet run --project samples/FileManager` |
 | [MarkdownEditor](samples/MarkdownEditor) | Split-pane editor with live preview and native dialogs | `dotnet run --project samples/MarkdownEditor` |
 | [VueApp](samples/VueApp) | Vue 3 + Vite frontend with typed IPC | `dotnet run --project samples/VueApp` |
