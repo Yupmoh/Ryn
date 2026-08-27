@@ -188,6 +188,11 @@ jobs:
       - name: Build
         run: dotnet build -c Release   # MinVer sets the version from the pushed tag
 
+      # The live PTY unit test loads the Linux shim by bare P/Invoke name. Keep the runtime asset in
+      # its package location and also place it beside the test host before executing the suite.
+      - name: Copy PTY shim to plugin test output
+        run: cp src/Ryn.Interop/runtimes/linux-x64/native/libryn-pty.so tests/Ryn.Plugins.Tests/bin/Release/net10.0/
+
       # Unit tests only. Integration tests need per-OS native libs and a copy step (see
       # build.yml's matrix) — that's the integration gate; the single-runner release job
       # must not re-run them. The package smoke test (Category=Package) runs in build.yml's
