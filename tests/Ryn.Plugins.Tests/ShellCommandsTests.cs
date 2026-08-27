@@ -153,7 +153,103 @@ public sealed class ShellCommandsTests
         var result = commands.Kill(99999);
         result.Should().BeFalse();
     }
+    [Fact]
+    public void Pty_RejectsInvalidInitialDimensionsBeforeSpawn()
+    {
+        var policy = Policy(new ShellOptions { AllowedCommands = ["echo"] });
+        var webView = Substitute.For<IRynWebView>();
+        using var commands = new PtyCommands(webView, policy);
 
+        var act = () => commands.Pty("echo", "[]", 0, 24);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void PtySignal_ReturnsFalseForUnknownSession()
+    {
+        var policy = Policy(new ShellOptions { AllowedCommands = ["echo"] });
+        var webView = Substitute.For<IRynWebView>();
+        using var commands = new PtyCommands(webView, policy);
+
+        commands.PtySignal(99999, 15).Should().BeFalse();
+    }
+
+    [Fact]
+    public void BuildProcessEnvironment_ScrubsSecrets()
+    {
+        const string visibleKey = "RYN_PTY_VISIBLE_TEST";
+        const string secretKey = "RYN_PTY_TOKEN_TEST";
+        var previousVisible = Environment.GetEnvironmentVariable(visibleKey);
+        var previousSecret = Environment.GetEnvironmentVariable(secretKey);
+        try
+        {
+            Environment.SetEnvironmentVariable(visibleKey, "visible");
+            Environment.SetEnvironmentVariable(secretKey, "secret");
+            var policy = Policy(new ShellOptions());
+
+            var environment = policy.BuildProcessEnvironment();
+
+            environment.Should().Contain(visibleKey, "visible");
+            environment.Should().NotContainKey(secretKey);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(visibleKey, previousVisible);
+            Environment.SetEnvironmentVariable(secretKey, previousSecret);
+        }
+    }
+
+    [Fact]
+    public void BuildProcessEnvironment_CanDisableInheritance()
+    {
+        var policy = Policy(new ShellOptions { InheritEnvironment = false });
+
+        policy.BuildProcessEnvironment().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void WindowsEnvironmentBlock_IsSortedAndDoubleNullTerminated()
+    {
+        var block = PtyNativeWindows.BuildEnvironmentBlock(new Dictionary<string, string>
+        {
+            ["Z_VAR"] = "last",
+            ["A_VAR"] = "first",
+        });
+
+        new string(block).Should().Be("A_VAR=first\0Z_VAR=last\0\0");
+    }
+
+    [Fact]
+    public void Pty_UnixSession_StreamsOutputAndExit()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var policy = Policy(new ShellOptions { AllowedCommands = ["/bin/sh"] });
+        var webView = Substitute.For<IRynWebView>();
+        var events = new System.Collections.Concurrent.ConcurrentQueue<(string Name, string Json)>();
+        webView.When(view => view.EmitEvent(Arg.Any<string>(), Arg.Any<string>()))
+            .Do(call => events.Enqueue((call.ArgAt<string>(0), call.ArgAt<string>(1))));
+        using var commands = new PtyCommands(webView, policy);
+
+        var sessionId = commands.Pty("/bin/sh", "[\"-c\",\"printf RYN_PTY_OK; stty size\"]", 91, 37);
+        var outputEvent = $"shell.pty.stdout.{sessionId}";
+        var exitEvent = $"shell.pty.exit.{sessionId}";
+
+        SpinWait.SpinUntil(
+            () => events.Any(entry => entry.Name == exitEvent),
+            TimeSpan.FromSeconds(5)).Should().BeTrue();
+
+        var encodedChunks = events
+            .Where(entry => entry.Name == outputEvent)
+            .SelectMany(entry => System.Text.Json.JsonSerializer.Deserialize<string[]>(entry.Json) ?? []);
+        var output = string.Concat(encodedChunks.Select(chunk =>
+            System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(chunk))));
+        output.Should().Contain("RYN_PTY_OK");
+        output.Should().Contain("37 91");
+        events.Should().Contain(entry => entry.Name == exitEvent && entry.Json == "0");
+    }
     [Fact]
     public void FullPathAllowlist_DoesNotPermitBareInvocation()
     {
