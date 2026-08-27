@@ -1,0 +1,8 @@
+{
+  "capabilities": {
+    "shell": {
+      "allow": ["pty", "ptyWrite", "ptyResize", "ptySignal", "ptyMetrics", "ptyKill"],
+      "commands": ["/bin/bash", "cmd.exe"]
+    }
+  }
+}

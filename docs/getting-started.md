@@ -382,7 +382,7 @@ use page CSS pixels; Ryn converts them to native coordinates automatically.
 | FileSystem | `Ryn.Plugins.FileSystem` | `AddRynFileSystem(opts => ...)` | `fs.readTextFile`, `fs.writeTextFile`, `fs.readDir`, `fs.stat`, `fs.exists`, `fs.mkdir`, `fs.remove` |
 | Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`, plus secure picker commands below |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
-| Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptyMetrics`, `shell.ptyKill` |
+| Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptySignal`, `shell.ptyMetrics`, `shell.ptyKill` |
 | Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.sendWithSound`, `notification.sendWithIcon`, `notification.sendWithId`, `notification.isSupported`, `notification.isPermissionGranted`, `notification.requestPermission` |
 | Audio | `Ryn.Plugins.Audio` | `AddRynAudio()` | `audio.play`, `audio.playSystem`, `audio.stop`, `audio.setVolume`, `audio.isPlaying` |
 | Tray | `Ryn.Plugins.Tray` | `AddRynTray(opts => ...)` | `tray.show`, `tray.hide`, `tray.setTooltip`, `tray.setMenu`, `tray.notify` |
@@ -415,7 +415,7 @@ public sealed class PathsService(IRynPaths paths)
 }
 ```
 
-> **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. If that native shim is not present next to the application, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path. The non-PTY `shell.execute`/`shell.open`/`shell.spawn` commands work on all three platforms.
+> **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. Spawn with `shell.pty({ command, argsJson, cols?, rows? })`; output arrives as base64 chunks on `shell.pty.stdout.{sessionId}`, and completion arrives on `shell.pty.exit.{sessionId}`. Use `shell.ptyWrite`, `shell.ptyResize`, `shell.ptySignal`, and `shell.ptyKill` for the live session. PTY children honor `ShellOptions.WorkingDirectory`, `InheritEnvironment`, and `ScrubEnvironmentVariables`. If the native shim is missing, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path.
 
 
 ## 7. Build for Production

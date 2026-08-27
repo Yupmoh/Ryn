@@ -13,7 +13,6 @@ var app = RynApplication.CreateBuilder()
         opts.Width = 900;
         opts.Height = 600;
         opts.Html = html;
-        opts.DevTools = true;
     })
     .ConfigureServices(services =>
     {
@@ -26,7 +25,7 @@ var app = RynApplication.CreateBuilder()
         services.AddRynShell(shell =>
         {
             var defaultShell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
-            shell.AllowedCommands.Add(Path.GetFileName(defaultShell));
+            shell.AllowedCommands.Add(defaultShell);
         });
     })
     .Build();

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Content Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="ryn.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

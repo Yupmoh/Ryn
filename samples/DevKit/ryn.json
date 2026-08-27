@@ -8,7 +8,7 @@
     "dialog": true,
     "clipboard": true,
     "shell": {
-      "allow": ["execute", "spawn", "kill", "open", "metrics", "pty", "ptyWrite", "ptyResize", "ptyKill", "ptyMetrics"],
+      "allow": ["execute", "spawn", "kill", "open", "metrics", "pty", "ptyWrite", "ptyResize", "ptySignal", "ptyKill", "ptyMetrics"],
       "commands": ["echo", "date", "whoami", "uname", "ls", "pwd"]
     },
     "notification": true

@@ -5,114 +5,127 @@
     <title>Ryn Terminal</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1e1e2e; display: flex; flex-direction: column; height: 100vh; }
-        #toolbar {
-            background: #181825; padding: 8px 16px; display: flex; align-items: center; gap: 12px;
-            border-bottom: 1px solid #313244; font-family: system-ui; color: #cdd6f4; font-size: 13px;
-        }
-        #toolbar button {
-            background: #45475a; border: none; color: #cdd6f4; padding: 4px 12px;
-            border-radius: 4px; cursor: pointer; font-size: 12px;
-        }
+        body { background: #1e1e2e; display: flex; flex-direction: column; height: 100vh; color: #cdd6f4; }
+        #toolbar { background: #181825; padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #313244; font-family: system-ui; font-size: 13px; }
+        #toolbar button { background: #45475a; border: none; color: #cdd6f4; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
         #toolbar button:hover { background: #585b70; }
+        #status { color: #a6e3a1; }
         #metrics { margin-left: auto; color: #6c7086; font-size: 11px; font-family: monospace; }
-        #terminal {
-            flex: 1; background: #1e1e2e; color: #cdd6f4; font-family: 'SF Mono', 'Cascadia Code', monospace;
-            font-size: 14px; padding: 8px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
-        }
-        #input-line {
-            background: #181825; border-top: 1px solid #313244; padding: 8px 16px; display: flex; gap: 8px;
-        }
-        #input-line input {
-            flex: 1; background: #313244; border: 1px solid #45475a; color: #cdd6f4;
-            padding: 6px 12px; border-radius: 4px; font-family: monospace; font-size: 14px;
-        }
-        #input-line input:focus { outline: none; border-color: #89b4fa; }
+        #terminal { flex: 1; background: #1e1e2e; color: #cdd6f4; font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 14px; padding: 8px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; outline: none; }
+        #terminal:focus { box-shadow: inset 0 0 0 1px #89b4fa; }
     </style>
 </head>
 <body>
     <div id="toolbar">
         <span>Ryn Terminal</span>
+        <span id="status">starting...</span>
         <button onclick="clearTerminal()">Clear</button>
-        <button onclick="killProcess()">Kill</button>
+        <button onclick="killSession()">Kill</button>
         <div id="metrics"></div>
     </div>
-    <div id="terminal"></div>
-    <div id="input-line">
-        <input id="cmd" type="text" placeholder="Type a command..." autofocus />
-    </div>
+    <div id="terminal" tabindex="0"></div>
 
     <script>
-        var term = document.getElementById('terminal');
-        var input = document.getElementById('cmd');
+        var terminal = document.getElementById('terminal');
+        var statusEl = document.getElementById('status');
         var metricsEl = document.getElementById('metrics');
-        var currentPid = null;
+        var sessionId = null;
+        var decoder = new TextDecoder();
 
-        function append(text, color) {
-            var span = document.createElement('span');
-            span.style.color = color || '#cdd6f4';
-            span.textContent = text;
-            term.appendChild(span);
-            term.scrollTop = term.scrollHeight;
+        function append(text) {
+            terminal.appendChild(document.createTextNode(text));
+            terminal.scrollTop = terminal.scrollHeight;
         }
 
-        function clearTerminal() {
-            term.innerHTML = '';
+        function decodeBase64(value) {
+            var binary = atob(value);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes;
         }
 
-        async function killProcess() {
-            if (currentPid !== null) {
-                await window.__ryn.invoke('shell.kill', { pid: currentPid });
-                currentPid = null;
-            }
+        function encodeBase64(text) {
+            var bytes = new TextEncoder().encode(text);
+            var binary = '';
+            for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary);
         }
 
-        async function runCommand(command) {
+        function clearTerminal() { terminal.textContent = ''; }
+
+        async function killSession() {
+            if (sessionId === null) return;
+            await window.__ryn.invoke('shell.ptyKill', { sessionId: sessionId });
+        }
+
+        async function writeInput(text) {
+            if (sessionId === null) return;
+            await window.__ryn.invoke('shell.ptyWrite', { sessionId: sessionId, base64Data: encodeBase64(text) });
+        }
+
+        function terminalDimensions() {
+            return {
+                cols: Math.max(1, Math.floor(terminal.clientWidth / 8.4)),
+                rows: Math.max(1, Math.floor(terminal.clientHeight / 19.5))
+            };
+        }
+
+        async function resizeSession() {
+            if (sessionId === null) return;
+            var dims = terminalDimensions();
+            await window.__ryn.invoke('shell.ptyResize', { sessionId: sessionId, cols: dims.cols, rows: dims.rows });
+        }
+
+        terminal.addEventListener('keydown', function(event) {
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            var text = event.key === 'Enter' ? '\r' : event.key === 'Backspace' ? '\x7f' : event.key.length === 1 ? event.key : '';
+            if (!text) return;
+            event.preventDefault();
+            writeInput(text);
+        });
+
+        window.addEventListener('resize', resizeSession);
+
+        async function start() {
             if (!window.__ryn) {
-                append('Not running inside RYN\\n', '#f38ba8');
+                statusEl.textContent = 'bridge unavailable';
+                append('Launch with: dotnet run --project samples/TerminalApp\n');
                 return;
             }
 
-            append('$ ' + command + '\\n', '#89b4fa');
+            var dims = terminalDimensions();
+            var shell = navigator.userAgent.includes('Windows') ? 'cmd.exe' : '/bin/bash';
+            sessionId = await window.__ryn.invoke('shell.pty', {
+                command: shell,
+                argsJson: '[]',
+                cols: dims.cols,
+                rows: dims.rows
+            });
 
-            try {
-                var result = await window.__ryn.invoke('shell.execute', {
-                    command: command.split(' ')[0],
-                    argsJson: JSON.stringify(command.split(' ').slice(1))
-                });
+            window.__ryn.on('shell.pty.stdout.' + sessionId, function(chunks) {
+                for (var i = 0; i < chunks.length; i++) append(decoder.decode(decodeBase64(chunks[i]), { stream: true }));
+            });
+            window.__ryn.on('shell.pty.exit.' + sessionId, function(exitCode) {
+                statusEl.textContent = 'exited ' + exitCode;
+                sessionId = null;
+            });
 
-                if (result.stdout) append(result.stdout, '#a6e3a1');
-                if (result.stderr) append(result.stderr, '#f38ba8');
-                append('exit: ' + result.exitCode + '\\n', '#6c7086');
-            } catch (e) {
-                append('Error: ' + e.message + '\\n', '#f38ba8');
-            }
+            statusEl.textContent = 'interactive';
+            terminal.focus();
         }
 
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && input.value.trim()) {
-                runCommand(input.value.trim());
-                input.value = '';
-            }
-        });
-
-        // Poll metrics
         setInterval(async function() {
             if (!window.__ryn) return;
             try {
-                var m = await window.__ryn.invoke('shell.metrics');
-                if (m && m.length > 0) {
-                    var total = m.reduce(function(a, b) { return { added: a.added + b.added, flushed: a.flushed + b.flushed, dropped: a.dropped + b.dropped }; }, { added: 0, flushed: 0, dropped: 0 });
-                    metricsEl.textContent = 'added:' + total.added + ' flushed:' + total.flushed + ' dropped:' + total.dropped;
-                }
-            } catch(e) { /* metrics not critical */ }
+                var metrics = await window.__ryn.invoke('shell.ptyMetrics');
+                metricsEl.textContent = metrics.length ? 'chunks:' + metrics[0].flushed + ' dropped:' + metrics[0].dropped : '';
+            } catch (error) { metricsEl.textContent = 'metrics unavailable'; }
         }, 2000);
 
-        if (!window.__ryn) {
-            append('Not running inside RYN — launch with: dotnet run --project samples/TerminalApp\\n', '#fab387');
-        } else {
-            append('Ryn Terminal ready. Type a command below.\\n', '#6c7086');
-        }
+        start().catch(function(error) {
+            statusEl.textContent = 'failed';
+            append('Error: ' + error.message + '\n');
+        });
     </script>
 </body>
 </html>
