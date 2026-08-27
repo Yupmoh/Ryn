@@ -296,6 +296,27 @@ public sealed class ShellExecutionPolicy
                 psi.Environment.Remove(key);
         }
     }
+    /// <summary>Builds the exact environment inherited by native PTY children.</summary>
+    internal IReadOnlyDictionary<string, string> BuildProcessEnvironment()
+    {
+        var environment = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        if (!_options.InheritEnvironment)
+            return environment;
+
+        var scrub = _options.ScrubEnvironmentVariables;
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            var key = (string)entry.Key;
+            if (scrub is { Count: > 0 } && scrub.Any(marker => key.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            environment[key] = (string)(entry.Value ?? string.Empty);
+        }
+
+        return environment;
+    }
 
     // Retained for callers that build a psi externally (spawn/pty share this).
     internal static void PopulateArguments(ProcessStartInfo psi, string[] args)

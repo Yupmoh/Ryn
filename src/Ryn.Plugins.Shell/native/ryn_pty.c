@@ -1,10 +1,11 @@
 #if !defined(_WIN32)
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #if defined(__APPLE__)
 #include <util.h>
@@ -13,34 +14,45 @@
 #endif
 
 /*
- * Spawns a child process with a PTY entirely in native code.
- * This avoids the dangerous pattern of doing managed work after fork()
- * in a .NET runtime, where the forked process inherits a potentially
- * inconsistent managed heap state.
- *
- * Returns 0 on success, -1 on failure (errno is set).
- * On success, *master_fd and *child_pid are populated.
+ * Spawns a child with a PTY. argv/envp/cwd are fully prepared by the parent;
+ * the child performs only async-signal-safe operations between fork and execve.
+ * Returns 0 on success or -errno on failure.
  */
 int ryn_pty_spawn(
     const char* command,
-    const char* const argv[],
+    char* const argv[],
+    char* const envp[],
+    const char* cwd,
+    unsigned short cols,
+    unsigned short rows,
     int* master_fd,
     int* child_pid)
 {
+    struct winsize ws;
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    ws.ws_xpixel = 0;
+    ws.ws_ypixel = 0;
+
     int master;
-    pid_t pid = forkpty(&master, NULL, NULL, NULL);
+    pid_t pid = forkpty(&master, NULL, NULL, &ws);
 
     if (pid < 0)
-        return -1;
+        return -errno;
 
     if (pid == 0)
     {
-        /* Child: exec immediately, no managed code runs here */
-        execvp(command, (char* const*)argv);
-        _exit(127); /* exec failed */
+        if (cwd != NULL && chdir(cwd) != 0)
+            _exit(127);
+
+        execve(command, argv, envp);
+        _exit(127);
     }
 
-    /* Parent */
+    int flags = fcntl(master, F_GETFD, 0);
+    if (flags != -1)
+        (void)fcntl(master, F_SETFD, flags | FD_CLOEXEC);
+
     *master_fd = master;
     *child_pid = (int)pid;
     return 0;

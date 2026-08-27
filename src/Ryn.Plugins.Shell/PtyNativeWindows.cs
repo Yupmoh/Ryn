@@ -92,17 +92,17 @@ internal static class PtyNativeWindows
         uint nSize);
 
     [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool ReadFile(
+    private static extern unsafe bool ReadFile(
         IntPtr hFile,
-        byte[] lpBuffer,
+        byte* lpBuffer,
         int nNumberOfBytesToRead,
         out int lpNumberOfBytesRead,
         IntPtr lpOverlapped);
 
     [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool WriteFile(
+    private static extern unsafe bool WriteFile(
         IntPtr hFile,
-        byte[] lpBuffer,
+        byte* lpBuffer,
         int nNumberOfBytesToWrite,
         out int lpNumberOfBytesWritten,
         IntPtr lpOverlapped);
@@ -211,7 +211,12 @@ internal static class PtyNativeWindows
     /// <summary>
     /// Creates a ConPTY session: pseudo console + child process with the PTY attached.
     /// </summary>
-    internal static ConPtySession CreateConPty(string commandLine, ushort cols, ushort rows)
+    internal static ConPtySession CreateConPty(
+        string commandLine,
+        ushort cols,
+        ushort rows,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string> environment)
     {
         // Create the two pipe pairs:
         // Pipe 1 (input):  we write to inputWriteEnd → ConPTY reads from inputReadEnd
@@ -273,7 +278,14 @@ internal static class PtyNativeWindows
 
         try
         {
-            StartProcessWithPty(hPC, commandLine, out processHandle, out threadHandle, out processId);
+            StartProcessWithPty(
+                hPC,
+                commandLine,
+                workingDirectory,
+                environment,
+                out processHandle,
+                out threadHandle,
+                out processId);
         }
         catch
         {
@@ -289,6 +301,8 @@ internal static class PtyNativeWindows
     private static void StartProcessWithPty(
         IntPtr hPC,
         string commandLine,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string> environment,
         out IntPtr processHandle,
         out IntPtr threadHandle,
         out int processId)
@@ -322,25 +336,32 @@ internal static class PtyNativeWindows
             si.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
             si.lpAttributeList = attrList;
 
-            if (!CreateProcessW(
-                    null,
-                    commandLine,
-                    IntPtr.Zero,
-                    IntPtr.Zero,
-                    false, // don't inherit handles — ConPTY manages I/O
-                    EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                    IntPtr.Zero,
-                    null,
-                    ref si,
-                    out var pi))
+            var environmentBlock = BuildEnvironmentBlock(environment);
+            unsafe
             {
-                throw new Win32Exception(Marshal.GetLastWin32Error(),
-                    $"CreateProcessW failed for command: {commandLine}");
-            }
+                fixed (char* environmentPointer = environmentBlock)
+                {
+                    if (!CreateProcessW(
+                            null,
+                            commandLine,
+                            IntPtr.Zero,
+                            IntPtr.Zero,
+                            false,
+                            EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                            (IntPtr)environmentPointer,
+                            workingDirectory,
+                            ref si,
+                            out var pi))
+                    {
+                        throw new Win32Exception(Marshal.GetLastWin32Error(),
+                            $"CreateProcessW failed for command: {commandLine}");
+                    }
 
-            processHandle = pi.hProcess;
-            threadHandle = pi.hThread;
-            processId = pi.dwProcessId;
+                    processHandle = pi.hProcess;
+                    threadHandle = pi.hThread;
+                    processId = pi.dwProcessId;
+                }
+            }
         }
         finally
         {
@@ -348,38 +369,51 @@ internal static class PtyNativeWindows
             Marshal.FreeHGlobal(attrList);
         }
     }
+    internal static char[] BuildEnvironmentBlock(IReadOnlyDictionary<string, string> environment)
+    {
+        var entries = environment.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+        var length = environment.Count == 0 ? 2 : 1;
+        foreach (var pair in entries)
+            length += pair.Key.Length + pair.Value.Length + 2;
+
+        var block = new char[length];
+        var offset = 0;
+        foreach (var pair in environment.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var entry = $"{pair.Key}={pair.Value}";
+            entry.AsSpan().CopyTo(block.AsSpan(offset));
+            offset += entry.Length + 1;
+        }
+
+        return block;
+    }
 
     /// <summary>
     /// Reads from the ConPTY output pipe. Returns bytes read, or 0 on EOF/error.
     /// </summary>
-    internal static int Read(IntPtr handle, byte[] buffer, int count)
+    internal static unsafe int Read(IntPtr handle, byte[] buffer, int count)
     {
-        if (!ReadFile(handle, buffer, count, out var bytesRead, IntPtr.Zero))
-            return 0; // Pipe broken = child exited
+        fixed (byte* pointer = buffer)
+        {
+            if (!ReadFile(handle, pointer, count, out var bytesRead, IntPtr.Zero))
+                return 0;
 
-        return bytesRead;
+            return bytesRead;
+        }
     }
 
     /// <summary>
     /// Writes to the ConPTY input pipe. Returns bytes written, or 0 on error.
     /// </summary>
-    internal static int Write(IntPtr handle, byte[] buffer, int offset, int count)
+    internal static unsafe int Write(IntPtr handle, byte[] buffer, int offset, int count)
     {
-        byte[] writeBuffer;
-        if (offset == 0 && count == buffer.Length)
+        fixed (byte* pointer = buffer)
         {
-            writeBuffer = buffer;
-        }
-        else
-        {
-            writeBuffer = new byte[count];
-            Array.Copy(buffer, offset, writeBuffer, 0, count);
-        }
+            if (!WriteFile(handle, pointer + offset, count, out var bytesWritten, IntPtr.Zero))
+                return 0;
 
-        if (!WriteFile(handle, writeBuffer, count, out var bytesWritten, IntPtr.Zero))
-            return 0;
-
-        return bytesWritten;
+            return bytesWritten;
+        }
     }
 
     /// <summary>

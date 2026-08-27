@@ -36,10 +36,11 @@ public sealed class PtyCommands : IDisposable
     }
 
     [RynCommand("shell.pty")]
-    public long Pty(string command, string argsJson)
+    public long Pty(string command, string argsJson, int cols = 80, int rows = 24)
     {
-        // Route through the same validation choke point as execute/spawn — this also enforces the
-        // argument policy, which the PTY path previously skipped entirely.
+        if (cols <= 0 || rows <= 0 || cols > 500 || rows > 500)
+            throw new ArgumentOutOfRangeException(nameof(cols), "PTY dimensions must be between 1 and 500.");
+
         var parsed = ShellExecutionPolicy.ParseArgs(argsJson);
         var resolvedCommand = _policy.ValidateInvocation(command, parsed);
 
@@ -57,10 +58,11 @@ public sealed class PtyCommands : IDisposable
 
         var sessionId = Interlocked.Increment(ref _nextSessionId);
         var sessionIdStr = sessionId.ToString(CultureInfo.InvariantCulture);
+        var environment = _policy.BuildProcessEnvironment();
 
         PtySession session = OperatingSystem.IsWindows()
-            ? CreateWindowsSession(sessionId, sessionIdStr, resolvedCommand, args)
-            : CreateUnixSession(sessionId, sessionIdStr, resolvedCommand, args);
+            ? CreateWindowsSession(sessionId, sessionIdStr, resolvedCommand, args, environment, cols, rows)
+            : CreateUnixSession(sessionId, sessionIdStr, resolvedCommand, args, environment, cols, rows);
 
         _sessions[sessionId] = session;
 
@@ -70,9 +72,23 @@ public sealed class PtyCommands : IDisposable
         return sessionId;
     }
 
-    private PtySessionUnix CreateUnixSession(long sessionId, string sessionIdStr, string resolvedCommand, string[] args)
+    private PtySessionUnix CreateUnixSession(
+        long sessionId,
+        string sessionIdStr,
+        string resolvedCommand,
+        string[] args,
+        IReadOnlyDictionary<string, string> environment,
+        int cols,
+        int rows)
     {
-        var masterFd = PtyNative.ForkWithPty(resolvedCommand, args, out var childPid);
+        var masterFd = PtyNative.ForkWithPty(
+            resolvedCommand,
+            args,
+            environment,
+            _policy.Options.WorkingDirectory,
+            (ushort)cols,
+            (ushort)rows,
+            out var childPid);
 
 #pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionUnix, disposed in exit/kill/Dispose
         var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
@@ -82,11 +98,22 @@ public sealed class PtyCommands : IDisposable
         return new PtySessionUnix(sessionId, childPid, masterFd, stdoutBatcher, cts);
     }
 
-    private PtySessionWindows CreateWindowsSession(long sessionId, string sessionIdStr, string resolvedCommand, string[] args)
+    private PtySessionWindows CreateWindowsSession(
+        long sessionId,
+        string sessionIdStr,
+        string resolvedCommand,
+        string[] args,
+        IReadOnlyDictionary<string, string> environment,
+        int cols,
+        int rows)
     {
         var commandLine = QuoteWindowsCommandLine(resolvedCommand, args);
-
-        var conPty = PtyNativeWindows.CreateConPty(commandLine, 80, 24);
+        var conPty = PtyNativeWindows.CreateConPty(
+            commandLine,
+            (ushort)cols,
+            (ushort)rows,
+            _policy.Options.WorkingDirectory,
+            environment);
 
 #pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionWindows, disposed in exit/kill/Dispose
         var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
@@ -147,16 +174,22 @@ public sealed class PtyCommands : IDisposable
         return JsonSerializer.Serialize(entries, ShellJsonContext.Default.ListProcessMetrics);
     }
 
+    [RynCommand("shell.ptySignal")]
+    public bool PtySignal(long sessionId, int signal)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var session))
+            return false;
+
+        return session.Signal(signal);
+    }
+
     [RynCommand("shell.ptyKill")]
     public bool PtyKill(long sessionId)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
 
-        // Kill is fire-and-forget: it SIGKILLs the child and cancels the loop's CTS, which unblocks the
-        // blocking read with EOF. The ReadLoop then drains, emits the exit event exactly once, closes the
-        // transport, and removes the session. We deliberately do NOT close the master fd here — closing it
-        // out from under a thread that may still be inside read() is the fd-reuse hazard this fix removes.
+        // Kill is fire-and-forget: the ReadLoop owns transport closure after child exit.
         session.RequestKill();
         return true;
     }
@@ -305,6 +338,8 @@ internal abstract class PtySession
 
     /// <summary>Waits for the child to exit and returns its exit code (-1 on failure).</summary>
     public abstract int WaitForExit();
+    /// <summary>Sends a platform signal to the child. Windows supports terminate semantics only.</summary>
+    public abstract bool Signal(int signal);
 
     public bool Write(byte[] bytes)
     {
@@ -371,6 +406,8 @@ internal sealed class PtySessionUnix : PtySession
 
     protected override void KillChild() => _ = PtyNative.Kill(_childPid, 9); // SIGKILL
 
+    public override bool Signal(int signal) => PtyNative.Kill(_childPid, signal) == 0;
+
     protected override bool WriteLocked(byte[] bytes)
     {
         var offset = 0;
@@ -405,6 +442,15 @@ internal sealed class PtySessionWindows : PtySession
     public override int WaitForExit() => PtyNativeWindows.WaitForExit(_conPty.ProcessHandle);
 
     protected override void KillChild() => PtyNativeWindows.Kill(_conPty.ProcessHandle);
+
+    public override bool Signal(int signal)
+    {
+        if (signal is not (9 or 15))
+            return false;
+
+        PtyNativeWindows.Kill(_conPty.ProcessHandle);
+        return true;
+    }
 
     protected override bool WriteLocked(byte[] bytes)
     {
@@ -469,17 +515,30 @@ internal static partial class PtyNative
     /// async-signal-safe and can deadlock the child. If the shim is missing we fail loudly here instead of
     /// silently taking a working-by-luck path.
     /// </remarks>
-    internal static int ForkWithPty(string command, string[] args, out int childPid)
+    internal static int ForkWithPty(
+        string command,
+        string[] args,
+        IReadOnlyDictionary<string, string> environment,
+        string? workingDirectory,
+        ushort cols,
+        ushort rows,
+        out int childPid)
     {
-        // Build null-terminated argv for the native shim
-        var argv = new string?[args.Length + 1];
-        Array.Copy(args, argv, args.Length);
-        argv[args.Length] = null;
+        using var argv = new NativeStringArray(args);
+        using var envp = NativeStringArray.CreateEnvironment(environment);
 
         int result;
         try
         {
-            result = ryn_pty_spawn(command, argv, out var masterFd, out childPid);
+            result = ryn_pty_spawn(
+                command,
+                argv.Pointer,
+                envp.Pointer,
+                workingDirectory,
+                cols,
+                rows,
+                out var masterFd,
+                out childPid);
             if (result == 0)
                 return masterFd;
         }
@@ -492,9 +551,8 @@ internal static partial class PtyNative
             throw new PlatformNotSupportedException(NativeShimMissingMessage, ex);
         }
 
-        var errno = Marshal.GetLastPInvokeError();
         throw new InvalidOperationException(
-            $"ryn_pty_spawn failed for command '{command}' (rc={result}, errno={errno}).");
+            $"ryn_pty_spawn failed for command '{command}' (errno={-result}).");
     }
 
     private const string NativeShimMissingMessage =
@@ -506,19 +564,34 @@ internal static partial class PtyNative
     // assembly directory + System32 is strictly narrower than the default probing order (which includes the
     // current working directory and PATH and is the actual hijack surface). INT-05 residual hardening.
 #pragma warning disable CA5393
-    [DllImport("ryn-pty", EntryPoint = "ryn_pty_spawn", SetLastError = true,
-        BestFitMapping = false, ThrowOnUnmappableChar = true)]
+    [DllImport("ryn-pty", EntryPoint = "ryn_pty_spawn", CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.System32)]
     private static extern int ryn_pty_spawn(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string command,
-        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPUTF8Str)] string?[] argv,
+        nint argv,
+        nint envp,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? workingDirectory,
+        ushort cols,
+        ushort rows,
         out int masterFd,
         out int childPid);
 #pragma warning restore CA5393
 
     internal static int Read(int fd, byte[] buf, int count)
     {
-        return (int)libc_read(fd, buf, count);
+        while (true)
+        {
+            var result = (int)libc_read(fd, buf, count);
+            if (result >= 0)
+                return result;
+
+            var error = Marshal.GetLastPInvokeError();
+            if (error == 4) // EINTR: retry after an interrupted system call.
+                continue;
+            if (error == 5) // EIO: PTY masters report EOF this way after the slave closes.
+                return 0;
+            return -1;
+        }
     }
 
     internal static unsafe int Write(int fd, byte[] buf, int offset, int count)
@@ -560,7 +633,14 @@ internal static partial class PtyNative
     /// </summary>
     internal static int WaitForExit(int pid)
     {
-        var result = libc_waitpid(pid, out var status, 0);
+        int result;
+        int status;
+        do
+        {
+            result = libc_waitpid(pid, out status, 0);
+        }
+        while (result < 0 && Marshal.GetLastPInvokeError() == 4); // EINTR
+
         if (result < 0)
             return -1;
 
