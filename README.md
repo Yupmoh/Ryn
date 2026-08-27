@@ -59,7 +59,7 @@ How Ryn compares on the axes that matter for a small, native, web-UI desktop app
 
 ¹ Photino is a thin wrapper; the deployed size depends on your own .NET app and runtime. The point of the row is the relative weight of the webview layer, not a head-to-head app size.
 
-² Multi-window: the API (open/track/close, per-window IPC) is complete on all platforms. On macOS a window opened after launch may currently paint only its background — a WebKit/saucer first-paint limitation; see [docs/multi-window.md](docs/multi-window.md).
+² Multi-window: the API (open/track/close, per-window IPC) is complete on all platforms. On macOS a window opened after launch may currently paint only its background — a WebKit/saucer first-paint limitation; see [docs/multi-window.md](https://github.com/Yupmoh/Ryn/blob/main/docs/multi-window.md).
 
 These numbers are for orientation, not a benchmark claim; they vary by platform, runtime mode (self-contained vs framework-dependent), and trimming. Ryn's ~5 MB figure is a NativeAOT hello-world on macOS arm64 (a full app pulling in every plugin is ~5.6 MB).
 
@@ -339,7 +339,7 @@ Control what the frontend can access:
 
 `"app": true` grants your own `app.*` commands; plugins are granted by their prefix. The shell plugin uses `scopedCommands` (argv templates) rather than a bare binary list, so each allowed argument is matched by an exact literal or a regex `validator`.
 
-A present `ryn.json` denies every command by default; only what you list is allowed. A **missing** `ryn.json` depends on the build: a **Debug** build falls back to allow-all for local convenience, while a **Release** build **fails closed and denies everything** (and logs a one-time startup warning) so a mis-deployed app never ships wide open. Always ship a `ryn.json`. Empty `scope: []` or `commands: []` = explicit deny-all. See [SECURITY.md](SECURITY.md) for the full model.
+A present `ryn.json` denies every command by default; only what you list is allowed. A **missing** `ryn.json` depends on the build: a **Debug** build falls back to allow-all for local convenience, while a **Release** build **fails closed and denies everything** (and logs a one-time startup warning) so a mis-deployed app never ships wide open. Always ship a `ryn.json`. Empty `scope: []` or `commands: []` = explicit deny-all. See [SECURITY.md](https://github.com/Yupmoh/Ryn/blob/main/SECURITY.md) for the full model.
 
 ## Bundling for Distribution
 
@@ -368,15 +368,15 @@ Output:
 
 | Sample | Description | Run |
 |--------|-------------|-----|
-| [HelloWindow](samples/HelloWindow) | Minimal IPC demo | `dotnet run --project samples/HelloWindow` |
-| [Showcase](samples/Showcase) | Full-featured demo with all plugins | `dotnet run --project samples/Showcase` |
-| [ViteApp](samples/ViteApp) | URL-backed frontend for Vite dev servers | `dotnet run --project samples/ViteApp` |
-| [TerminalApp](samples/TerminalApp) | Interactive streaming PTY with resize, signals, metrics, and lifecycle handling | `dotnet run --project samples/TerminalApp` |
-| [FileManager](samples/FileManager) | File browser with breadcrumb nav and preview | `dotnet run --project samples/FileManager` |
-| [MarkdownEditor](samples/MarkdownEditor) | Split-pane editor with live preview and native dialogs | `dotnet run --project samples/MarkdownEditor` |
-| [VueApp](samples/VueApp) | Vue 3 + Vite frontend with typed IPC | `dotnet run --project samples/VueApp` |
-| [MultiWindow](samples/MultiWindow) | Multiple windows with per-window IPC | `dotnet run --project samples/MultiWindow` |
-| [DevKit](samples/DevKit) | Developer toolkit exercising every Ryn capability | `dotnet run --project samples/DevKit` |
+| [HelloWindow](https://github.com/Yupmoh/Ryn/tree/main/samples/HelloWindow) | Minimal IPC demo | `dotnet run --project samples/HelloWindow` |
+| [Showcase](https://github.com/Yupmoh/Ryn/tree/main/samples/Showcase) | Full-featured demo with all plugins | `dotnet run --project samples/Showcase` |
+| [ViteApp](https://github.com/Yupmoh/Ryn/tree/main/samples/ViteApp) | URL-backed frontend for Vite dev servers | `dotnet run --project samples/ViteApp` |
+| [TerminalApp](https://github.com/Yupmoh/Ryn/tree/main/samples/TerminalApp) | Interactive streaming PTY with resize, signals, metrics, and lifecycle handling | `dotnet run --project samples/TerminalApp` |
+| [FileManager](https://github.com/Yupmoh/Ryn/tree/main/samples/FileManager) | File browser with breadcrumb nav and preview | `dotnet run --project samples/FileManager` |
+| [MarkdownEditor](https://github.com/Yupmoh/Ryn/tree/main/samples/MarkdownEditor) | Split-pane editor with live preview and native dialogs | `dotnet run --project samples/MarkdownEditor` |
+| [VueApp](https://github.com/Yupmoh/Ryn/tree/main/samples/VueApp) | Vue 3 + Vite frontend with typed IPC | `dotnet run --project samples/VueApp` |
+| [MultiWindow](https://github.com/Yupmoh/Ryn/tree/main/samples/MultiWindow) | Multiple windows with per-window IPC | `dotnet run --project samples/MultiWindow` |
+| [DevKit](https://github.com/Yupmoh/Ryn/tree/main/samples/DevKit) | Developer toolkit exercising every Ryn capability | `dotnet run --project samples/DevKit` |
 
 ## Project Structure
 
@@ -410,25 +410,25 @@ docs/
 
 ## Documentation
 
-- [Getting Started](docs/getting-started.md): full walkthrough from install to bundle
-- [Architecture](docs/architecture.md): the IPC pipeline, threading model, and security internals
-- [Security Model](SECURITY.md): the trust boundary, capabilities, and the shell/updater hardening
-- [Capabilities Reference](docs/capabilities.md): the canonical `ryn.json` schema
-- [Plugin Authoring](docs/plugin-authoring.md): writing Ryn plugins with commands, options, DI, and events
-- [Vite Integration](docs/vite-integration.md): using Vite and TypeScript with Ryn
-- [Custom Title Bars](docs/custom-title-bars.md): frameless title bars, the `data-webview-*` contract, and window controls
-- [Multi-window](docs/multi-window.md): opening and managing multiple windows
-- [WebView Panes](docs/webview-panes.md): embedded browser panes — layout, sessions, find/screenshot/downloads, lifecycle
-- [Window Backdrop](docs/window-backdrop.md): translucent backdrop materials (vibrancy / acrylic / mica)
-- [Notifications](docs/notifications.md): sending notifications and handling activation events
-- [GPU Rendering](docs/gpu-rendering.md): WebGL and GPU behavior across the platform webviews
-- [Accessibility & Internationalization](docs/accessibility-and-i18n.md): the current a11y / i18n stance
-- [Roadmap](docs/ROADMAP.md): planned capabilities beyond the current alpha
-- [Third-Party Notices](THIRD-PARTY-NOTICES.md): licenses for the native libraries Ryn redistributes
+- [Getting Started](https://github.com/Yupmoh/Ryn/blob/main/docs/getting-started.md): full walkthrough from install to bundle
+- [Architecture](https://github.com/Yupmoh/Ryn/blob/main/docs/architecture.md): the IPC pipeline, threading model, and security internals
+- [Security Model](https://github.com/Yupmoh/Ryn/blob/main/SECURITY.md): the trust boundary, capabilities, and the shell/updater hardening
+- [Capabilities Reference](https://github.com/Yupmoh/Ryn/blob/main/docs/capabilities.md): the canonical `ryn.json` schema
+- [Plugin Authoring](https://github.com/Yupmoh/Ryn/blob/main/docs/plugin-authoring.md): writing Ryn plugins with commands, options, DI, and events
+- [Vite Integration](https://github.com/Yupmoh/Ryn/blob/main/docs/vite-integration.md): using Vite and TypeScript with Ryn
+- [Custom Title Bars](https://github.com/Yupmoh/Ryn/blob/main/docs/custom-title-bars.md): frameless title bars, the `data-webview-*` contract, and window controls
+- [Multi-window](https://github.com/Yupmoh/Ryn/blob/main/docs/multi-window.md): opening and managing multiple windows
+- [WebView Panes](https://github.com/Yupmoh/Ryn/blob/main/docs/webview-panes.md): embedded browser panes — layout, sessions, find/screenshot/downloads, lifecycle
+- [Window Backdrop](https://github.com/Yupmoh/Ryn/blob/main/docs/window-backdrop.md): translucent backdrop materials (vibrancy / acrylic / mica)
+- [Notifications](https://github.com/Yupmoh/Ryn/blob/main/docs/notifications.md): sending notifications and handling activation events
+- [GPU Rendering](https://github.com/Yupmoh/Ryn/blob/main/docs/gpu-rendering.md): WebGL and GPU behavior across the platform webviews
+- [Accessibility & Internationalization](https://github.com/Yupmoh/Ryn/blob/main/docs/accessibility-and-i18n.md): the current a11y / i18n stance
+- [Roadmap](https://github.com/Yupmoh/Ryn/blob/main/docs/ROADMAP.md): planned capabilities beyond the current alpha
+- [Third-Party Notices](https://github.com/Yupmoh/Ryn/blob/main/THIRD-PARTY-NOTICES.md): licenses for the native libraries Ryn redistributes
 
 ## Author
 
-Ryn is designed, built, and maintained by **[Moh](https://github.com/Yupmoh)**. It started as a one-person effort to bring the Tauri developer experience to .NET, and it's still mostly solo-maintained. If Ryn is useful to you, a star on the repo helps. Contributions are welcome too; see [CONTRIBUTING.md](CONTRIBUTING.md).
+Ryn is designed, built, and maintained by **[Moh](https://github.com/Yupmoh)**. It started as a one-person effort to bring the Tauri developer experience to .NET, and it's still mostly solo-maintained. If Ryn is useful to you, a star on the repo helps. Contributions are welcome too; see [CONTRIBUTING.md](https://github.com/Yupmoh/Ryn/blob/main/CONTRIBUTING.md).
 
 ## Acknowledgements
 
@@ -436,4 +436,4 @@ Ryn builds on [**saucer**](https://github.com/saucer/saucer), the C++ webview li
 
 ## License
 
-[MIT](LICENSE) © [Moh](https://github.com/Yupmoh)
+[MIT](https://github.com/Yupmoh/Ryn/blob/main/LICENSE) © [Moh](https://github.com/Yupmoh)
