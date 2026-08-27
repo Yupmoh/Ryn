@@ -115,7 +115,7 @@ cd MyApp
 dotnet add package Ryn
 ```
 
-The `Ryn` package bundles the whole framework in a single reference: `Ryn.Core`, `Ryn.Ipc` (with the `[RynCommand]` source generator), and `Ryn.Interop` (with the native webview libraries). The individual packages are also published if you'd rather reference them one at a time.
+The `Ryn` package bundles the whole framework in a single reference: `Ryn.Core`, `Ryn.Callbacks` (with the `[RynCallback]` source generator), `Ryn.Ipc` (with the `[RynCommand]` source generator), and `Ryn.Interop` (with the native webview libraries). The individual packages are also published if you'd rather reference them one at a time.
 
 > **Windows:** the default `dotnet new console` template emits top-level statements with an implicit MTA entry point, which WebView2 cannot use. Replace `Program.cs` with an explicit `[STAThread] static void Main()` (see [Windows requirements](#windows-requirements)) or scaffold with `ryn new`, which generates a Windows-safe entry point for you. On macOS and Linux either shape works.
 
@@ -280,6 +280,39 @@ Every command name is plugin-prefixed (`app.*` for your own commands, `fs.*`, `c
 
 Supported parameter/return types: `int`, `long`, `float`, `double`, `bool`, `string`, `JsonElement`, primitive arrays (`int[]`, `string[]`), nullable types (`int?`), and complex DTOs via `[RynJsonContext]`.
 
+### Handling webview navigation
+
+Use source-generated callbacks when the host needs to inspect or block top-level webview navigation. Register the callback dispatcher and each generated handler group with DI:
+
+```csharp
+using Ryn.Callbacks;
+using Ryn.Core;
+
+public static class NavigationCallbacks
+{
+    [RynCallback(RynCallbackKind.WebViewNavigating)]
+    public static NavigationDecision OnNavigating(WebViewNavigatingContext context)
+    {
+        return context.Url.Scheme is "ryn" or "https"
+            ? NavigationDecision.Allow
+            : NavigationDecision.Block;
+    }
+
+    [RynCallback(RynCallbackKind.WebViewNavigated)]
+    public static void OnNavigated(WebViewNavigatedContext context)
+    {
+        Console.WriteLine($"Navigated to {context.Url}");
+    }
+}
+```
+
+```csharp
+services.AddRynCallbacks();
+services.AddNavigationCallbacks();
+```
+
+Callbacks are synchronous because Saucer requires the `WebViewNavigating` policy before its native callback returns. Multiple handler groups run in DI registration order; the first `Block` decision stops dispatch, while `WebViewNavigated` notifies every group.
+
 ### Security with ryn.json
 
 Control what the frontend can access:
@@ -349,11 +382,11 @@ Output:
 
 ```
 src/
-  Ryn                  Bundle package: Core + Ipc + Interop in one PackageReference
+  Ryn                  Bundle package: Core + Callbacks + Ipc + Interop in one PackageReference
   Ryn.Core             Window management, app lifecycle, configuration, events
+  Ryn.Callbacks        Source-generated native webview callback routing
   Ryn.Interop          Auto-generated saucer C bindings via ClangSharp
   Ryn.Ipc              JS <> C# IPC bridge, source generator, capabilities, observability
-  Ryn.Plugins.*        FileSystem, Dialog, Clipboard, Shell, Notification, Audio, Tray, MenuBar, Badge, GlobalShortcut, WebViewPane, Updater
   Ryn.Cli              CLI: new, dev, build, bundle, doctor, updater keygen
 samples/               9 example applications
 templates/             dotnet new template pack

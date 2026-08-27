@@ -216,6 +216,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private readonly ConcurrentDictionary<string, Func<RynSchemeRequest, ValueTask<RynSchemeResponse>>> _schemeHandlers = new();
 
     private CommandDispatchHandler? _commandHandler;
+    private WebViewNavigatingHandler? _webViewNavigatingHandler;
+    private WebViewNavigatedHandler? _webViewNavigatedHandler;
 
     // The window that owns this webview, stamped onto each IPC dispatch as the ambient "current window" so
     // window.* commands act on the originating window rather than always on the main window. Null for a webview
@@ -258,10 +260,81 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         _selfHandle = (nint)NativeCallbackHelper.Alloc(this);
 
         RegisterAppScheme();
+        RegisterNavigationCallbacks();
         InjectBridgeScript();
     }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
+    internal void SetWebViewNavigatingHandler(WebViewNavigatingHandler handler) => _webViewNavigatingHandler = handler;
+    internal void SetWebViewNavigatedHandler(WebViewNavigatedHandler handler) => _webViewNavigatedHandler = handler;
+
+    private unsafe void RegisterNavigationCallbacks()
+    {
+        var webview = (saucer_webview*)_webview;
+        Saucer.saucer_webview_on(
+            webview,
+            saucer_webview_event.SAUCER_WEBVIEW_EVENT_NAVIGATE,
+            (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, saucer_navigation*, void*, saucer_policy>)&OnWebViewNavigating,
+            1,
+            (void*)_selfHandle);
+        Saucer.saucer_webview_on(
+            webview,
+            saucer_webview_event.SAUCER_WEBVIEW_EVENT_NAVIGATED,
+            (void*)(delegate* unmanaged[Cdecl]<saucer_webview*, saucer_url*, void*, void>)&OnWebViewNavigated,
+            1,
+            (void*)_selfHandle);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe saucer_policy OnWebViewNavigating(
+        saucer_webview* webview,
+        saucer_navigation* navigation,
+        void* userdata)
+    {
+        var navigationData = (nint)navigation;
+        var callbackData = (nint)userdata;
+        return NativeGuard.Invoke(
+            nameof(OnWebViewNavigating),
+            saucer_policy.SAUCER_POLICY_ALLOW,
+            () =>
+            {
+                if (navigationData == 0 || callbackData == 0)
+                    return saucer_policy.SAUCER_POLICY_ALLOW;
+
+                var nativeNavigation = (saucer_navigation*)navigationData;
+                var url = new Uri(
+                    SaucerStringReader.ReadUrlString(Saucer.saucer_navigation_url(nativeNavigation)),
+                    UriKind.Absolute);
+                var context = new WebViewNavigatingContext(
+                    url,
+                    Saucer.saucer_navigation_new_window(nativeNavigation) != 0,
+                    Saucer.saucer_navigation_redirection(nativeNavigation) != 0,
+                    Saucer.saucer_navigation_user_initiated(nativeNavigation) != 0);
+                var handler = NativeCallbackHelper.Resolve<RynWebView>(callbackData)._webViewNavigatingHandler;
+                return handler?.Invoke(context) == NavigationDecision.Block
+                    ? saucer_policy.SAUCER_POLICY_BLOCK
+                    : saucer_policy.SAUCER_POLICY_ALLOW;
+            });
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void OnWebViewNavigated(
+        saucer_webview* webview,
+        saucer_url* url,
+        void* userdata)
+    {
+        var urlData = (nint)url;
+        var callbackData = (nint)userdata;
+        NativeGuard.Invoke(nameof(OnWebViewNavigated), () =>
+        {
+            if (urlData == 0 || callbackData == 0)
+                return;
+
+            var context = new WebViewNavigatedContext(
+                new Uri(SaucerStringReader.ReadUrlString((saucer_url*)urlData), UriKind.Absolute));
+            NativeCallbackHelper.Resolve<RynWebView>(callbackData)._webViewNavigatedHandler?.Invoke(context);
+        });
+    }
 
     /// <summary>Records the window that owns this webview, so IPC commands from its page can be routed back to it.</summary>
     internal void SetOwningWindow(IRynWindow window) => _owningWindow = window;

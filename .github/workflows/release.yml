@@ -236,10 +236,10 @@ jobs:
           # Native libraries ship in Ryn.Interop.
           verify_native "./nupkg/Ryn.Interop.*.nupkg"
 
-          # Ryn is a metapackage: it must DECLARE dependencies on Core/Ipc/Interop (not contain them).
+          # Ryn is a metapackage: it must DECLARE dependencies on Core/Callbacks/Ipc/Interop (not contain them).
           echo "== Ryn metapackage dependencies =="
           RYN_NUSPEC=$(unzip -p "$(ls ./nupkg/Ryn.[0-9]*.nupkg | head -1)" Ryn.nuspec)
-          for dep in Ryn.Core Ryn.Ipc Ryn.Interop; do
+          for dep in Ryn.Core Ryn.Callbacks Ryn.Ipc Ryn.Interop; do
             if echo "$RYN_NUSPEC" | grep -q "dependency id=\"$dep\""; then
               echo "  OK: Ryn -> $dep"
             else
@@ -247,17 +247,27 @@ jobs:
             fi
           done
 
-          # The IPC source generator must ship from exactly ONE package (Ryn.Ipc). If it also
-          # shipped from Ryn, an app using Ryn + a plugin would load two copies and emit duplicate
-          # code (the alpha.1 bug).
-          echo "== generator ships once (Ryn.Ipc only) =="
-          if ! unzip -Z1 "$(ls ./nupkg/Ryn.Ipc.[0-9]*.nupkg | head -1)" | grep -q 'analyzers/dotnet/cs/Ryn.Ipc.Generator.dll'; then
-            echo "  FATAL: Ryn.Ipc must ship the IPC source generator"; exit 1
+          # Each source generator must ship exactly once, from its corresponding runtime package.
+          # The Ryn metapackage only declares dependencies; embedding either generator there would
+          # make consumers load a second copy and emit duplicate code.
+          verify_generator_once() {
+            local pkg="$1" generator="$2"
+            local contents count
+            contents=$(unzip -Z1 "$pkg")
+            count=$(printf '%s\n' "$contents" | grep -cFx "analyzers/dotnet/cs/${generator}.dll" || true)
+            if [ "$count" -ne 1 ]; then
+              echo "  FATAL: $(basename "$pkg") must contain exactly one ${generator}.dll analyzer (found $count)"; exit 1
+            fi
+            echo "  OK: ${generator}.dll appears exactly once in $(basename "$pkg")"
+          }
+
+          echo "== generators ship once from their runtime packages =="
+          verify_generator_once "$(ls ./nupkg/Ryn.Ipc.[0-9]*.nupkg | head -1)" "Ryn.Ipc.Generator"
+          verify_generator_once "$(ls ./nupkg/Ryn.Callbacks.[0-9]*.nupkg | head -1)" "Ryn.Callbacks.Generator"
+          if unzip -Z1 "$(ls ./nupkg/Ryn.[0-9]*.nupkg | head -1)" | grep -Eq 'Ryn\.(Ipc|Callbacks)\.Generator'; then
+            echo "  FATAL: the Ryn metapackage must NOT embed source generators (would duplicate)"; exit 1
           fi
-          if unzip -Z1 "$(ls ./nupkg/Ryn.[0-9]*.nupkg | head -1)" | grep -q 'Ryn.Ipc.Generator'; then
-            echo "  FATAL: the Ryn metapackage must NOT ship the generator (would duplicate)"; exit 1
-          fi
-          echo "  OK: generator only in Ryn.Ipc"
+          echo "  OK: the Ryn metapackage contains no generator copies"
 
       # Trusted publishing: exchange the GitHub OIDC token for a short-lived NuGet API key.
       # No long-lived secret — configure a trusted publisher policy on NuGet.org instead
@@ -277,7 +287,7 @@ jobs:
         run: |
           VER="${GITHUB_REF_NAME#v}"
           mkdir -p stage/lib
-          # Ryn's own managed assemblies (Core, Ipc, Interop, the generator, plugins) — not the CLI.
+          # Ryn's own managed assemblies (Core, Callbacks, Ipc, Interop, the generators, plugins) — not the CLI.
           find src -path '*/bin/Release/*' -name 'Ryn.*.dll' ! -name 'Ryn.Cli.dll' -exec cp -n {} stage/lib/ \;
           # Native webview libraries per RID (downloaded earlier into Ryn.Interop/runtimes).
           cp -R src/Ryn.Interop/runtimes stage/runtimes
@@ -329,7 +339,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          for lc in ryn.core ryn.ipc ryn.interop ryn.ipc.generator; do
+          for lc in ryn.core ryn.callbacks ryn.ipc ryn.interop ryn.callbacks.generator ryn.ipc.generator; do
             echo "Waiting for $lc $VERSION to finish validating on NuGet..."
             for i in $(seq 1 20); do
               if curl -sf "https://api.nuget.org/v3-flatcontainer/$lc/index.json" | grep -q "\"$VERSION\""; then
@@ -359,7 +369,7 @@ jobs:
             echo "No key available (trusted-publishing login failed and NUGET_API_KEY not set) — skipping."
             exit 0
           fi
-          for pkg in Ryn.Core Ryn.Ipc Ryn.Interop Ryn.Ipc.Generator; do
+          for pkg in Ryn.Core Ryn.Callbacks Ryn.Ipc Ryn.Interop Ryn.Callbacks.Generator Ryn.Ipc.Generator; do
             ok=false
             # 1) trusted-publishing token (no stored secret needed if it carries the Unlist scope)
             if [ -n "$TP_KEY" ] && \
@@ -411,6 +421,8 @@ jobs:
             Ryn
             Ryn.Cli
             Ryn.Core
+            Ryn.Callbacks
+            Ryn.Callbacks.Generator
             Ryn.Interop
             Ryn.Ipc
             Ryn.Ipc.Generator

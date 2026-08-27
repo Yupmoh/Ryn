@@ -19,6 +19,8 @@
   <Folder Name="/src/">
     <Project Path="src/Ryn/Ryn.csproj" />
     <Project Path="src/Ryn.Cli/Ryn.Cli.csproj" />
+    <Project Path="src/Ryn.Callbacks/Ryn.Callbacks.csproj" />
+    <Project Path="src/Ryn.Callbacks.Generator/Ryn.Callbacks.Generator.csproj" />
     <Project Path="src/Ryn.Core/Ryn.Core.csproj" />
     <Project Path="src/Ryn.Interop/Ryn.Interop.csproj" />
     <Project Path="src/Ryn.Ipc/Ryn.Ipc.csproj" />
@@ -37,6 +39,7 @@
     <Project Path="src/Ryn.Plugins.WebViewPane/Ryn.Plugins.WebViewPane.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Ryn.Callbacks.Tests/Ryn.Callbacks.Tests.csproj" />
     <Project Path="tests/Ryn.Core.Tests/Ryn.Core.Tests.csproj" />
     <Project Path="tests/Ryn.Integration.Tests/Ryn.Integration.Tests.csproj" />
     <Project Path="tests/Ryn.Interop.Tests/Ryn.Interop.Tests.csproj" />

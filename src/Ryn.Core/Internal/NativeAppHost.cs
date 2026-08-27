@@ -84,6 +84,10 @@ internal sealed unsafe class NativeAppHost : IDisposable
     /// <summary>The IPC command handler applied to each window's webview. Assigned before <see cref="Run"/>.</summary>
     internal CommandDispatchHandler? CommandHandler { get; set; }
 
+    /// <summary>The navigation handlers applied to each window's webview. Assigned before <see cref="Run"/>.</summary>
+    internal WebViewNavigatingHandler? WebViewNavigatingHandler { get; set; }
+    internal WebViewNavigatedHandler? WebViewNavigatedHandler { get; set; }
+
     internal void Run(CancellationToken cancellationToken)
     {
         NativeLibraryResolver.Register();
@@ -149,6 +153,8 @@ internal sealed unsafe class NativeAppHost : IDisposable
 
         var main = CreateWindowCore(_mainWindowOptions, isMain: true);
         if (CommandHandler is not null) main.SetCommandHandler(CommandHandler);
+        if (WebViewNavigatingHandler is not null) main.SetWebViewNavigatingHandler(WebViewNavigatingHandler);
+        if (WebViewNavigatedHandler is not null) main.SetWebViewNavigatedHandler(WebViewNavigatedHandler);
         main.InitializeNative();
 
         // Publish the fully-initialized window only after InitializeNative, so anything the announcement wakes
@@ -208,6 +214,8 @@ internal sealed unsafe class NativeAppHost : IDisposable
     {
         var window = CreateWindowCore(options.ToRynOptions(), isMain: false);
         if (CommandHandler is not null) window.SetCommandHandler(CommandHandler);
+        if (WebViewNavigatingHandler is not null) window.SetWebViewNavigatingHandler(WebViewNavigatingHandler);
+        if (WebViewNavigatedHandler is not null) window.SetWebViewNavigatedHandler(WebViewNavigatedHandler);
         window.InitializeNative();
         return window;
     }

@@ -239,6 +239,8 @@ internal static class NewCommand
             references = $"""
                   <ItemGroup>
                     <ProjectReference Include="{src}/Ryn.Core/Ryn.Core.csproj" />
+                    <ProjectReference Include="{src}/Ryn.Callbacks/Ryn.Callbacks.csproj" />
+                    <ProjectReference Include="{src}/Ryn.Callbacks.Generator/Ryn.Callbacks.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
                     <ProjectReference Include="{src}/Ryn.Ipc/Ryn.Ipc.csproj" />
                     <ProjectReference Include="{src}/Ryn.Ipc.Generator/Ryn.Ipc.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
                   </ItemGroup>
@@ -246,9 +248,10 @@ internal static class NewCommand
         }
         else
         {
-            // Single Ryn metapackage: it pulls in Ryn.Core + Ryn.Interop (native libs) and, transitively,
-            // Ryn.Ipc — which ships the [RynCommand] source generator as an analyzer. Referencing the
-            // individual packages here would risk shipping the generator twice.
+            // Single Ryn metapackage: it pulls in Ryn.Core + Ryn.Interop (native libs) and,
+            // transitively, Ryn.Callbacks and Ryn.Ipc — each of which ships its source generator
+            // as an analyzer. Referencing the individual packages here would risk shipping a
+            // generator twice.
             references = $"""
                   <ItemGroup>
                     <PackageReference Include="Ryn" Version="{RynPackageVersion}" />

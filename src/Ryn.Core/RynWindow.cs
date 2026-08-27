@@ -24,6 +24,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private WindowStatePersistence? _statePersistence;
 
     private CommandDispatchHandler? _commandHandler;
+    private WebViewNavigatingHandler? _webViewNavigatingHandler;
+    private WebViewNavigatedHandler? _webViewNavigatedHandler;
 
     private volatile string _cachedTitle;
     private int _cachedWidth;
@@ -118,6 +120,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public int Id { get; }
 
     internal void SetCommandHandler(CommandDispatchHandler handler) => _commandHandler = handler;
+    internal void SetWebViewNavigatingHandler(WebViewNavigatingHandler handler) => _webViewNavigatingHandler = handler;
+    internal void SetWebViewNavigatedHandler(WebViewNavigatedHandler handler) => _webViewNavigatedHandler = handler;
 
     /// <summary>Completes the window's close signal so <see cref="WaitForCloseAsync"/> awaiters unblock. Used
     /// by the host's OnFinish/startup-failure paths to defensively release a still-open waiter.</summary>
@@ -453,6 +457,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         foreach (var customScheme in _options.CustomSchemeHandlers)
             _rynWebView.RegisterCustomScheme(customScheme.Scheme, customScheme.Handler);
         if (_commandHandler is not null) _rynWebView.SetCommandHandler(_commandHandler);
+        if (_webViewNavigatingHandler is not null) _rynWebView.SetWebViewNavigatingHandler(_webViewNavigatingHandler);
+        if (_webViewNavigatedHandler is not null) _rynWebView.SetWebViewNavigatedHandler(_webViewNavigatedHandler);
         if (_options.AllowedOrigins.Count > 0) _rynWebView.SetAllowedOrigins(_options.AllowedOrigins.ToList());
         else if (_options.Url is not null) _rynWebView.SetAllowedOrigins([_options.Url.GetLeftPart(UriPartial.Authority)]);
         if (_options.DevTools) _rynWebView.InjectConsoleForwardScript();

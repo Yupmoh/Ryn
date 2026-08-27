@@ -144,6 +144,8 @@ public sealed partial class RynApplication : IAsyncDisposable
             // Wire IPC command dispatcher if registered. The host applies it to the main window's webview
             // during OnReady, before the window is initialized.
             host.CommandHandler = _services.GetService<CommandDispatchHandler>();
+            host.WebViewNavigatingHandler = _services.GetService<WebViewNavigatingHandler>();
+            host.WebViewNavigatedHandler = _services.GetService<WebViewNavigatedHandler>();
             // Publish the live main window once it is fully initialized (inside OnReady, on the UI thread) so
             // deferred IRynWindow/IRynWebView injections and queued main-thread work resolve against it.
             host.MainWindowCreated = window => accessor.Window = window;

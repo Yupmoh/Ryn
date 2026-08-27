@@ -253,9 +253,9 @@ jobs:
           fi
 
       # TST-02: the package smoke test (Ryn.PackageTests, [Trait Category=Package]) is the end-to-end
-      # guard for the alpha.1 duplicate-generator regression — it packs Ryn + a plugin, restores from
-      # a local feed, and builds a consumer app asserting exactly one Router.g.cs. It was excluded from
-      # every job by the Test/Integration filters above, so packaging regressions stayed green on PRs.
+      # guard for duplicate-generator regressions — it packs Ryn + a plugin, restores from a local
+      # feed, and builds a consumer app asserting exactly one router from each generator. It was excluded
+      # from every job by the Test/Integration filters above, so packaging regressions stayed green on PRs.
       # Wire it in on one runner (macOS) only: it pack/restore/consumer-builds and is slow, but the
       # graph is platform-independent so a single leg is sufficient. It builds its own consumer project,
       # so no --no-build here.

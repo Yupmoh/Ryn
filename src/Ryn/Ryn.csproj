@@ -2,14 +2,14 @@
   <PropertyGroup>
     <RootNamespace>Ryn</RootNamespace>
     <PackageId>Ryn</PackageId>
-    <Description>Rich Yet Native — build cross-platform .NET desktop apps with web UIs. One package for the whole framework: it pulls in Ryn.Core, Ryn.Ipc (with the [RynCommand] source generator), and Ryn.Interop (with the native webview libraries).</Description>
+    <Description>Rich Yet Native — build cross-platform .NET desktop apps with web UIs. One package for the whole framework: it pulls in Ryn.Core, Ryn.Callbacks and Ryn.Ipc (with their source generators), and Ryn.Interop (with the native webview libraries).</Description>
     <PackageTags>ryn;desktop;webview;native;cross-platform;tauri</PackageTags>
 
     <!-- Metapackage: no code of its own — referencing Ryn pulls in the framework packages.
-         The IPC source generator ships from exactly one place (Ryn.Ipc) and the native webview
-         libraries from Ryn.Interop, both flowing in transitively. (A merged package that bundled
-         the assemblies would have to embed its own copy of the generator, which then collides with
-         Ryn.Ipc's copy when a plugin is also referenced — two generators, duplicate code.) -->
+         The callback and IPC source generators each ship from exactly one place (Ryn.Callbacks and
+         Ryn.Ipc respectively), and the native webview libraries flow transitively from Ryn.Interop.
+         A merged package that bundled the assemblies would have to embed its own generator copies,
+         which then collide with their runtime packages when a plugin is also referenced. -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <!-- No assembly of its own, so there are no symbols: skip the symbols package. An empty .snupkg packs
          without error here (the metapackage has dependencies) but NuGet's symbol server rejects it on push
@@ -22,9 +22,10 @@
   </PropertyGroup>
 
   <!-- Plain project references become package dependencies, so a consumer that references Ryn gets
-       Ryn.Core, Ryn.Ipc and Ryn.Interop automatically. -->
+       Ryn.Core, Ryn.Callbacks, Ryn.Ipc and Ryn.Interop automatically. -->
   <ItemGroup>
     <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Callbacks\Ryn.Callbacks.csproj" />
     <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
     <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" />
   </ItemGroup>

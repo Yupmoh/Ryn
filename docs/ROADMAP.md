@@ -72,14 +72,13 @@ dom-ready, load, title, favicon, and permission-request events. **Embedded panes
 already surface the full set** (`webviewPane.navigated` / `titleChanged` /
 `loadState` / `domReady` / `favicon` / `permissionRequested` /
 `processTerminated` / download events — see
-[webview-panes.md](webview-panes.md)), but the **main** `IRynWebView` still only
-surfaces file drop. As a result an app cannot stop its top frame from navigating
-to an arbitrary external site, reliably wait for page readiness, or apply policy
-to camera/microphone/geolocation prompts on the primary webview. The plan is to
-add `NavigationStarting` (cancellable), `Navigated`, `DomReady`/`Loaded`, and
-`PermissionRequested` to `IRynWebView`, mapped from the saucer callbacks (the
-pane plugin's interop is the template), before the interface is frozen. Status:
-**Planned** (main webview only). (tracks ARC-14)
+[webview-panes.md](webview-panes.md)). The main webview now exposes
+source-generated, NativeAOT-safe `WebViewNavigating` and `WebViewNavigated`
+callbacks through `Ryn.Callbacks`; the pre-navigation callback can synchronously
+block a navigation. Dom-ready/load and permission-request callbacks remain to be
+added before the interface is frozen. Status: **Partially complete** (main
+webview navigation callbacks delivered; lifecycle and permission callbacks
+planned). (tracks ARC-14)
 
 ### Hot-reload dev loop
 

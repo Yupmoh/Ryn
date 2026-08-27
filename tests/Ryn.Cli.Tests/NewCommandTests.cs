@@ -198,8 +198,12 @@ public sealed class NewCommandTests : IDisposable
         // ProjectReference entries instead of PackageReference to Ryn packages.
         csprojContent.Should().Contain("ProjectReference");
         csprojContent.Should().Contain("Ryn.Core.csproj");
+        csprojContent.Should().Contain("Ryn.Callbacks.csproj");
         csprojContent.Should().Contain("Ryn.Ipc.csproj");
         csprojContent.Should().Contain("Ryn.Ipc.Generator.csproj");
+        csprojContent.Should().Contain(
+            "Ryn.Callbacks.Generator.csproj\" OutputItemType=\"Analyzer\" ReferenceOutputAssembly=\"false\"",
+            "the callback generator must be a compile-time analyzer rather than a runtime assembly");
     }
 
     [Fact]
