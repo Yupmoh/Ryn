@@ -57,6 +57,22 @@ public sealed class WindowStatePersistenceTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_PreservesCompositorOwnedPlacement()
+    {
+        var persistence = new WindowStatePersistence(_appId);
+        persistence.Save(new WindowStateData { Width = 900, Height = 700, IsMaximized = true });
+
+        var loaded = persistence.Load();
+
+        loaded.Should().NotBeNull();
+        loaded!.X.Should().BeNull();
+        loaded.Y.Should().BeNull();
+        loaded.Width.Should().Be(900);
+        loaded.Height.Should().Be(700);
+        loaded.IsMaximized.Should().BeTrue();
+    }
+
+    [Fact]
     public void Save_OverwritesPreviousState()
     {
         var persistence = new WindowStatePersistence(_appId);

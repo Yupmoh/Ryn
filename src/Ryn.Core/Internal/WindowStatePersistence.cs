@@ -73,11 +73,12 @@ internal sealed class WindowStatePersistence
 /// </summary>
 internal sealed class WindowStateData
 {
-    /// <summary>Last non-maximized window X position, in screen coordinates.</summary>
-    public int X { get; set; }
-
-    /// <summary>Last non-maximized window Y position, in screen coordinates.</summary>
-    public int Y { get; set; }
+    /// <summary>
+    /// Last non-maximized X/Y position in screen coordinates. Null when the active window system owns global
+    /// placement, as native Wayland does. Existing state files with numeric values remain compatible.
+    /// </summary>
+    public int? X { get; set; }
+    public int? Y { get; set; }
 
     /// <summary>Last non-maximized window width, in logical pixels. Doubles as the pre-maximize width to restore to.</summary>
     public int Width { get; set; }

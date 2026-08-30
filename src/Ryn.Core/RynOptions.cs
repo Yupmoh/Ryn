@@ -67,7 +67,7 @@ public sealed class RynOptions
     /// Initial windowed origin X, in screen coordinates. Unset keeps the platform default
     /// (typically centered). Applied when the native window is created, before the first paint.
     /// Off-screen or invalid values (including the Windows <c>-32000</c> sentinel) are clamped
-    /// onto a visible monitor.
+    /// onto a visible monitor. Ignored on native Wayland, where the compositor owns placement.
     /// </summary>
     public int X { get => _x; set => Set(ref _x, value); }
 
@@ -75,7 +75,7 @@ public sealed class RynOptions
     /// Initial windowed origin Y, in screen coordinates. Unset keeps the platform default
     /// (typically centered). Applied when the native window is created, before the first paint.
     /// Off-screen or invalid values (including the Windows <c>-32000</c> sentinel) are clamped
-    /// onto a visible monitor.
+    /// onto a visible monitor. Ignored on native Wayland, where the compositor owns placement.
     /// </summary>
     public int Y { get => _y; set => Set(ref _y, value); }
 

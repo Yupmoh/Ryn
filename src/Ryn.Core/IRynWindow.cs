@@ -27,7 +27,8 @@ public interface IRynWindow
     public event EventHandler? Focused;
     /// <summary>Occurs when the window loses focus.</summary>
     public event EventHandler? Blurred;
-    /// <summary>Occurs after the window has been moved.</summary>
+    /// <summary>Occurs after the window has moved to known screen coordinates. Not raised on native Wayland,
+    /// where the compositor does not expose global window coordinates.</summary>
     public event EventHandler<WindowMovedEventArgs>? Moved;
     /// <summary>Occurs when the window state changes.</summary>
     public event EventHandler<WindowStateChangedEventArgs>? StateChanged;
@@ -56,7 +57,8 @@ public interface IRynWindow
     /// <summary>Sets whether the window is maximized. Unlike <see cref="ToggleMaximize"/>, the target state is
     /// explicit, so callers can safely request the same state more than once.</summary>
     public void SetMaximized(bool maximized);
-    /// <summary>Moves the window's top-left corner to the given screen coordinates (in points).</summary>
+    /// <summary>Moves the window's top-left corner to the given screen coordinates (in points). No effect on
+    /// native Wayland, where the compositor owns global placement.</summary>
     public void Move(int x, int y);
     /// <summary>Enters or leaves fullscreen mode.</summary>
     public void SetFullscreen(bool fullscreen);
@@ -96,7 +98,8 @@ public interface IRynWindow
     /// <summary>The backdrop material currently applied — may be <see cref="BackdropMaterial.None"/> if the
     /// requested material degraded on this OS.</summary>
     public BackdropMaterial GetBackdrop();
-    /// <summary>Centers the window on its current screen.</summary>
+    /// <summary>Centers the window on its current screen. No effect on native Wayland, where the compositor
+    /// owns global placement.</summary>
     public void Center();
     /// <summary>
     /// Initiates a window drag operation (for frameless windows on Windows/Linux). For dragging a title bar

@@ -48,6 +48,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private nint _linuxResizeSurface;
     private nuint _linuxResizeRealizeHandler;
     private nuint _linuxResizeLayoutHandler;
+    private bool _usesCompositorPlacement;
     private volatile bool _disposed;
 
     /// <inheritdoc />
@@ -244,7 +245,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_window != null) Saucer.saucer_window_set_maximized(_window, (byte)(maximized ? 1 : 0));
     });
 
-    public void Move(int x, int y) => RunOnUi(() => { if (_window != null) ApplyPosition(x, y); });
+    public void Move(int x, int y) => RunOnUi(() => { if (_window != null && !_usesCompositorPlacement) ApplyPosition(x, y); });
 
     public void SetFullscreen(bool fullscreen) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_fullscreen(_window, (byte)(fullscreen ? 1 : 0)); });
@@ -310,7 +311,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
 
     public void Center() => RunOnUi(() =>
     {
-        if (_window == null) return;
+        if (_window == null || _usesCompositorPlacement) return;
         if (TryComputeCenter(out var x, out var y)) ApplyPosition(x, y);
     });
 
@@ -411,6 +412,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         int error = 0;
         _window = Saucer.saucer_window_new(app, &error);
         if (_window == null) throw new InvalidOperationException($"Failed to create saucer window (error code: {error})");
+        _usesCompositorPlacement = LinuxDisplay.IsNativeWayland();
         // Schemes are registered with the engine process-globally and must exist before the webview is created
         // (saucer silently no-ops handle_scheme for a scheme it wasn't told about pre-creation). The host
         // dedupes, so the reserved "ryn" scheme and any scheme shared across windows are registered once.
@@ -498,21 +500,21 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
                 Saucer.saucer_window_set_size(_window, state.Width, state.Height);
                 _cachedWidth = state.Width;
                 _cachedHeight = state.Height;
-                // Restore position too (ARC-05): saved X/Y were previously dropped. Clamp against the current
-                // screen so a state file from a now-disconnected/secondary monitor can't lose the window.
-                var (clampedX, clampedY) = ClampToScreen(state.X, state.Y, state.Width, state.Height);
-                Saucer.saucer_window_set_position(_window, clampedX, clampedY);
-                _cachedX = clampedX;
-                _cachedY = clampedY;
-                // Seed normal geometry from the restored (non-maximized) values so an immediate close round-trips.
-                _normalX = clampedX;
-                _normalY = clampedY;
                 _normalWidth = state.Width;
                 _normalHeight = state.Height;
-                if (state.IsMaximized)
+                // Native Wayland owns global placement and does not expose screen coordinates. Restore only
+                // compositor-independent state there; X11/XWayland and other platforms keep coordinate restore.
+                if (!_usesCompositorPlacement && state.X is { } savedX && state.Y is { } savedY)
                 {
-                    Saucer.saucer_window_set_maximized(_window, 1);
+                    var (clampedX, clampedY) = ClampToScreen(savedX, savedY, state.Width, state.Height);
+                    Saucer.saucer_window_set_position(_window, clampedX, clampedY);
+                    _cachedX = clampedX;
+                    _cachedY = clampedY;
+                    _normalX = clampedX;
+                    _normalY = clampedY;
                 }
+                if (state.IsMaximized)
+                    Saucer.saucer_window_set_maximized(_window, 1);
             }
             else
             {
@@ -718,7 +720,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// </summary>
     private void ApplyInitialPlacement()
     {
-        if (_options.IsSet(nameof(RynOptions.X)) || _options.IsSet(nameof(RynOptions.Y)))
+        if (!_usesCompositorPlacement && (_options.IsSet(nameof(RynOptions.X)) || _options.IsSet(nameof(RynOptions.Y))))
         {
             int currentX, currentY;
             Saucer.saucer_window_position(_window, &currentX, &currentY);
@@ -974,6 +976,29 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private void SaveWindowState(saucer_window* window)
     {
         if (_statePersistence is null) return;
+        if (_usesCompositorPlacement)
+        {
+            var compositorMaximized = Saucer.saucer_window_maximized(window) != 0;
+            int width, height;
+            if (compositorMaximized)
+            {
+                width = Volatile.Read(ref _normalWidth);
+                height = Volatile.Read(ref _normalHeight);
+            }
+            else
+            {
+                Saucer.saucer_window_size(window, &width, &height);
+                _cachedWidth = width; _cachedHeight = height;
+                _normalWidth = width; _normalHeight = height;
+            }
+            _statePersistence.Save(new WindowStateData
+            {
+                Width = width,
+                Height = height,
+                IsMaximized = compositorMaximized,
+            });
+            return;
+        }
         var isMaximized = Saucer.saucer_window_maximized(window) != 0;
         if (!isMaximized)
         {
@@ -1049,6 +1074,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
 
     private void CheckPositionChanged(saucer_window* window)
     {
+        if (_usesCompositorPlacement) return;
         int x, y;
         Saucer.saucer_window_position(window, &x, &y);
         var prevX = _cachedX; var prevY = _cachedY;

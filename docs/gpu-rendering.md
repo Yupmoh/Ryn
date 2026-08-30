@@ -92,6 +92,19 @@ must be available in the user's session or GTK cannot start. The option is
 process-wide and has no effect on Windows or macOS; keep `Auto` unless the
 application specifically requires native Wayland or X11/XWayland behavior.
 
+#### Window placement under each backend
+
+Ryn follows the active window system's placement contract:
+
+- **X11/XWayland:** Ryn can apply and persist absolute `X`/`Y` coordinates.
+- **Native Wayland:** the compositor owns global placement. Ryn ignores `X`, `Y`, `Move()`, and
+  `Center()`, does not emit coordinate-bearing `Moved` events, and persists only window size and
+  maximized state. No fabricated or stale coordinates are exposed.
+
+This behavior is isolated to native Wayland. Windows, macOS, and Linux running through X11 or
+XWayland retain coordinate-managed placement. Future Wayland session-management support can let
+the compositor restore placement without exposing global coordinates to the application.
+
 ### `LinuxRenderingMode` — Linux frame transport, default `Auto`
 
 On Linux, WebKitGTK normally presents accelerated frames through DMA-BUF. This is the
