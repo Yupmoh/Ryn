@@ -45,8 +45,10 @@ CPU-bound API.
 
 ## 2. The Ryn knobs (and what they do *not* do)
 
-Ryn exposes two relevant options on both `RynOptions` (app-wide) and
-`RynWindowOptions` (per secondary window). Shipped in PR #32.
+Ryn exposes the following rendering controls. `HardwareAcceleration` and
+`BrowserFlags` are available on both `RynOptions` (app-wide) and
+`RynWindowOptions` (per secondary window). `LinuxRenderingMode` is application-wide
+because WebKitGTK selects its transport when the process initializes.
 
 ### `HardwareAcceleration` — `bool`, default `true`
 
@@ -68,8 +70,30 @@ var app = RynApplication.CreateBuilder()
     .Build();
 ```
 
-> **There is no "make it fast" toggle beyond this.** If your renderer is slow with
-> `HardwareAcceleration = true`, the problem is in your JS rendering code, not Ryn.
+> `HardwareAcceleration` is not a universal performance fix. Leave it enabled unless
+> you are diagnosing a driver or headless-environment compatibility problem.
+
+### `LinuxRenderingMode` — Linux frame transport, default `Auto`
+
+On Linux, WebKitGTK normally presents accelerated frames through DMA-BUF. This is the
+efficient path and remains the default. Some NVIDIA, Wayland, GTK4 and WebKitGTK
+combinations can retain imported DMA-BUF textures and grow native host memory while a
+window is visible. Use the shared-memory compatibility mode on affected systems:
+
+```csharp
+.ConfigureOptions(opts =>
+{
+    opts.LinuxRenderingMode = LinuxRenderingMode.SharedMemory;
+})
+```
+
+This applies `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` before GTK/WebKit initializes. It
+changes how finished frames reach the host window; it does **not** disable WebKit
+hardware acceleration. Keep `Auto` for unaffected systems because DMA-BUF avoids the
+extra copies and memory bandwidth of shared-memory presentation.
+
+Do not use `WEBKIT_DISABLE_DMABUF_RENDERER=1` as a substitute. Some current WebKitGTK
+configurations fail rather than selecting a valid fallback transport.
 
 ### `BrowserFlags` — `IList<string>`, the per-engine escape hatch
 
@@ -93,8 +117,9 @@ because each OS runs a different engine. Always guard a flag behind an OS check.
 })
 ```
 
-You can also set both from `ryn.json` / configuration: a `HardwareAcceleration`
-boolean and a `BrowserFlags` array. They project onto secondary windows too.
+You can also set `HardwareAcceleration`, `LinuxRenderingMode`, and `BrowserFlags` from
+`ryn.json` / configuration. Hardware acceleration and browser flags project onto
+secondary windows; the Linux rendering mode remains process-wide.
 
 ---
 

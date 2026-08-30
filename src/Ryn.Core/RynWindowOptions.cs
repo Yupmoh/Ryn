@@ -61,6 +61,7 @@ public sealed class RynWindowOptions
     /// WebGL and WebGPU much slower. Applied once, before the webview is created.</summary>
     public bool HardwareAcceleration { get; set; } = true;
 
+
     /// <summary>Engine-specific webview flags applied before creation — the lever for experimental rendering
     /// features (e.g. <c>--enable-unsafe-webgpu</c> on Windows/Chromium). Syntax is not portable across
     /// platforms; see <see cref="RynOptions.BrowserFlags"/> for the per-engine format.</summary>

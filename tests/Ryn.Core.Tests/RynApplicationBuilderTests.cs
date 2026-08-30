@@ -199,6 +199,21 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_BindsLinuxRenderingModeFromConfiguration()
+    {
+        var builder = RynApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Ryn:LinuxRenderingMode"] = "SharedMemory",
+        });
+
+        await using var app = builder.Build();
+
+        app.Services.GetRequiredService<RynOptions>().LinuxRenderingMode
+            .Should().Be(LinuxRenderingMode.SharedMemory);
+    }
+
+    [Fact]
     public async Task Build_BindsPlacementFromConfiguration()
     {
         var builder = RynApplication.CreateBuilder();

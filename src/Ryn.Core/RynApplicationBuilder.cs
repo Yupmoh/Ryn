@@ -270,6 +270,10 @@ public sealed class RynApplicationBuilder
         if (section[nameof(RynOptions.HardwareAcceleration)] is { } hwAccel && bool.TryParse(hwAccel, out var hw))
             options.HardwareAcceleration = hw;
 
+        if (section[nameof(RynOptions.LinuxRenderingMode)] is { } linuxRenderingMode &&
+            Enum.TryParse<LinuxRenderingMode>(linuxRenderingMode, true, out var linuxMode))
+            options.LinuxRenderingMode = linuxMode;
+
         if (section[nameof(RynOptions.CrossOriginIsolation)] is { } coi && bool.TryParse(coi, out var ci))
             options.CrossOriginIsolation = ci;
 
@@ -304,6 +308,7 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.TitleBarAutoDragHeight), static (t, s) => t.TitleBarAutoDragHeight = s.TitleBarAutoDragHeight);
         CopyIfSet(target, source, nameof(RynOptions.Transparent), static (t, s) => t.Transparent = s.Transparent);
         CopyIfSet(target, source, nameof(RynOptions.HardwareAcceleration), static (t, s) => t.HardwareAcceleration = s.HardwareAcceleration);
+        CopyIfSet(target, source, nameof(RynOptions.LinuxRenderingMode), static (t, s) => t.LinuxRenderingMode = s.LinuxRenderingMode);
         CopyIfSet(target, source, nameof(RynOptions.Url), static (t, s) => t.Url = s.Url);
         CopyIfSet(target, source, nameof(RynOptions.Html), static (t, s) => t.Html = s.Html);
         CopyIfSet(target, source, nameof(RynOptions.ContentDirectory), static (t, s) => t.ContentDirectory = s.ContentDirectory);
@@ -375,6 +380,9 @@ public sealed class RynApplicationBuilder
 
         if (options.IpcCommandTimeout <= TimeSpan.Zero)
             throw new InvalidOperationException($"RynOptions.IpcCommandTimeout must be greater than 0 (was {options.IpcCommandTimeout}).");
+
+        if (!Enum.IsDefined(options.LinuxRenderingMode))
+            throw new InvalidOperationException($"RynOptions.LinuxRenderingMode has an invalid value ({options.LinuxRenderingMode}).");
 
         var schemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var scheme in options.CustomSchemes)

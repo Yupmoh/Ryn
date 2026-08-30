@@ -33,6 +33,7 @@ public sealed class RynOptions
     private bool _transparent;
     private bool _clickThrough;
     private bool _hardwareAcceleration = true;
+    private LinuxRenderingMode _linuxRenderingMode = LinuxRenderingMode.Auto;
     private Uri? _url;
     private string? _html;
     private string? _contentDirectory;
@@ -143,6 +144,15 @@ public sealed class RynOptions
     /// created, so it cannot change for a live window.
     /// </summary>
     public bool HardwareAcceleration { get => _hardwareAcceleration; set => Set(ref _hardwareAcceleration, value); }
+
+    /// <summary>
+    /// Selects how WebKitGTK transfers rendered frames to the Linux host window. The default
+    /// <see cref="LinuxRenderingMode.Auto"/> lets WebKitGTK use its efficient DMA-BUF path.
+    /// <see cref="LinuxRenderingMode.SharedMemory"/> is a compatibility mode for systems where that path is
+    /// unstable, notably affected NVIDIA/Wayland configurations. Applied process-wide before GTK initializes;
+    /// it does not disable WebKit hardware acceleration. Has no effect outside Linux.
+    /// </summary>
+    public LinuxRenderingMode LinuxRenderingMode { get => _linuxRenderingMode; set => Set(ref _linuxRenderingMode, value); }
 
     /// <summary>URL to navigate to on startup. Mutually exclusive with <see cref="Html"/> and <see cref="ContentDirectory"/>.</summary>
     public Uri? Url { get => _url; set => Set(ref _url, value); }
@@ -268,6 +278,19 @@ public sealed class RynOptions
         field = value;
         _setProperties.Add(propertyName);
     }
+}
+
+/// <summary>Controls how WebKitGTK transfers rendered frames to the host window on Linux.</summary>
+public enum LinuxRenderingMode
+{
+    /// <summary>Let WebKitGTK select its normal rendering transport, usually accelerated DMA-BUF.</summary>
+    Auto,
+
+    /// <summary>
+    /// Force shared-memory frame transport while retaining WebKit hardware acceleration. Use as a
+    /// compatibility mode for DMA-BUF lifetime or driver issues.
+    /// </summary>
+    SharedMemory,
 }
 
 /// <summary>
