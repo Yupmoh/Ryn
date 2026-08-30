@@ -49,6 +49,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     private nuint _linuxResizeRealizeHandler;
     private nuint _linuxResizeLayoutHandler;
     private bool _usesCompositorPlacement;
+    private nuint _moveObserverRegistration;
     private volatile bool _disposed;
 
     /// <inheritdoc />
@@ -245,7 +246,12 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         if (_window != null) Saucer.saucer_window_set_maximized(_window, (byte)(maximized ? 1 : 0));
     });
 
-    public void Move(int x, int y) => RunOnUi(() => { if (_window != null && !_usesCompositorPlacement) ApplyPosition(x, y); });
+    public void Move(int x, int y) => RunOnUi(() =>
+    {
+        if (_window == null || _usesCompositorPlacement) return;
+        Saucer.saucer_window_set_position(_window, x, y);
+        HandleNativeMove();
+    });
 
     public void SetFullscreen(bool fullscreen) =>
         RunOnUi(() => { if (_window != null) Saucer.saucer_window_set_fullscreen(_window, (byte)(fullscreen ? 1 : 0)); });
@@ -312,16 +318,35 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public void Center() => RunOnUi(() =>
     {
         if (_window == null || _usesCompositorPlacement) return;
-        if (TryComputeCenter(out var x, out var y)) ApplyPosition(x, y);
+        if (!TryComputeCenter(out var x, out var y)) return;
+        Saucer.saucer_window_set_position(_window, x, y);
+        HandleNativeMove();
     });
 
-    /// <summary>Applies a new top-left and updates the cached/normal-position bookkeeping (so a later restore from
-    /// maximized returns here). Caller must hold the UI thread and have checked <c>_window != null</c>.</summary>
-    private void ApplyPosition(int x, int y)
+    /// <summary>Reads and publishes the actual native position after a platform or programmatic move.</summary>
+    internal void HandleNativeMove()
     {
-        Saucer.saucer_window_set_position(_window, x, y);
-        _cachedX = x; _cachedY = y;
-        if (Saucer.saucer_window_maximized(_window) == 0) { _normalX = x; _normalY = y; }
+        if (_window == null || _usesCompositorPlacement) return;
+        int x, y;
+        Saucer.saucer_window_position(_window, &x, &y);
+        UpdatePosition(x, y, Saucer.saucer_window_maximized(_window) == 0);
+    }
+
+    internal bool UpdatePosition(int x, int y, bool isWindowed)
+    {
+        if (!isWindowed)
+            return false;
+
+        var changed = _cachedX != x || _cachedY != y;
+        _cachedX = x;
+        _cachedY = y;
+        _normalX = x;
+        _normalY = y;
+        if (!changed) return false;
+        Moved?.Invoke(this, new WindowMovedEventArgs { X = x, Y = y });
+        _rynWebView?.EmitEvent("window.moved", $"{{\"x\":{x},\"y\":{y}}}");
+        SaveTrackedWindowState();
+        return true;
     }
 
     public void StartDrag() => RunOnUi(() =>
@@ -531,6 +556,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // native state here gives the subscription below a correct baseline.
         _isMaximized = Saucer.saucer_window_maximized(_window) != 0;
         SubscribeWindowEvents();
+        _moveObserverRegistration = WindowMoveObserver.Install(GetNativeWindowHandle(), _selfHandle, _usesCompositorPlacement);
         // The main window is created during AppKit's launch display cycle and loads before it is shown. A
         // secondary window is created after the loop is already running: show it FIRST, then load on the next
         // tick so the window is on screen when its content navigates. NOTE: on macOS a WKWebView created after
@@ -852,7 +878,6 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var handle = GetNativeWindowHandle();
         if (handle != 0) MacOsTitleBar.SetTrafficLightPosition(handle, x, y);
     }
-
     /// <summary>
     /// The underlying saucer window handle (a <c>saucer_window*</c>), or 0 after disposal. For plugin
     /// backends that create additional native objects against this window — e.g. secondary webview panes
@@ -865,13 +890,13 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     /// toolkit window on Linux — saucer's stable native index 0), or 0 when the native window is gone or
     /// saucer reports an unexpected size. For plugin backends that must attach to the real window.
     /// </summary>
-    internal nint GetNativeWindowHandle()
+    internal nint GetNativeWindowHandle() => _disposed ? 0 : GetNativeWindowHandleCore();
+
+    private nint GetNativeWindowHandleCore()
     {
-        if (_disposed || _window == null) return 0;
+        if (_window == null) return 0;
         nuint size; System.Runtime.CompilerServices.Unsafe.SkipInit(out size);
         Saucer.saucer_window_native(_window, 0, null, &size);
-        // Require at least sizeof(nint) so MemoryMarshal.Read<nint> can't over-read the stack buffer if saucer
-        // ever reports a smaller size; saucer returns 8 (a pointer) today, so this never trips in practice (INT-11).
         if (size < (nuint)sizeof(nint) || size > 64) return 0;
         Span<byte> buf = stackalloc byte[(int)size];
         fixed (byte* ptr = buf)
@@ -919,8 +944,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         }
         Resized?.Invoke(this, new WindowResizedEventArgs { Width = width, Height = height });
         _rynWebView?.EmitEvent("window.resized", $"{{\"width\":{width},\"height\":{height}}}");
-        if (_window != null)
-            CheckPositionChanged(_window);
+        HandleNativeMove();
+        SaveTrackedWindowState();
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -967,12 +992,8 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         });
     }
 
-    /// <summary>
-    /// Captures the live window geometry at close and persists it (ARC-05). Reads position/size straight from
-    /// saucer rather than the caches — there is no native "moved" event, so a drag-then-close would otherwise
-    /// save stale coordinates. When maximized, saucer reports the maximized rect, so we persist the pre-maximize
-    /// (cached "normal") size alongside the maximized flag, and let restore re-maximize.
-    /// </summary>
+    /// <summary>Captures the live window geometry at close and persists it. The move observer normally keeps
+    /// the caches current; the final native read remains a teardown safety net.</summary>
     private void SaveWindowState(saucer_window* window)
     {
         if (_statePersistence is null) return;
@@ -1002,8 +1023,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var isMaximized = Saucer.saucer_window_maximized(window) != 0;
         if (!isMaximized)
         {
-            // Read the live geometry straight from saucer: there is no native "moved" event, so a drag-then-close
-            // would otherwise persist stale coordinates. Refresh both the live and normal caches.
+            // Refresh both live and normal caches from the final native geometry.
             int x, y, w, h;
             Saucer.saucer_window_position(window, &x, &y);
             Saucer.saucer_window_size(window, &w, &h);
@@ -1040,7 +1060,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         var self = NativeCallbackHelper.Resolve<RynWindow>(userdata);
         NativeGuard.Invoke("RynWindow.OnWindowFocus", () =>
         {
-            if (focused != 0) { self.Focused?.Invoke(self, EventArgs.Empty); self._rynWebView?.EmitEvent("window.focused", "{}"); self.CheckPositionChanged(window); }
+            if (focused != 0) { self.Focused?.Invoke(self, EventArgs.Empty); self._rynWebView?.EmitEvent("window.focused", "{}"); self.HandleNativeMove(); }
             else { self.Blurred?.Invoke(self, EventArgs.Empty); self._rynWebView?.EmitEvent("window.blurred", "{}"); }
         });
     }
@@ -1072,17 +1092,18 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         });
     }
 
-    private void CheckPositionChanged(saucer_window* window)
+
+    private void SaveTrackedWindowState()
     {
-        if (_usesCompositorPlacement) return;
-        int x, y;
-        Saucer.saucer_window_position(window, &x, &y);
-        var prevX = _cachedX; var prevY = _cachedY;
-        _cachedX = x; _cachedY = y;
-        // Track the non-maximized position for persistence (ARC-05); a maximized window's origin is the
-        // screen corner, not where the user wants it restored.
-        if (Saucer.saucer_window_maximized(window) == 0) { _normalX = x; _normalY = y; }
-        if (prevX != x || prevY != y) { Moved?.Invoke(this, new WindowMovedEventArgs { X = x, Y = y }); _rynWebView?.EmitEvent("window.moved", $"{{\"x\":{x},\"y\":{y}}}"); }
+        if (_statePersistence is null) return;
+        _statePersistence.Save(new WindowStateData
+        {
+            Width = Volatile.Read(ref _normalWidth),
+            Height = Volatile.Read(ref _normalHeight),
+            X = Volatile.Read(ref _normalX),
+            Y = Volatile.Read(ref _normalY),
+            IsMaximized = _isMaximized,
+        });
     }
 
     /// <summary>
@@ -1142,10 +1163,15 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // no-op; nulling the field makes that explicit.
         _themeDetector?.Dispose(); _themeDetector = null;
         _rynWebView?.Dispose(); _rynWebView = null;
+        if (_window != null)
+        {
+            WindowMoveObserver.Uninstall(GetNativeWindowHandleCore(), _moveObserverRegistration, _usesCompositorPlacement);
+            _moveObserverRegistration = 0;
+        }
         if (_window != null && OperatingSystem.IsLinux())
         {
             LinuxWindowResizeObserver.Uninstall(
-                GetNativeWindowHandle(),
+                GetNativeWindowHandleCore(),
                 _linuxResizeRealizeHandler,
                 _linuxResizeSurface,
                 _linuxResizeLayoutHandler);
