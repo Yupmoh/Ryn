@@ -31,6 +31,8 @@ public sealed class RynOptionsTests
         options.HardwareAcceleration.Should().BeTrue();
         options.LinuxRenderingMode.Should().Be(LinuxRenderingMode.Auto);
         options.IsSet(nameof(RynOptions.LinuxRenderingMode)).Should().BeFalse();
+        options.LinuxDisplayBackend.Should().Be(LinuxDisplayBackend.Auto);
+        options.IsSet(nameof(RynOptions.LinuxDisplayBackend)).Should().BeFalse();
     }
 
     [Fact]
@@ -77,6 +79,7 @@ public sealed class RynOptionsTests
         var environment = new Dictionary<string, string?>();
 
         LinuxRendering.Configure(
+            LinuxDisplayBackend.Auto,
             LinuxRenderingMode.SharedMemory,
             isLinux: true,
             (name, value) => environment[name] = value);
@@ -86,13 +89,33 @@ public sealed class RynOptionsTests
     }
 
     [Theory]
-    [InlineData(LinuxRenderingMode.Auto, true)]
-    [InlineData(LinuxRenderingMode.SharedMemory, false)]
-    public void RenderingMode_DoesNotChangeEnvironmentWhenInactive(LinuxRenderingMode mode, bool isLinux)
+    [InlineData(LinuxDisplayBackend.X11, "x11")]
+    [InlineData(LinuxDisplayBackend.Wayland, "wayland")]
+    public void DisplayBackend_SetsGtkEnvironmentBeforeInitialization(LinuxDisplayBackend backend, string expected)
     {
         var environment = new Dictionary<string, string?>();
 
-        LinuxRendering.Configure(mode, isLinux, (name, value) => environment[name] = value);
+        LinuxRendering.Configure(
+            backend,
+            LinuxRenderingMode.Auto,
+            isLinux: true,
+            (name, value) => environment[name] = value);
+
+        environment.Should().ContainSingle()
+            .Which.Should().Be(new KeyValuePair<string, string?>(LinuxRendering.DisplayBackendVariable, expected));
+    }
+
+    [Theory]
+    [InlineData(LinuxDisplayBackend.Auto, LinuxRenderingMode.Auto, true)]
+    [InlineData(LinuxDisplayBackend.X11, LinuxRenderingMode.SharedMemory, false)]
+    public void LinuxModes_DoNotChangeEnvironmentWhenInactive(
+        LinuxDisplayBackend backend,
+        LinuxRenderingMode renderingMode,
+        bool isLinux)
+    {
+        var environment = new Dictionary<string, string?>();
+
+        LinuxRendering.Configure(backend, renderingMode, isLinux, (name, value) => environment[name] = value);
 
         environment.Should().BeEmpty();
     }

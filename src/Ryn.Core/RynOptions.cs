@@ -34,6 +34,7 @@ public sealed class RynOptions
     private bool _clickThrough;
     private bool _hardwareAcceleration = true;
     private LinuxRenderingMode _linuxRenderingMode = LinuxRenderingMode.Auto;
+    private LinuxDisplayBackend _linuxDisplayBackend = LinuxDisplayBackend.Auto;
     private Uri? _url;
     private string? _html;
     private string? _contentDirectory;
@@ -153,6 +154,14 @@ public sealed class RynOptions
     /// it does not disable WebKit hardware acceleration. Has no effect outside Linux.
     /// </summary>
     public LinuxRenderingMode LinuxRenderingMode { get => _linuxRenderingMode; set => Set(ref _linuxRenderingMode, value); }
+
+    /// <summary>
+    /// Selects the GTK display backend on Linux. <see cref="LinuxDisplayBackend.Auto"/> preserves GTK's
+    /// normal backend selection, <see cref="LinuxDisplayBackend.Wayland"/> requires native Wayland, and
+    /// <see cref="LinuxDisplayBackend.X11"/> requires X11 (through XWayland in a Wayland session).
+    /// Applied process-wide before GTK initializes. Has no effect outside Linux.
+    /// </summary>
+    public LinuxDisplayBackend LinuxDisplayBackend { get => _linuxDisplayBackend; set => Set(ref _linuxDisplayBackend, value); }
 
     /// <summary>URL to navigate to on startup. Mutually exclusive with <see cref="Html"/> and <see cref="ContentDirectory"/>.</summary>
     public Uri? Url { get => _url; set => Set(ref _url, value); }
@@ -278,6 +287,19 @@ public sealed class RynOptions
         field = value;
         _setProperties.Add(propertyName);
     }
+}
+
+/// <summary>Selects the GTK display backend used by Ryn on Linux.</summary>
+public enum LinuxDisplayBackend
+{
+    /// <summary>Let GTK select the display backend from the current desktop session.</summary>
+    Auto,
+
+    /// <summary>Require the native Wayland backend.</summary>
+    Wayland,
+
+    /// <summary>Require the X11 backend, using XWayland when available in a Wayland session.</summary>
+    X11,
 }
 
 /// <summary>Controls how WebKitGTK transfers rendered frames to the host window on Linux.</summary>

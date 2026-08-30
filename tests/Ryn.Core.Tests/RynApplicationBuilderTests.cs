@@ -214,6 +214,21 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_BindsLinuxDisplayBackendFromConfiguration()
+    {
+        var builder = RynApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Ryn:LinuxDisplayBackend"] = "X11",
+        });
+
+        await using var app = builder.Build();
+
+        app.Services.GetRequiredService<RynOptions>().LinuxDisplayBackend
+            .Should().Be(LinuxDisplayBackend.X11);
+    }
+
+    [Fact]
     public async Task Build_BindsPlacementFromConfiguration()
     {
         var builder = RynApplication.CreateBuilder();

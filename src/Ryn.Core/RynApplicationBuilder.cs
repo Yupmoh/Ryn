@@ -274,6 +274,10 @@ public sealed class RynApplicationBuilder
             Enum.TryParse<LinuxRenderingMode>(linuxRenderingMode, true, out var linuxMode))
             options.LinuxRenderingMode = linuxMode;
 
+        if (section[nameof(RynOptions.LinuxDisplayBackend)] is { } linuxDisplayBackend &&
+            Enum.TryParse<LinuxDisplayBackend>(linuxDisplayBackend, true, out var displayBackend))
+            options.LinuxDisplayBackend = displayBackend;
+
         if (section[nameof(RynOptions.CrossOriginIsolation)] is { } coi && bool.TryParse(coi, out var ci))
             options.CrossOriginIsolation = ci;
 
@@ -309,6 +313,7 @@ public sealed class RynApplicationBuilder
         CopyIfSet(target, source, nameof(RynOptions.Transparent), static (t, s) => t.Transparent = s.Transparent);
         CopyIfSet(target, source, nameof(RynOptions.HardwareAcceleration), static (t, s) => t.HardwareAcceleration = s.HardwareAcceleration);
         CopyIfSet(target, source, nameof(RynOptions.LinuxRenderingMode), static (t, s) => t.LinuxRenderingMode = s.LinuxRenderingMode);
+        CopyIfSet(target, source, nameof(RynOptions.LinuxDisplayBackend), static (t, s) => t.LinuxDisplayBackend = s.LinuxDisplayBackend);
         CopyIfSet(target, source, nameof(RynOptions.Url), static (t, s) => t.Url = s.Url);
         CopyIfSet(target, source, nameof(RynOptions.Html), static (t, s) => t.Html = s.Html);
         CopyIfSet(target, source, nameof(RynOptions.ContentDirectory), static (t, s) => t.ContentDirectory = s.ContentDirectory);
@@ -383,6 +388,8 @@ public sealed class RynApplicationBuilder
 
         if (!Enum.IsDefined(options.LinuxRenderingMode))
             throw new InvalidOperationException($"RynOptions.LinuxRenderingMode has an invalid value ({options.LinuxRenderingMode}).");
+        if (!Enum.IsDefined(options.LinuxDisplayBackend))
+            throw new InvalidOperationException($"RynOptions.LinuxDisplayBackend has an invalid value ({options.LinuxDisplayBackend}).");
 
         var schemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var scheme in options.CustomSchemes)

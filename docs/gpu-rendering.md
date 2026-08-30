@@ -47,8 +47,9 @@ CPU-bound API.
 
 Ryn exposes the following rendering controls. `HardwareAcceleration` and
 `BrowserFlags` are available on both `RynOptions` (app-wide) and
-`RynWindowOptions` (per secondary window). `LinuxRenderingMode` is application-wide
-because WebKitGTK selects its transport when the process initializes.
+`RynWindowOptions` (per secondary window). `LinuxDisplayBackend` and
+`LinuxRenderingMode` are application-wide because GTK and WebKitGTK select them
+when the process initializes.
 
 ### `HardwareAcceleration` — `bool`, default `true`
 
@@ -72,6 +73,24 @@ var app = RynApplication.CreateBuilder()
 
 > `HardwareAcceleration` is not a universal performance fix. Leave it enabled unless
 > you are diagnosing a driver or headless-environment compatibility problem.
+
+### `LinuxDisplayBackend` — GTK display backend, default `Auto`
+
+Ryn normally leaves GTK's display backend selection unchanged. Linux applications
+that need a specific window-system contract can require native Wayland or X11:
+
+```csharp
+.ConfigureOptions(opts =>
+{
+    opts.LinuxDisplayBackend = LinuxDisplayBackend.Wayland;
+    // Or LinuxDisplayBackend.X11. In a Wayland desktop this uses XWayland when available.
+})
+```
+
+`Wayland` and `X11` set `GDK_BACKEND` before GTK initializes. A requested backend
+must be available in the user's session or GTK cannot start. The option is
+process-wide and has no effect on Windows or macOS; keep `Auto` unless the
+application specifically requires native Wayland or X11/XWayland behavior.
 
 ### `LinuxRenderingMode` — Linux frame transport, default `Auto`
 
@@ -117,9 +136,10 @@ because each OS runs a different engine. Always guard a flag behind an OS check.
 })
 ```
 
-You can also set `HardwareAcceleration`, `LinuxRenderingMode`, and `BrowserFlags` from
-`ryn.json` / configuration. Hardware acceleration and browser flags project onto
-secondary windows; the Linux rendering mode remains process-wide.
+You can also set `HardwareAcceleration`, `LinuxDisplayBackend`,
+`LinuxRenderingMode`, and `BrowserFlags` from `ryn.json` / configuration.
+Hardware acceleration and browser flags project onto secondary windows; both Linux
+options remain process-wide.
 
 ---
 

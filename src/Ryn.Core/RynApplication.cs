@@ -130,7 +130,7 @@ public sealed partial class RynApplication : IAsyncDisposable
         {
             var options = _services.GetRequiredService<RynOptions>();
 
-            LinuxRendering.Configure(options.LinuxRenderingMode);
+            LinuxRendering.Configure(options.LinuxDisplayBackend, options.LinuxRenderingMode);
 
             // Create and publish the host BEFORE plugins initialize, so a plugin backend that resolves
             // IMainThreadDispatcher / IRynApplicationLifetime during its InitializeAsync marshals onto (and can
