@@ -74,44 +74,18 @@ public sealed class RynOptionsTests
     }
 
     [Fact]
-    public void SharedMemoryMode_SetsEnvironmentAndReexecutesWhenNotInherited()
+    public void SharedMemoryMode_SetsWebKitEnvironmentBeforeInitialization()
     {
         var environment = new Dictionary<string, string?>();
-        var reexecutions = 0;
-
-        Action act = () => LinuxRendering.Configure(
-            LinuxDisplayBackend.Auto,
-            LinuxRenderingMode.SharedMemory,
-            isLinux: true,
-            name => environment.GetValueOrDefault(name),
-            (name, value) => environment[name] = value,
-            () => reexecutions++);
-
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("Linux process re-execution returned without replacing the process.");
-        environment.Should().ContainSingle()
-            .Which.Should().Be(new KeyValuePair<string, string?>(LinuxRendering.ForceSharedMemoryVariable, "1"));
-        reexecutions.Should().Be(1);
-    }
-
-    [Fact]
-    public void SharedMemoryMode_DoesNotReexecuteWhenAlreadyInherited()
-    {
-        var environment = new Dictionary<string, string?>
-        {
-            [LinuxRendering.ForceSharedMemoryVariable] = "1",
-        };
-        var reexecutions = 0;
 
         LinuxRendering.Configure(
             LinuxDisplayBackend.Auto,
             LinuxRenderingMode.SharedMemory,
             isLinux: true,
-            name => environment.GetValueOrDefault(name),
-            (name, value) => environment[name] = value,
-            () => reexecutions++);
+            (name, value) => environment[name] = value);
 
-        reexecutions.Should().Be(0);
+        environment.Should().ContainSingle()
+            .Which.Should().Be(new KeyValuePair<string, string?>(LinuxRendering.ForceSharedMemoryVariable, "1"));
     }
 
     [Theory]
@@ -125,9 +99,7 @@ public sealed class RynOptionsTests
             backend,
             LinuxRenderingMode.Auto,
             isLinux: true,
-            name => environment.GetValueOrDefault(name),
-            (name, value) => environment[name] = value,
-            () => throw new InvalidOperationException("Reexecution is not expected."));
+            (name, value) => environment[name] = value);
 
         environment.Should().ContainSingle()
             .Which.Should().Be(new KeyValuePair<string, string?>(LinuxRendering.DisplayBackendVariable, expected));
@@ -143,27 +115,8 @@ public sealed class RynOptionsTests
     {
         var environment = new Dictionary<string, string?>();
 
-        LinuxRendering.Configure(
-            backend,
-            renderingMode,
-            isLinux,
-            name => environment.GetValueOrDefault(name),
-            (name, value) => environment[name] = value,
-            () => throw new InvalidOperationException("Reexecution is not expected."));
+        LinuxRendering.Configure(backend, renderingMode, isLinux, (name, value) => environment[name] = value);
 
         environment.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void ReexecutionArguments_PreserveEmptyAndUtf8Arguments()
-    {
-        byte[] commandLine =
-        [
-            .. "dotnet\0app.dll\0\0hello world\0caf"u8,
-            0xC3, 0xA9, 0,
-        ];
-
-        LinuxProcessReexecutor.ReadNullTerminatedArguments(commandLine)
-            .Should().Equal("dotnet", "app.dll", "", "hello world", "caf\u00e9");
     }
 }

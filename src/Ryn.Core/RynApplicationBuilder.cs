@@ -366,8 +366,15 @@ public sealed class RynApplicationBuilder
             copy(target, source);
     }
 
-    internal static void ApplyProcessWideOptions(RynOptions options) =>
-        LinuxRendering.Configure(options.LinuxDisplayBackend, options.LinuxRenderingMode);
+    internal static void ApplyProcessWideOptions(
+        RynOptions options,
+        bool? isLinux = null,
+        Action<string, string?>? setEnvironmentVariable = null) =>
+        LinuxRendering.Configure(
+            options.LinuxDisplayBackend,
+            options.LinuxRenderingMode,
+            isLinux ?? OperatingSystem.IsLinux(),
+            setEnvironmentVariable ?? Environment.SetEnvironmentVariable);
 
     private static void ValidateOptions(RynOptions options)
     {
