@@ -214,6 +214,29 @@ public sealed class RynApplicationBuilderTests
     }
 
     [Fact]
+    public async Task Build_ActivatesConfiguredSharedMemoryBeforeRun()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var previous = Environment.GetEnvironmentVariable(LinuxRendering.ForceSharedMemoryVariable);
+        Environment.SetEnvironmentVariable(LinuxRendering.ForceSharedMemoryVariable, null);
+        try
+        {
+            var builder = RynApplication.CreateBuilder();
+            builder.ConfigureOptions(options => options.LinuxRenderingMode = LinuxRenderingMode.SharedMemory);
+
+            await using var app = builder.Build();
+
+            Environment.GetEnvironmentVariable(LinuxRendering.ForceSharedMemoryVariable).Should().Be("1");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(LinuxRendering.ForceSharedMemoryVariable, previous);
+        }
+    }
+
+    [Fact]
     public async Task Build_BindsLinuxDisplayBackendFromConfiguration()
     {
         var builder = RynApplication.CreateBuilder();

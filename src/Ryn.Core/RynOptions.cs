@@ -150,8 +150,9 @@ public sealed class RynOptions
     /// Selects how WebKitGTK transfers rendered frames to the Linux host window. The default
     /// <see cref="LinuxRenderingMode.Auto"/> lets WebKitGTK use its efficient DMA-BUF path.
     /// <see cref="LinuxRenderingMode.SharedMemory"/> is a compatibility mode for systems where that path is
-    /// unstable, notably affected NVIDIA/Wayland configurations. Applied process-wide before GTK initializes;
-    /// it does not disable WebKit hardware acceleration. Has no effect outside Linux.
+    /// unstable, notably affected NVIDIA/Wayland configurations. Applied process-wide when the application is
+    /// built, before plugins or native GTK/WebKit initialization; it does not disable WebKit hardware
+    /// acceleration. Has no effect outside Linux.
     /// </summary>
     public LinuxRenderingMode LinuxRenderingMode { get => _linuxRenderingMode; set => Set(ref _linuxRenderingMode, value); }
 
@@ -159,7 +160,8 @@ public sealed class RynOptions
     /// Selects the GTK display backend on Linux. <see cref="LinuxDisplayBackend.Auto"/> preserves GTK's
     /// normal backend selection, <see cref="LinuxDisplayBackend.Wayland"/> requires native Wayland, and
     /// <see cref="LinuxDisplayBackend.X11"/> requires X11 (through XWayland in a Wayland session).
-    /// Applied process-wide before GTK initializes. Has no effect outside Linux.
+    /// Applied process-wide when the application is built, before plugins or native GTK initialization. Has no
+    /// effect outside Linux.
     /// </summary>
     public LinuxDisplayBackend LinuxDisplayBackend { get => _linuxDisplayBackend; set => Set(ref _linuxDisplayBackend, value); }
 

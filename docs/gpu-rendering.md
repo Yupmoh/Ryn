@@ -119,7 +119,8 @@ window is visible. Use the shared-memory compatibility mode on affected systems:
 })
 ```
 
-This applies `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` before GTK/WebKit initializes. It
+Ryn applies `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` when `Build()` resolves the final
+options, before plugin initialization and before `RunAsync()` creates GTK/WebKit. It
 changes how finished frames reach the host window; it does **not** disable WebKit
 hardware acceleration. Keep `Auto` for unaffected systems because DMA-BUF avoids the
 extra copies and memory bandwidth of shared-memory presentation.

@@ -130,8 +130,6 @@ public sealed partial class RynApplication : IAsyncDisposable
         {
             var options = _services.GetRequiredService<RynOptions>();
 
-            LinuxRendering.Configure(options.LinuxDisplayBackend, options.LinuxRenderingMode);
-
             // Create and publish the host BEFORE plugins initialize, so a plugin backend that resolves
             // IMainThreadDispatcher / IRynApplicationLifetime during its InitializeAsync marshals onto (and can
             // request shutdown of) the real host. The host buffers pre-loop work and drains it on the UI thread

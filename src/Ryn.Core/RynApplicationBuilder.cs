@@ -130,6 +130,7 @@ public sealed class RynApplicationBuilder
         }
 
         ValidateOptions(options);
+        ApplyProcessWideOptions(options);
 
         // 3. Logging — register a default console/debug provider bound to the "Logging" config section so
         // framework Critical/Error messages (notably "Plugin failed to initialize", which must never be
@@ -365,6 +366,16 @@ public sealed class RynApplicationBuilder
             copy(target, source);
     }
 
+    internal static void ApplyProcessWideOptions(
+        RynOptions options,
+        bool? isLinux = null,
+        Action<string, string?>? setEnvironmentVariable = null) =>
+        LinuxRendering.Configure(
+            options.LinuxDisplayBackend,
+            options.LinuxRenderingMode,
+            isLinux ?? OperatingSystem.IsLinux(),
+            setEnvironmentVariable ?? Environment.SetEnvironmentVariable);
+
     private static void ValidateOptions(RynOptions options)
     {
         // Fail fast at Build() with an actionable message instead of a late crash inside the native ready
@@ -390,6 +401,7 @@ public sealed class RynApplicationBuilder
             throw new InvalidOperationException($"RynOptions.LinuxRenderingMode has an invalid value ({options.LinuxRenderingMode}).");
         if (!Enum.IsDefined(options.LinuxDisplayBackend))
             throw new InvalidOperationException($"RynOptions.LinuxDisplayBackend has an invalid value ({options.LinuxDisplayBackend}).");
+
 
         var schemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var scheme in options.CustomSchemes)
