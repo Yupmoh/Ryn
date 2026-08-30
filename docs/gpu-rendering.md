@@ -119,11 +119,13 @@ window is visible. Use the shared-memory compatibility mode on affected systems:
 })
 ```
 
-Ryn applies `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` when `Build()` resolves the final
-options, before plugin initialization and before `RunAsync()` creates GTK/WebKit. It
-changes how finished frames reach the host window; it does **not** disable WebKit
-hardware acceleration. Keep `Auto` for unaffected systems because DMA-BUF avoids the
-extra copies and memory bandwidth of shared-memory presentation.
+WebKitGTK can cache this setting before managed startup. If the variable is not already
+inherited, `Build()` sets `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1` and replaces the current
+Linux process once with the same executable, native argument vector, environment, and
+process ID. On the replacement run the variable is already present, so startup continues
+normally without another restart. This changes how finished frames reach the host window;
+it does **not** disable WebKit hardware acceleration. Keep `Auto` for unaffected systems
+because DMA-BUF avoids the extra copies and memory bandwidth of shared-memory presentation.
 
 Do not use `WEBKIT_DISABLE_DMABUF_RENDERER=1` as a substitute. Some current WebKitGTK
 configurations fail rather than selecting a valid fallback transport.
