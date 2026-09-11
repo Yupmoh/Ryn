@@ -41,7 +41,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     /// <param name="contentDirectory">Static content root, or null for an IPC-only server (e.g. backing a Vite dev server).</param>
     /// <param name="preferredPort">Fixed loopback port to try first.</param>
-    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS.</param>
+    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS; any loopback origin is permitted too.</param>
     /// <param name="crossOriginIsolation">When true, static responses send COOP/COEP/CORP so the page is crossOriginIsolated (SharedArrayBuffer).</param>
     internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false, long maxBodyBytes = 32L * 1024 * 1024)
     {
@@ -360,7 +360,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
         if (path.StartsWith(IpcProtocol.IpcEvalPrefix, StringComparison.Ordinal))
         {
-            await HandleIpcEvalAsync(stream, request, keepAlive, ct).ConfigureAwait(false);
+            await HandleIpcEvalAsync(stream, request, corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -406,17 +406,18 @@ internal sealed class LocalWebServer : IAsyncDisposable
             ok ? "application/json" : "text/plain", Encoding.UTF8.GetBytes(data), headers, keepAlive, ct).ConfigureAwait(false);
     }
 
-    private async Task HandleIpcEvalAsync(NetworkStream stream, HttpRequest request, bool keepAlive, CancellationToken ct)
+    private async Task HandleIpcEvalAsync(NetworkStream stream, HttpRequest request,
+        IReadOnlyList<(string Name, string Value)> corsHeaders, bool keepAlive, CancellationToken ct)
     {
         if (_webView is null)
         {
-            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         if (!IsAuthorized(request))
         {
-            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -426,12 +427,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
             || !long.TryParse(segments[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var evalId)
             || !int.TryParse(segments[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var okFlag))
         {
-            await WriteTextAsync(stream, 400, "Bad Request", "bad eval path", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 400, "Bad Request", "bad eval path", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         _webView.HandleEvalFromServer(evalId, okFlag, Encoding.UTF8.GetString(request.Body));
-        await WriteTextAsync(stream, 200, "OK", "", keepAlive, ct).ConfigureAwait(false);
+        await WriteTextAsync(stream, 200, "OK", "", corsHeaders, keepAlive, ct).ConfigureAwait(false);
     }
 
     // ---- authorization (loopback + per-launch token + same-origin) ----
@@ -448,27 +449,50 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var host = HostOnly(request.Headers.TryGetValue("Host", out var h) ? h : "");
         if (!IsLoopbackHost(host)) return false;
 
-        if (request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrEmpty(origin))
+        if (request.Headers.TryGetValue("Origin", out var origin)
+            && !string.IsNullOrEmpty(origin)
+            && !IsAllowedIpcOrigin(origin))
         {
-            var allowed = _allowedCorsOrigin is not null
-                && string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase);
-            if (!allowed && !(Uri.TryCreate(origin, UriKind.Absolute, out var ou) && IsLoopbackHost(ou.Host)))
-                return false;
+            return false;
         }
 
         return true;
     }
 
+    /// <summary>
+    /// Whether an IPC request's <c>Origin</c> is permitted: the configured cross-origin value, or any loopback
+    /// origin. Single source of truth for both the request guard (<see cref="IsAuthorized"/>) and the CORS
+    /// response headers (<see cref="BuildCorsHeaders"/>) — when the two disagree, the browser blocks a request
+    /// the host has already accepted, and the page sees a network error instead of the command result.
+    /// </summary>
+    private bool IsAllowedIpcOrigin(string origin)
+    {
+        if (string.IsNullOrEmpty(origin)) return false;
+
+        if (_allowedCorsOrigin is not null
+            && string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Matches IsAuthorized: a page served from loopback (including one that moved to a different loopback
+        // port during the session) stays authorized, so its CORS preflight must succeed as well.
+        return Uri.TryCreate(origin, UriKind.Absolute, out var uri) && IsLoopbackHost(uri.Host);
+    }
+
     private List<(string, string)> BuildCorsHeaders(HttpRequest request)
     {
         var headers = new List<(string, string)>();
-        if (_allowedCorsOrigin is null) return headers;
 
         var origin = request.Headers.TryGetValue("Origin", out var o) ? o : "";
-        if (string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(origin)) return headers;
+
+        // The CORS decision varies by request Origin (loopback and possibly the configured dev origin), so any
+        // cache in front of this endpoint must key on it — allowed or not.
+        headers.Add(("Vary", "Origin"));
+        if (IsAllowedIpcOrigin(origin))
         {
             headers.Add(("Access-Control-Allow-Origin", origin));
-            headers.Add(("Vary", "Origin"));
             headers.Add(("Access-Control-Allow-Methods", "POST, OPTIONS"));
             headers.Add(("Access-Control-Allow-Headers", $"Content-Type, {IpcProtocol.TokenHeader}"));
         }
@@ -674,7 +698,11 @@ internal sealed class LocalWebServer : IAsyncDisposable
     // ---- response writing ----
 
     private static Task WriteTextAsync(NetworkStream stream, int status, string reason, string text, bool keepAlive, CancellationToken ct) =>
-        WriteAsync(stream, status, reason, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(text), [], keepAlive, ct);
+        WriteTextAsync(stream, status, reason, text, [], keepAlive, ct);
+
+    private static Task WriteTextAsync(NetworkStream stream, int status, string reason, string text,
+        IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct) =>
+        WriteAsync(stream, status, reason, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(text), headers, keepAlive, ct);
 
     private static async Task WriteAsync(NetworkStream stream, int status, string reason, string? contentType,
         byte[] body, IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct, bool headOnly = false)
