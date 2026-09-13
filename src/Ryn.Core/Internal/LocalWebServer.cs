@@ -82,8 +82,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
     /// call onward. Host-controlled escape hatch for a frontend whose origin changes mid-session (e.g. the dev
     /// server or app backend moved to a different loopback port and the webview navigated to it) — call this
     /// before navigating. Nothing is persisted: after a restart the host re-authorizes, so the trust set always
-    /// reflects the host's current intent. An origin that was never authorized — loopback included — stays
-    /// rejected even with a valid IPC token, because every navigated page receives the token-bearing bridge.
+    /// reflects the host's current intent. Unapproved origins are rejected even with a valid IPC token.
     /// </summary>
     internal void AuthorizeIpcOrigin(string origin)
     {
@@ -96,9 +95,16 @@ internal sealed class LocalWebServer : IAsyncDisposable
         }
     }
 
+    internal void RevokeIpcOrigin(string origin)
+    {
+        if (NormalizeOrigin(origin) is not { } normalized)
+            throw new ArgumentException("Origin must be an absolute http(s) origin.", nameof(origin));
+        lock (_originLock) _trustedOrigins.Remove(normalized);
+    }
+
     /// <summary>Lower-cases the host and strips any path/trailing slash so comparisons are exact-authority;
     /// returns null for anything that is not an absolute http(s) origin.</summary>
-    private static string? NormalizeOrigin(string? origin)
+    internal static string? NormalizeOrigin(string? origin)
     {
         if (string.IsNullOrWhiteSpace(origin)) return null;
         if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)) return null;

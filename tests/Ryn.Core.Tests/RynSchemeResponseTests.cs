@@ -97,4 +97,28 @@ public sealed class RynSchemeResponseTests
     {
         RynWebView.ParseHeaderValue(headers, "X-Ryn-Token").Should().Be("token");
     }
+
+    [Fact]
+    public void OriginParser_PreservesAbsentHeaderCompatibility()
+    {
+        RynWebView.ParseOriginHeader("X-Ryn-Token: token").Should().BeNull(
+            "WebKit omits Origin for same-origin ryn:// requests");
+    }
+
+    [Theory]
+    [InlineData("Origin:")]
+    [InlineData("Origin:   ")]
+    [InlineData("Origin: null")]
+    [InlineData("Origin: NULL")]
+    public void OriginParser_MarksSuppliedUnusableOriginsAsPresent(string headers)
+    {
+        RynWebView.ParseOriginHeader(headers).Should().BeEmpty(
+            "an explicit empty or opaque Origin must not use the absent-header authorization path");
+    }
+
+    [Fact]
+    public void OriginParser_PreservesUsableOrigin()
+    {
+        RynWebView.ParseOriginHeader("Origin: https://app.example").Should().Be("https://app.example");
+    }
 }

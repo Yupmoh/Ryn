@@ -554,6 +554,10 @@ if (path.StartsWith("/ipc/", ...) && matchedOrigin is null && requestOrigin is n
 
 Allowed origins default to `ryn://app`. When `opts.Url` is set, the URL's origin is added automatically. Additional origins can be configured via `opts.AllowedOrigins`.
 
+The authenticated bridge is created only in trusted top-level documents; untrusted navigation receives no bridge or IPC base URL. For HTTP-server windows, call `window.AuthorizeIpcOrigin("http://localhost:5174")` before navigating to a replacement frontend. Call `window.RevokeIpcOrigin(origin)` to reject subsequent requests and prevent bridge creation on future navigation. In-flight commands may finish, and revocation cannot erase scripts already loaded by a page. Both methods are host-only and do nothing without a local IPC server.
+
+The `ryn://` transport permits an absent Origin header for WebKit compatibility, but rejects explicitly empty and opaque (`Origin: null`) values. Token validation remains required.
+
 ## 8. NativeAOT Considerations
 
 Ryn is designed NativeAOT-first. Every design decision accounts for the constraints of ahead-of-time compilation.

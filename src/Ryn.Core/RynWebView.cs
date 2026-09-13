@@ -18,8 +18,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     internal static string GetConsoleForwardScriptText() => Encoding.UTF8.GetString(ConsoleForwardScript);
 
     /// <summary>
-    /// Per-launch high-entropy token embedded in the JS bridge and required on every IPC request handled
-    /// by the local web server, so another local process or a cross-origin page cannot drive IPC.
+    /// Per-launch high-entropy token embedded in the JS bridge and required on every IPC request. Origin
+    /// authorization separately limits which page contexts may use a token-bearing bridge.
     /// </summary>
     private readonly string _ipcToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
 
@@ -233,6 +233,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private bool _crossOriginIsolation;
     private EmbeddedContentStore? _embeddedContent;
     private readonly HashSet<string> _allowedOrigins = new(StringComparer.OrdinalIgnoreCase) { IpcProtocol.AppOrigin };
+    private nuint? _bridgeScript;
+    private string _ipcBase = "";
 
     /// <summary>
     /// Schemes the app declared up front (RynOptions.CustomSchemes), which the host registered with the
@@ -362,6 +364,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     {
         foreach (var origin in origins)
             _allowedOrigins.Add(origin);
+        InjectBridgeScript();
+    }
+
+    internal void RevokeIpcOrigin(string origin)
+    {
+        _allowedOrigins.Remove(origin);
+        InjectBridgeScript();
     }
 
     /// <summary>
@@ -586,10 +595,13 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     private unsafe void InjectBridgeScript()
     {
-        var script = BuildBridgeScript(_ipcToken, _ipcCommandTimeout);
+        if (_bridgeScript is { } previous)
+            Saucer.saucer_webview_uninject((saucer_webview*)_webview, previous);
+        var origins = string.Join(",", _allowedOrigins.Select(origin => $"\"{System.Text.Json.JsonEncodedText.Encode(origin)}\""));
+        var script = $"(function(){{if(![{origins}].includes(location.protocol+'//'+location.host))return;{BuildBridgeScript(_ipcToken, _ipcCommandTimeout)}window.__ryn._ipcBase=\"{System.Text.Json.JsonEncodedText.Encode(_ipcBase)}\";}})();";
         Span<byte> buf = stackalloc byte[256];
         var str = Utf8String.Create(script, buf); // falls back to a pooled buffer for the full script
-        Saucer.saucer_webview_inject(
+        _bridgeScript = Saucer.saucer_webview_inject(
             (saucer_webview*)_webview,
             str.Pointer,
             saucer_script_time.SAUCER_SCRIPT_TIME_CREATION,
@@ -605,8 +617,8 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// </summary>
     internal unsafe void SetIpcBaseOverride(string absoluteBaseUrl)
     {
-        var js = $"(function(){{window.__ryn=window.__ryn||{{}};window.__ryn._ipcBase=\"{System.Text.Json.JsonEncodedText.Encode(absoluteBaseUrl)}\";}})();";
-        InjectAtCreation(js);
+        _ipcBase = absoluteBaseUrl;
+        InjectBridgeScript();
     }
 
     /// <summary>Surfaces a developer-facing warning in the page console (visible in DevTools).</summary>
@@ -781,13 +793,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             return;
         }
 
-        // IPC endpoints (cmd/eval) are privileged: enforce the per-launch token and require POST. The token is
-        // the real security boundary — only the bridge injected into the app's own same-origin page receives
-        // it (IPC-01). WebKit sends NO Origin header for same-origin custom-scheme (ryn://) requests, so the
-        // legitimate in-page bridge call arrives with no Origin; requiring one would deny every same-origin IPC
-        // call. So a MISSING Origin is allowed (the token gates it), while a PRESENT Origin must be on the
-        // allowlist — a genuinely cross-origin caller (which also lacks the token) is still rejected. The token
-        // check is constant-time.
+        // IPC endpoints (cmd/eval) are privileged: require POST, the per-launch token, and an allowed Origin
+        // whenever the engine supplies one. WebKit omits Origin for legitimate same-origin ryn:// requests,
+        // so absence remains compatible; an explicitly empty or opaque "null" Origin is still supplied but
+        // unusable and must fail the allowlist check. Origin authorization is independent of token secrecy
+        // because injected scripts can remain reachable after navigation. The token check is constant-time.
         if (isIpc)
         {
             var presentedToken = ParseHeaderValue(headers, IpcProtocol.TokenHeader);
@@ -1329,15 +1339,18 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     }
 
     /// <summary>
-    /// Extracts the request Origin from the raw header blob, normalizing an absent/empty/"null" Origin to
-    /// <c>null</c>. A null result means "no usable origin" — for /ipc/ that is treated as <em>denied</em>.
+    /// Extracts the request Origin from the raw header blob. <c>null</c> means the header was absent; an
+    /// explicitly empty or opaque <c>Origin: null</c> value becomes an empty sentinel so callers do not grant
+    /// the missing-header compatibility path to a supplied but unusable origin.
     /// </summary>
-    private static string? ParseOriginHeader(string headers)
+    internal static string? ParseOriginHeader(string headers)
     {
         var value = ParseHeaderValue(headers, "Origin");
-        if (value is null || value.Length == 0 || string.Equals(value, "null", StringComparison.OrdinalIgnoreCase))
+        if (value is null)
             return null;
-        return value;
+        return value.Length == 0 || string.Equals(value, "null", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value;
     }
 
     // saucer concatenates request headers as NUL-separated "Name: value" pairs ("\0"); some transports use
@@ -1381,7 +1394,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     {
         if (requestOrigin is null)
             return IpcProtocol.AppOrigin;
-        return _allowedOrigins.Contains(requestOrigin) ? requestOrigin : null;
+        return requestOrigin.Length > 0 && _allowedOrigins.Contains(requestOrigin) ? requestOrigin : null;
     }
 
     private static unsafe void AppendHeader(saucer_scheme_response* response, string name, string value)

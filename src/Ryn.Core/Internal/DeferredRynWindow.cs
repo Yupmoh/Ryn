@@ -56,6 +56,7 @@ internal sealed class DeferredRynWindow(RynWindowAccessor accessor) : IRynWindow
     public ValueTask WaitForCloseAsync(CancellationToken cancellationToken = default) => Live.WaitForCloseAsync(cancellationToken);
     public ValueTask NavigateAsync(Uri url, CancellationToken cancellationToken = default) => Live.NavigateAsync(url, cancellationToken);
     public void AuthorizeIpcOrigin(string origin) => Live.AuthorizeIpcOrigin(origin);
+    public void RevokeIpcOrigin(string origin) => Live.RevokeIpcOrigin(origin);
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default) => Live.EvaluateJavaScriptAsync(script, cancellationToken);
     public void Close() => Live.Close();
     public void Minimize() => Live.Minimize();
