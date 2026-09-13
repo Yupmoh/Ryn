@@ -10,9 +10,11 @@ namespace Ryn.Core.Tests;
 /// <summary>
 /// CORS regression tests for the <see cref="LocalWebServer"/> IPC endpoints. The allow-origin decision must
 /// agree with the request guard: a request the host authorizes must also pass the browser's CORS check, or the
-/// page reports a network error for a command the server already accepted. Regression: a page whose origin
-/// moved to a different loopback port mid-session (e.g. the dev server restarted on a new port) stayed
-/// authorized but received no <c>Access-Control-Allow-Origin</c>, so every <c>window.__ryn.invoke</c> failed.
+/// page reports a network error for a command the server already accepted. Trust is explicit per origin — the
+/// configured cross-origin value, the server's own origin, and runtime authorizations via
+/// <see cref="LocalWebServer.AuthorizeIpcOrigin"/>. A loopback origin is NOT trusted by default: the webview may
+/// navigate to an unrelated localhost service, and that page holds the token-bearing bridge, so an unapproved
+/// origin must be rejected even with a valid token.
 /// </summary>
 public sealed class LocalWebServerCorsTests : IAsyncLifetime
 {
@@ -38,34 +40,51 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _server.DisposeAsync();
 
-    [Theory]
-    [InlineData(ConfiguredOrigin)]
-    [InlineData(DriftedOrigin)]
-    public async Task Preflight_FromLoopbackOrigin_EchoesAllowOrigin(string origin)
+    [Fact]
+    public async Task Preflight_FromConfiguredOrigin_EchoesAllowOrigin()
     {
-        var response = await SendPreflightAsync(origin);
+        var response = await SendPreflightAsync(ConfiguredOrigin);
 
         StatusOf(response).Should().Be(204);
-        HeaderOf(response, "Access-Control-Allow-Origin").Should().Be(origin,
-            "the host authorizes any loopback origin, so the browser's preflight must succeed for it");
+        HeaderOf(response, "Access-Control-Allow-Origin").Should().Be(ConfiguredOrigin,
+            "the configured cross-origin value is trusted by construction");
         HeaderOf(response, "Vary").Should().Be("Origin");
     }
 
     [Fact]
-    public async Task Preflight_FromNonLoopbackOrigin_HasNoAllowOrigin()
+    public async Task Preflight_FromUnapprovedLoopbackOrigin_HasNoAllowOrigin()
     {
-        var response = await SendPreflightAsync("https://evil.example.com");
+        var response = await SendPreflightAsync(DriftedOrigin);
 
         StatusOf(response).Should().Be(204);
         HeaderOf(response, "Access-Control-Allow-Origin").Should().BeNull(
-            "a non-loopback cross-site origin must not be allowed");
+            "a loopback origin the host never approved must not be allowed — trust is explicit, not address-based");
         HeaderOf(response, "Vary").Should().Be("Origin", "the response varies by Origin either way");
     }
 
     [Fact]
-    public async Task IpcCommand_FromDriftedLoopbackOrigin_CarriesAllowOrigin()
+    public async Task IpcCommand_WithValidToken_FromUnapprovedLoopbackOrigin_IsForbidden()
+    {
+        var response = await SendRawAsync(
+            $"POST /ipc/cmd/1/x.y HTTP/1.1\r\n" +
+            $"Host: localhost:{_port}\r\n" +
+            $"Origin: {DriftedOrigin}\r\n" +
+            $"{IpcProtocol.TokenHeader}: {_host.IpcToken}\r\n" +
+            $"Content-Length: 2\r\n" +
+            $"Connection: close\r\n\r\n" +
+            $"{{}}");
+
+        StatusOf(response).Should().Be(403,
+            "a valid token must not substitute for origin trust: any navigated page holds the bridge, so an " +
+            "unrelated localhost service must stay locked out until the host authorizes it");
+    }
+
+    [Fact]
+    public async Task IpcCommand_AfterRuntimeAuthorization_FromDriftedOrigin_IsAccepted()
     {
         _host.OnDispatch = (_, _) => Task.FromResult((true, "{\"ok\":true}"));
+
+        _server.AuthorizeIpcOrigin(DriftedOrigin);
 
         var response = await SendRawAsync(
             $"POST /ipc/cmd/1/x.y HTTP/1.1\r\n" +
@@ -76,14 +95,16 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
             $"Connection: close\r\n\r\n" +
             $"{{}}");
 
-        StatusOf(response).Should().Be(200, "a loopback origin stays authorized after the port change");
+        StatusOf(response).Should().Be(200, "the host explicitly trusted the drifted page origin");
         HeaderOf(response, "Access-Control-Allow-Origin").Should().Be(DriftedOrigin,
             "an authorized cross-origin command response must be readable by the page");
     }
 
     [Fact]
-    public async Task IpcEval_FromDriftedLoopbackOrigin_CarriesAllowOrigin()
+    public async Task IpcEval_AfterRuntimeAuthorization_CarriesAllowOrigin()
     {
+        _server.AuthorizeIpcOrigin(DriftedOrigin);
+
         var response = await SendRawAsync(
             $"POST /ipc/eval/1/1 HTTP/1.1\r\n" +
             $"Host: localhost:{_port}\r\n" +
@@ -99,6 +120,25 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Preflight_FromServerOwnOrigin_EchoesAllowOrigin()
+    {
+        // Pages served by this server are same-origin clients: their POSTs carry the server's own origin,
+        // which is trusted by construction (no host action required).
+        var response = await SendPreflightAsync($"http://localhost:{_port}");
+
+        StatusOf(response).Should().Be(204);
+        HeaderOf(response, "Access-Control-Allow-Origin").Should().Be($"http://localhost:{_port}");
+    }
+
+    [Fact]
+    public void AuthorizeIpcOrigin_RejectsNonOrigin()
+    {
+        var act = () => _server.AuthorizeIpcOrigin("not an origin");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public async Task IpcCommand_FromNonLoopbackOrigin_IsForbidden()
     {
         var response = await SendRawAsync(
@@ -110,7 +150,7 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
             $"Connection: close\r\n\r\n" +
             $"{{}}");
 
-        StatusOf(response).Should().Be(403, "the request guard must keep rejecting non-loopback origins");
+        StatusOf(response).Should().Be(403, "the request guard must keep rejecting untrusted origins");
     }
 
     // ---- raw-socket helpers ----

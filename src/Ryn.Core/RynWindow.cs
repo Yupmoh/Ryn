@@ -200,6 +200,9 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
     public ValueTask NavigateAsync(Uri url, CancellationToken cancellationToken = default) =>
         _rynWebView?.NavigateAsync(url, cancellationToken) ?? ValueTask.CompletedTask;
 
+    /// <inheritdoc />
+    public void AuthorizeIpcOrigin(string origin) => _localServer?.AuthorizeIpcOrigin(origin);
+
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default) =>
         _rynWebView?.EvaluateJavaScriptAsync(script, cancellationToken) ?? new ValueTask<string>(string.Empty);
 

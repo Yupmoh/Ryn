@@ -25,7 +25,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     private readonly string? _contentDirectory;
     private EmbeddedContentStore? _embeddedContent;
-    private readonly string? _allowedCorsOrigin;
+    // Explicitly trusted IPC origins: the configured cross-origin value plus runtime authorizations made by the
+    // host (e.g. the page origin moved to a new port mid-session). Trust is opt-in per origin — a loopback
+    // origin is NOT trusted by default, because Ryn injects its token-bearing bridge into every main-frame
+    // navigation, so any loopback page the webview lands on would otherwise be able to invoke IPC commands.
+    private readonly HashSet<string> _trustedOrigins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _originLock = new();
     private readonly bool _crossOriginIsolation;
     private readonly int _preferredPort;
     private ILocalServerHost? _webView;
@@ -41,13 +46,14 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     /// <param name="contentDirectory">Static content root, or null for an IPC-only server (e.g. backing a Vite dev server).</param>
     /// <param name="preferredPort">Fixed loopback port to try first.</param>
-    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS; any loopback origin is permitted too.</param>
+    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), that origin is trusted for IPC: the request guard accepts it and CORS echoes it. Other origins (loopback included) are rejected until the host authorizes them via <see cref="AuthorizeIpcOrigin"/>.</param>
     /// <param name="crossOriginIsolation">When true, static responses send COOP/COEP/CORP so the page is crossOriginIsolated (SharedArrayBuffer).</param>
     internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false, long maxBodyBytes = 32L * 1024 * 1024)
     {
         _contentDirectory = contentDirectory is null ? null : Path.GetFullPath(contentDirectory);
         _preferredPort = preferredPort > 0 ? preferredPort : DefaultPort;
-        _allowedCorsOrigin = allowedCorsOrigin?.TrimEnd('/');
+        if (NormalizeOrigin(allowedCorsOrigin) is { } configured)
+            _trustedOrigins.Add(configured);
         _crossOriginIsolation = crossOriginIsolation;
         _maxBodyBytes = maxBodyBytes;
     }
@@ -62,9 +68,44 @@ internal sealed class LocalWebServer : IAsyncDisposable
     {
         var port = BindLoopback(_preferredPort);
         Url = $"http://localhost:{port}";
+        // Pages served by this server itself are same-origin clients: their POSTs carry this server's own
+        // origin in the Origin header, so it must be trusted by default (no host action required).
+        if (NormalizeOrigin(Url) is { } self)
+            _trustedOrigins.Add(self);
         _cts = new CancellationTokenSource();
         _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token));
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Authorizes <paramref name="origin"/> for IPC: the request guard accepts it and CORS echoes it, from this
+    /// call onward. Host-controlled escape hatch for a frontend whose origin changes mid-session (e.g. the dev
+    /// server or app backend moved to a different loopback port and the webview navigated to it) — call this
+    /// before navigating. Nothing is persisted: after a restart the host re-authorizes, so the trust set always
+    /// reflects the host's current intent. An origin that was never authorized — loopback included — stays
+    /// rejected even with a valid IPC token, because every navigated page receives the token-bearing bridge.
+    /// </summary>
+    internal void AuthorizeIpcOrigin(string origin)
+    {
+        if (NormalizeOrigin(origin) is not { } normalized)
+            throw new ArgumentException("Origin must be an absolute http(s) origin, e.g. http://127.0.0.1:8080.", nameof(origin));
+
+        lock (_originLock)
+        {
+            _trustedOrigins.Add(normalized);
+        }
+    }
+
+    /// <summary>Lower-cases the host and strips any path/trailing slash so comparisons are exact-authority;
+    /// returns null for anything that is not an absolute http(s) origin.</summary>
+    private static string? NormalizeOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return null;
+        if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
+        // A bare origin's path is always "/"; anything longer carries a path or query and is not an origin.
+        if (uri.PathAndQuery.Length > 1) return null;
+        return uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
     }
 
     private int BindLoopback(int preferred)
@@ -460,24 +501,24 @@ internal sealed class LocalWebServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Whether an IPC request's <c>Origin</c> is permitted: the configured cross-origin value, or any loopback
-    /// origin. Single source of truth for both the request guard (<see cref="IsAuthorized"/>) and the CORS
+    /// Whether an IPC request's <c>Origin</c> is permitted: only origins explicitly trusted — the configured
+    /// cross-origin value, the server's own origin, and runtime authorizations via <see cref="AuthorizeIpcOrigin"/>.
+    /// Single source of truth for both the request guard (<see cref="IsAuthorized"/>) and the CORS
     /// response headers (<see cref="BuildCorsHeaders"/>) — when the two disagree, the browser blocks a request
     /// the host has already accepted, and the page sees a network error instead of the command result.
+    /// A loopback origin is deliberately NOT trusted by default: the webview may navigate to an unrelated
+    /// localhost service, and that page holds the token-bearing bridge, so trust must be the host's explicit
+    /// decision rather than a property of the request's source address.
     /// </summary>
     private bool IsAllowedIpcOrigin(string origin)
     {
-        if (string.IsNullOrEmpty(origin)) return false;
+        var normalized = NormalizeOrigin(origin);
+        if (normalized is null) return false;
 
-        if (_allowedCorsOrigin is not null
-            && string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+        lock (_originLock)
         {
-            return true;
+            return _trustedOrigins.Contains(normalized);
         }
-
-        // Matches IsAuthorized: a page served from loopback (including one that moved to a different loopback
-        // port during the session) stays authorized, so its CORS preflight must succeed as well.
-        return Uri.TryCreate(origin, UriKind.Absolute, out var uri) && IsLoopbackHost(uri.Host);
     }
 
     private List<(string, string)> BuildCorsHeaders(HttpRequest request)
