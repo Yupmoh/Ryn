@@ -8,6 +8,7 @@ on:
       - "vendor/saucer-bindings"
       - ".github/workflows/native-libs.yml"
       - "build/saucer-macos13.patch"
+      - "build/saucer-windows-icon.patch"
 
 permissions:
   contents: read
@@ -128,6 +129,13 @@ jobs:
           fi
           git -C "$SAUCER_SRC" apply --check "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
           git -C "$SAUCER_SRC" apply "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
+
+      - name: Patch bindings for standalone Windows icon decoding
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          git -C vendor/saucer-bindings apply --check "$GITHUB_WORKSPACE/build/saucer-windows-icon.patch"
+          git -C vendor/saucer-bindings apply "$GITHUB_WORKSPACE/build/saucer-windows-icon.patch"
 
       - name: Build
         run: cmake --build build/native --config Release

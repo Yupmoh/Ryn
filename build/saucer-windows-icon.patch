@@ -1,0 +1,119 @@
+diff --git a/private/icon.impl.hpp b/private/icon.impl.hpp
+index 1f9dddd..eb3b097 100644
+--- a/private/icon.impl.hpp
++++ b/private/icon.impl.hpp
+@@ -7,4 +7,7 @@
+ 
+ struct saucer_icon : saucer::bindings::opaque<saucer_icon, saucer::icon>
+ {
++#ifdef _WIN32
++    unsigned long long gdiplus_token;
++#endif
+ };
+diff --git a/src/icon.cpp b/src/icon.cpp
+index e9fad18..7cd5f24 100644
+--- a/src/icon.cpp
++++ b/src/icon.cpp
+@@ -3,6 +3,50 @@
+ 
+ #include "utils/wide.hpp"
+ 
++#ifdef _WIN32
++#include <windows.h>
++#include <gdiplus.h>
++#endif
++
++namespace
++{
++#ifdef _WIN32
++    static_assert(sizeof(ULONG_PTR) == sizeof(saucer_icon::gdiplus_token));
++
++    saucer_icon *new_initialized_icon(auto &&factory, int *error)
++    {
++        Gdiplus::GdiplusStartupInput input{};
++        ULONG_PTR token{};
++        const auto status = Gdiplus::GdiplusStartup(&token, &input, nullptr);
++
++        if (status != Gdiplus::Status::Ok)
++        {
++            if (error)
++            {
++                *error = static_cast<int>(status);
++            }
++
++            return nullptr;
++        }
++
++        auto rtn = factory();
++
++        if (!rtn.has_value())
++        {
++            if (error)
++            {
++                *error = rtn.error().code();
++            }
++
++            Gdiplus::GdiplusShutdown(token);
++            return nullptr;
++        }
++
++        return new saucer_icon{std::move(*rtn), static_cast<unsigned long long>(token)};
++    }
++#endif
++} // namespace
++
+ extern "C"
+ {
+     bool saucer_icon_empty(saucer_icon *icon)
+@@ -22,16 +66,29 @@ extern "C"
+ 
+     void saucer_icon_free(saucer_icon *icon)
+     {
++#ifdef _WIN32
++        const auto token = static_cast<ULONG_PTR>(icon->gdiplus_token);
++        delete icon;
++        Gdiplus::GdiplusShutdown(token);
++#else
+         delete icon;
++#endif
+     }
+ 
+     saucer_icon *saucer_icon_copy(saucer_icon *icon)
+     {
++#ifdef _WIN32
++        return new_initialized_icon([icon]() -> saucer::result<saucer::icon> { return **icon; }, nullptr);
++#else
+         return saucer_icon::make(**icon);
++#endif
+     }
+ 
+     saucer_icon *saucer_icon_new_from_file(const char *path, int *error)
+     {
++#ifdef _WIN32
++        return new_initialized_icon([path] { return saucer::icon::from(saucer::bindings::u8path(path)); }, error);
++#else
+         auto rtn = saucer::icon::from(saucer::bindings::u8path(path));
+ 
+         if (!rtn.has_value() && error)
+@@ -45,10 +102,14 @@ extern "C"
+         }
+ 
+         return saucer_icon::from(std::move(*rtn));
++#endif
+     }
+ 
+     saucer_icon *saucer_icon_new_from_stash(saucer_stash *stash, int *error)
+     {
++#ifdef _WIN32
++        return new_initialized_icon([stash] { return saucer::icon::from(**stash); }, error);
++#else
+         auto rtn = saucer::icon::from(**stash);
+ 
+         if (!rtn.has_value() && error)
+@@ -62,5 +123,6 @@ extern "C"
+         }
+ 
+         return saucer_icon::from(std::move(*rtn));
++#endif
+     }
+ }
