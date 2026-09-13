@@ -284,7 +284,7 @@ jobs:
         id: version
         run: |
           cd vendor/saucer-bindings
-          COMMIT=$(git rev-parse --short HEAD)
+          COMMIT=$(git -C ../.. rev-parse --short HEAD)
           # TST-05: read the PROJECT version, not the first "VERSION" token in the file. The naive
           # `grep -oP 'VERSION \K[0-9.]+' | head -1` matched `cmake_minimum_required(VERSION 3.21)`,
           # so every release was tagged native-v3.21-<sha> and the constant prefix made the random
