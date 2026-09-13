@@ -8,6 +8,7 @@ on:
       - "vendor/saucer-bindings"
       - ".github/workflows/native-libs.yml"
       - "build/saucer-macos13.patch"
+      - "build/saucer-windows-icon.patch"
 
 permissions:
   contents: read
@@ -86,6 +87,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+      - name: Setup .NET
+        if: matrix.rid == 'win-x64'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
 
       - name: Install Linux dependencies
         if: startsWith(matrix.rid, 'linux-')
@@ -124,6 +130,13 @@ jobs:
           git -C "$SAUCER_SRC" apply --check "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
           git -C "$SAUCER_SRC" apply "$GITHUB_WORKSPACE/build/saucer-macos13.patch"
 
+      - name: Patch bindings for standalone Windows icon decoding
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          git -C vendor/saucer-bindings apply --check "$GITHUB_WORKSPACE/build/saucer-windows-icon.patch"
+          git -C vendor/saucer-bindings apply "$GITHUB_WORKSPACE/build/saucer-windows-icon.patch"
+
       - name: Build
         run: cmake --build build/native --config Release
 
@@ -149,6 +162,61 @@ jobs:
           find build/native/_deps/saucer-build -name "saucer.dll" -exec cp {} staging/ \; 2>/dev/null || true
           find build/native/_deps/saucer-build -name "WebView2Loader.dll" -path "*/win-x64/*" -exec cp {} staging/ \; 2>/dev/null || true
           ls -la staging/
+      # Exercise the exported decoder before saucer_application_new: this is a supported binding call and
+      # catches Windows GDI+ lifetime regressions that ordinary Ryn startup masks by initializing the app first.
+      - name: Verify standalone Windows icon decode
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $source = @'
+          using System;
+          using System.Runtime.InteropServices;
+
+          internal static unsafe class IconSmoke
+          {
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate nint NewIcon(byte* path, int* error);
+
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate void FreeIcon(nint icon);
+
+              public static int Main(string[] args)
+              {
+                  nint library = NativeLibrary.Load(Path.GetFullPath(args[0]));
+                  var create = Marshal.GetDelegateForFunctionPointer<NewIcon>(
+                      NativeLibrary.GetExport(library, "saucer_icon_new_from_file"));
+                  var free = Marshal.GetDelegateForFunctionPointer<FreeIcon>(
+                      NativeLibrary.GetExport(library, "saucer_icon_free"));
+                  byte[] path = System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(args[1]) + '\0');
+                  fixed (byte* pointer = path)
+                  {
+                      int error = 0;
+                      nint icon = create(pointer, &error);
+                      if (icon == 0 || error != 0)
+                      {
+                          Console.Error.WriteLine($"Standalone icon decode failed: icon={icon}, error={error}");
+                          return 1;
+                      }
+
+                      free(icon);
+                  }
+
+                  return 0;
+              }
+          }
+          '@
+          New-Item -ItemType Directory -Force build/icon-smoke | Out-Null
+          Set-Content build/icon-smoke/IconSmoke.cs $source
+          Set-Content build/icon-smoke/IconSmoke.csproj @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+            </PropertyGroup>
+          </Project>
+          '@
+          dotnet run --project build/icon-smoke/IconSmoke.csproj -- staging/saucer-bindings.dll assets/icon-128.png
 
       - name: Build ryn-pty shim (Unix only)
         if: matrix.rid != 'win-x64'
@@ -216,7 +284,7 @@ jobs:
         id: version
         run: |
           cd vendor/saucer-bindings
-          COMMIT=$(git rev-parse --short HEAD)
+          COMMIT=$(git -C ../.. rev-parse --short HEAD)
           # TST-05: read the PROJECT version, not the first "VERSION" token in the file. The naive
           # `grep -oP 'VERSION \K[0-9.]+' | head -1` matched `cmake_minimum_required(VERSION 3.21)`,
           # so every release was tagged native-v3.21-<sha> and the constant prefix made the random
