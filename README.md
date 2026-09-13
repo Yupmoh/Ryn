@@ -75,11 +75,11 @@ To keep the comparison honest, Ryn deliberately does **not** try to be some thin
 
 ## Status
 
-**Alpha.** Ryn runs on **macOS**, **Windows**, and **Linux** on both x64 and ARM64. Its cross-platform windowing, audio, signed auto-updater, and NativeAOT paths are exercised by CI and third-party desktop apps, including ZK Andy's production Ryn app. Linux's first broad Primal Launcher test found one Ryn defect—the notification plugin competing with GTK for GLib's default main context—which is fixed in v0.27.4; notification activation remains the one Linux retest still called out below.
+**Alpha.** Ryn supports macOS (x64 and ARM64), Windows (x64), and Linux (x64 and ARM64). CI builds and tests these targets, including NativeAOT publishing. Desktop integration and feature availability vary by platform as shown below.
 
 ### Platform support matrix
 
-Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specific retest or caveat remaining · ⚪ not implemented
+Legend: ✅ supported · 🟡 supported with a verification caveat · ⚪ unavailable
 
 | Capability | macOS | Windows | Linux |
 |---|:---:|:---:|:---:|
@@ -89,13 +89,13 @@ Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specif
 | Dialogs / file pickers | ✅ (osascript) | ✅ (PowerShell+WinForms) | ✅ (zenity/kdialog) |
 | Clipboard (text) | ✅ | ✅ | ✅ (X11 via xclip, Wayland via wl-clipboard) |
 | Clipboard (image) | ✅ | ✅ | ✅ |
-| Notifications | ✅ | ✅ | 🟡 (v0.27.4 fix awaiting downstream retest) |
+| Notifications | ✅ | ✅ | 🟡 (activation needs end-to-end verification) |
 | Audio playback | ✅ | ✅ | ✅ |
 | Shell / PTY | ✅ | ✅ | ✅ |
 | Tray icon | ✅ | ✅ | ✅ (menu-only; no icon-click event) |
-| Menu bar | ✅ | ✅ (accelerators display-only) | ❌ (header bars are the GTK norm) |
-| App badge | ✅ (Dock) | ✅ (taskbar overlay) | ❌ (no portable badge surface) |
-| Global shortcuts | ✅ | ✅ | ❌ (Wayland needs the portal API) |
+| Menu bar | ✅ | ✅ (accelerators display-only) | ⚪ |
+| App badge | ✅ (Dock) | ✅ (taskbar overlay) | ⚪ |
+| Global shortcuts | ✅ | ✅ | ⚪ |
 | WebView panes (embedded browser) | ✅ | ✅ (CSS zoom) | ✅ (CSS zoom) |
 | Pane extras (find, screenshot, downloads, crash recovery, suspend) | ✅ | ✅ (+ CDP passthrough) | ✅ |
 | Custom title bars (`data-webview-*`) | ✅ | ✅ | ✅ |
@@ -103,7 +103,7 @@ Legend: ✅ verified on a real app · 🟡 implemented, with a capability-specif
 | Auto-updater (signed) | ✅ | ✅ | ✅ |
 | NativeAOT publish | ✅ | ✅ | ✅ |
 
-Native libraries are committed for `osx-arm64`; `osx-x64`, `linux-x64`, `linux-arm64`, and `win-x64` are built in CI. Linux's core GUI and plugin paths have been exercised in Primal Launcher on x64; ARM64 is built and executed natively in CI.
+Native release assets cover `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`, and `win-x64`. CI coverage does not imply that every desktop interaction has been manually verified on every target.
 
 ## Installation
 
@@ -341,6 +341,16 @@ Control what the frontend can access:
 
 A present `ryn.json` denies every command by default; only what you list is allowed. A **missing** `ryn.json` depends on the build: a **Debug** build falls back to allow-all for local convenience, while a **Release** build **fails closed and denies everything** (and logs a one-time startup warning) so a mis-deployed app never ships wide open. Always ship a `ryn.json`. Empty `scope: []` or `commands: []` = explicit deny-all. See [SECURITY.md](https://github.com/Yupmoh/Ryn/blob/main/SECURITY.md) for the full model.
 
+For a frontend that changes origin while a window is open, authorize the replacement origin in host code before navigating:
+
+```csharp
+window.AuthorizeIpcOrigin("http://localhost:5174");
+await window.NavigateAsync(new Uri("http://localhost:5174"));
+window.RevokeIpcOrigin("http://localhost:5173");
+```
+
+These APIs apply to windows using a local HTTP IPC server. New documents receive the authenticated bridge only when their origin is trusted. Revocation rejects subsequent IPC requests; it does not cancel in-flight commands or erase scripts already loaded. See [the security architecture](https://github.com/Yupmoh/Ryn/blob/main/docs/architecture.md#cors-origin-validation) for transport details.
+
 ## Bundling for Distribution
 
 ```bash
@@ -390,7 +400,7 @@ src/
   Ryn.Cli              CLI: new, dev, build, bundle, doctor, updater keygen
 samples/               9 example applications
 templates/             dotnet new template pack
-tests/                 600+ xUnit tests across 7 test projects
+tests/                 Unit, integration, CLI, and package verification suites
 benchmarks/            BenchmarkDotNet suites (IPC, marshaling, JSON, escaping)
 docs/
   getting-started.md   Walkthrough from install to bundle
