@@ -50,11 +50,15 @@ public interface IRynWindow
     /// Authorizes <paramref name="origin"/> (e.g. <c>http://127.0.0.1:8080</c>) for IPC: the request guard
     /// accepts it and CORS echoes it, from this call onward. Use when the page's origin changes mid-session —
     /// authorize the new origin <em>before</em> navigating to it. Origins the host never authorized — loopback
-    /// included — are rejected for IPC even with a valid token, because every navigated page receives the
-    /// token-bearing bridge. Authorizations live for this window's lifetime; re-authorize after a restart.
+    /// included — are rejected for IPC even with a valid token. Authorizations live until revoked or the
+    /// window closes; re-authorize after a restart. The bridge is installed on the next navigation.
     /// A no-op when this window has no IPC server (e.g. remote or <c>ryn://</c> content).
     /// </summary>
     public void AuthorizeIpcOrigin(string origin);
+    /// <summary>Revokes an HTTP(S) origin, rejecting subsequent IPC requests. In-flight commands may finish.
+    /// Already loaded scripts are not erased; future documents no longer receive the bridge.
+    /// A no-op when this window has no IPC server.</summary>
+    public void RevokeIpcOrigin(string origin);
     /// <summary>Evaluates a JavaScript expression in the webview and returns the result.</summary>
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default);
     /// <summary>Closes the window synchronously.</summary>

@@ -201,7 +201,20 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _rynWebView?.NavigateAsync(url, cancellationToken) ?? ValueTask.CompletedTask;
 
     /// <inheritdoc />
-    public void AuthorizeIpcOrigin(string origin) => _localServer?.AuthorizeIpcOrigin(origin);
+    public void AuthorizeIpcOrigin(string origin)
+    {
+        if (_localServer is null) return;
+        _localServer.AuthorizeIpcOrigin(origin);
+        RunOnUi(() => _rynWebView?.SetAllowedOrigins([LocalWebServer.NormalizeOrigin(origin)!]));
+    }
+
+    /// <inheritdoc />
+    public void RevokeIpcOrigin(string origin)
+    {
+        if (_localServer is null) return;
+        _localServer.RevokeIpcOrigin(origin);
+        RunOnUi(() => _rynWebView?.RevokeIpcOrigin(LocalWebServer.NormalizeOrigin(origin)!));
+    }
 
     public ValueTask<string> EvaluateJavaScriptAsync(string script, CancellationToken cancellationToken = default) =>
         _rynWebView?.EvaluateJavaScriptAsync(script, cancellationToken) ?? new ValueTask<string>(string.Empty);

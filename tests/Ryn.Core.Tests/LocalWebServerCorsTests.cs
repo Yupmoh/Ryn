@@ -101,6 +101,19 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RevokedOrigin_CannotDispatchUntilReauthorized()
+    {
+        _server.AuthorizeIpcOrigin(DriftedOrigin);
+        _server.RevokeIpcOrigin(DriftedOrigin);
+        var request = $"POST /ipc/cmd/1/x.y HTTP/1.1\r\nHost: localhost:{_port}\r\nOrigin: {DriftedOrigin}\r\n{IpcProtocol.TokenHeader}: {_host.IpcToken}\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}";
+        var rejected = await SendRawAsync(request);
+        StatusOf(rejected).Should().Be(403);
+        HeaderOf(rejected, "Access-Control-Allow-Origin").Should().BeNull();
+        _server.AuthorizeIpcOrigin(DriftedOrigin);
+        StatusOf(await SendRawAsync(request)).Should().Be(200);
+    }
+
+    [Fact]
     public async Task IpcEval_AfterRuntimeAuthorization_CarriesAllowOrigin()
     {
         _server.AuthorizeIpcOrigin(DriftedOrigin);
