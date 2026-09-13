@@ -130,12 +130,46 @@ public sealed class LocalWebServerCorsTests : IAsyncLifetime
         HeaderOf(response, "Access-Control-Allow-Origin").Should().Be($"http://localhost:{_port}");
     }
 
-    [Fact]
-    public void AuthorizeIpcOrigin_RejectsNonOrigin()
+    [Theory]
+    [InlineData("not an origin")]
+    [InlineData("http://user:password@localhost:31001")]
+    [InlineData("http://localhost:31001/#fragment")]
+    [InlineData("http://localhost:31001/path")]
+    [InlineData("http://localhost:31001/?query=value")]
+    public void AuthorizeIpcOrigin_RejectsNonOrigin(string origin)
     {
-        var act = () => _server.AuthorizeIpcOrigin("not an origin");
+        var act = () => _server.AuthorizeIpcOrigin(origin);
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("/ipc/cmd/1/x.y", false, 403)]
+    [InlineData("/ipc/cmd/1", true, 400)]
+    public async Task CommandError_FromTrustedOrigin_IsReadable(string path, bool validToken, int status)
+    {
+        var response = await SendRawAsync(
+            $"POST {path} HTTP/1.1\r\nHost: localhost:{_port}\r\n" +
+            $"Origin: {ConfiguredOrigin}\r\n" +
+            $"{IpcProtocol.TokenHeader}: {(validToken ? _host.IpcToken : "wrong")}\r\n" +
+            "Content-Length: 2\r\nConnection: close\r\n\r\n{}");
+
+        StatusOf(response).Should().Be(status);
+        HeaderOf(response, "Access-Control-Allow-Origin").Should().Be(ConfiguredOrigin);
+    }
+
+    [Fact]
+    public async Task CommandBeforeWebViewReady_FromTrustedOrigin_IsReadable()
+    {
+        await using var server = new LocalWebServer(null, 29451, ConfiguredOrigin);
+        await server.StartAsync();
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, server.Url + "/ipc/cmd/1/x.y");
+        request.Headers.Add("Origin", ConfiguredOrigin);
+        using var response = await client.SendAsync(request);
+
+        ((int)response.StatusCode).Should().Be(503);
+        response.Headers.GetValues("Access-Control-Allow-Origin").Should().Equal(ConfiguredOrigin);
     }
 
     [Fact]

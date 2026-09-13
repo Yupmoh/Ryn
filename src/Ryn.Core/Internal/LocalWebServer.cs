@@ -103,6 +103,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(origin)) return null;
         if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)) return null;
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
+        if (uri.UserInfo.Length != 0 || uri.Fragment.Length != 0) return null;
         // A bare origin's path is always "/"; anything longer carries a path or query and is not an origin.
         if (uri.PathAndQuery.Length > 1) return null;
         return uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
@@ -419,13 +420,13 @@ internal sealed class LocalWebServer : IAsyncDisposable
     {
         if (_webView is null)
         {
-            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         if (!IsAuthorized(request))
         {
-            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -433,7 +434,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var segments = request.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length < 4)
         {
-            await WriteTextAsync(stream, 400, "Bad Request", "bad command path", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 400, "Bad Request", "bad command path", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
