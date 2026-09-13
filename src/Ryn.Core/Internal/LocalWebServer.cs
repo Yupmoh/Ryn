@@ -25,7 +25,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     private readonly string? _contentDirectory;
     private EmbeddedContentStore? _embeddedContent;
-    private readonly string? _allowedCorsOrigin;
+    // Explicitly trusted IPC origins: the configured cross-origin value plus runtime authorizations made by the
+    // host (e.g. the page origin moved to a new port mid-session). Trust is opt-in per origin — a loopback
+    // origin is NOT trusted by default, because Ryn injects its token-bearing bridge into every main-frame
+    // navigation, so any loopback page the webview lands on would otherwise be able to invoke IPC commands.
+    private readonly HashSet<string> _trustedOrigins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _originLock = new();
     private readonly bool _crossOriginIsolation;
     private readonly int _preferredPort;
     private ILocalServerHost? _webView;
@@ -41,13 +46,14 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
     /// <param name="contentDirectory">Static content root, or null for an IPC-only server (e.g. backing a Vite dev server).</param>
     /// <param name="preferredPort">Fixed loopback port to try first.</param>
-    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), cross-origin IPC from that origin is permitted via CORS.</param>
+    /// <param name="allowedCorsOrigin">When set (e.g. a dev-server origin), that origin is trusted for IPC: the request guard accepts it and CORS echoes it. Other origins (loopback included) are rejected until the host authorizes them via <see cref="AuthorizeIpcOrigin"/>.</param>
     /// <param name="crossOriginIsolation">When true, static responses send COOP/COEP/CORP so the page is crossOriginIsolated (SharedArrayBuffer).</param>
     internal LocalWebServer(string? contentDirectory, int preferredPort, string? allowedCorsOrigin = null, bool crossOriginIsolation = false, long maxBodyBytes = 32L * 1024 * 1024)
     {
         _contentDirectory = contentDirectory is null ? null : Path.GetFullPath(contentDirectory);
         _preferredPort = preferredPort > 0 ? preferredPort : DefaultPort;
-        _allowedCorsOrigin = allowedCorsOrigin?.TrimEnd('/');
+        if (NormalizeOrigin(allowedCorsOrigin) is { } configured)
+            _trustedOrigins.Add(configured);
         _crossOriginIsolation = crossOriginIsolation;
         _maxBodyBytes = maxBodyBytes;
     }
@@ -62,9 +68,45 @@ internal sealed class LocalWebServer : IAsyncDisposable
     {
         var port = BindLoopback(_preferredPort);
         Url = $"http://localhost:{port}";
+        // Pages served by this server itself are same-origin clients: their POSTs carry this server's own
+        // origin in the Origin header, so it must be trusted by default (no host action required).
+        if (NormalizeOrigin(Url) is { } self)
+            _trustedOrigins.Add(self);
         _cts = new CancellationTokenSource();
         _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token));
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Authorizes <paramref name="origin"/> for IPC: the request guard accepts it and CORS echoes it, from this
+    /// call onward. Host-controlled escape hatch for a frontend whose origin changes mid-session (e.g. the dev
+    /// server or app backend moved to a different loopback port and the webview navigated to it) — call this
+    /// before navigating. Nothing is persisted: after a restart the host re-authorizes, so the trust set always
+    /// reflects the host's current intent. An origin that was never authorized — loopback included — stays
+    /// rejected even with a valid IPC token, because every navigated page receives the token-bearing bridge.
+    /// </summary>
+    internal void AuthorizeIpcOrigin(string origin)
+    {
+        if (NormalizeOrigin(origin) is not { } normalized)
+            throw new ArgumentException("Origin must be an absolute http(s) origin, e.g. http://127.0.0.1:8080.", nameof(origin));
+
+        lock (_originLock)
+        {
+            _trustedOrigins.Add(normalized);
+        }
+    }
+
+    /// <summary>Lower-cases the host and strips any path/trailing slash so comparisons are exact-authority;
+    /// returns null for anything that is not an absolute http(s) origin.</summary>
+    private static string? NormalizeOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return null;
+        if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
+        if (uri.UserInfo.Length != 0 || uri.Fragment.Length != 0) return null;
+        // A bare origin's path is always "/"; anything longer carries a path or query and is not an origin.
+        if (uri.PathAndQuery.Length > 1) return null;
+        return uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped);
     }
 
     private int BindLoopback(int preferred)
@@ -360,7 +402,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
 
         if (path.StartsWith(IpcProtocol.IpcEvalPrefix, StringComparison.Ordinal))
         {
-            await HandleIpcEvalAsync(stream, request, keepAlive, ct).ConfigureAwait(false);
+            await HandleIpcEvalAsync(stream, request, corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -378,13 +420,13 @@ internal sealed class LocalWebServer : IAsyncDisposable
     {
         if (_webView is null)
         {
-            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         if (!IsAuthorized(request))
         {
-            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -392,7 +434,7 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var segments = request.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length < 4)
         {
-            await WriteTextAsync(stream, 400, "Bad Request", "bad command path", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 400, "Bad Request", "bad command path", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -406,17 +448,18 @@ internal sealed class LocalWebServer : IAsyncDisposable
             ok ? "application/json" : "text/plain", Encoding.UTF8.GetBytes(data), headers, keepAlive, ct).ConfigureAwait(false);
     }
 
-    private async Task HandleIpcEvalAsync(NetworkStream stream, HttpRequest request, bool keepAlive, CancellationToken ct)
+    private async Task HandleIpcEvalAsync(NetworkStream stream, HttpRequest request,
+        IReadOnlyList<(string Name, string Value)> corsHeaders, bool keepAlive, CancellationToken ct)
     {
         if (_webView is null)
         {
-            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 503, "Service Unavailable", "webview not ready", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         if (!IsAuthorized(request))
         {
-            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 403, "Forbidden", "forbidden", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
@@ -426,12 +469,12 @@ internal sealed class LocalWebServer : IAsyncDisposable
             || !long.TryParse(segments[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var evalId)
             || !int.TryParse(segments[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var okFlag))
         {
-            await WriteTextAsync(stream, 400, "Bad Request", "bad eval path", keepAlive, ct).ConfigureAwait(false);
+            await WriteTextAsync(stream, 400, "Bad Request", "bad eval path", corsHeaders, keepAlive, ct).ConfigureAwait(false);
             return;
         }
 
         _webView.HandleEvalFromServer(evalId, okFlag, Encoding.UTF8.GetString(request.Body));
-        await WriteTextAsync(stream, 200, "OK", "", keepAlive, ct).ConfigureAwait(false);
+        await WriteTextAsync(stream, 200, "OK", "", corsHeaders, keepAlive, ct).ConfigureAwait(false);
     }
 
     // ---- authorization (loopback + per-launch token + same-origin) ----
@@ -448,27 +491,50 @@ internal sealed class LocalWebServer : IAsyncDisposable
         var host = HostOnly(request.Headers.TryGetValue("Host", out var h) ? h : "");
         if (!IsLoopbackHost(host)) return false;
 
-        if (request.Headers.TryGetValue("Origin", out var origin) && !string.IsNullOrEmpty(origin))
+        if (request.Headers.TryGetValue("Origin", out var origin)
+            && !string.IsNullOrEmpty(origin)
+            && !IsAllowedIpcOrigin(origin))
         {
-            var allowed = _allowedCorsOrigin is not null
-                && string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase);
-            if (!allowed && !(Uri.TryCreate(origin, UriKind.Absolute, out var ou) && IsLoopbackHost(ou.Host)))
-                return false;
+            return false;
         }
 
         return true;
     }
 
+    /// <summary>
+    /// Whether an IPC request's <c>Origin</c> is permitted: only origins explicitly trusted — the configured
+    /// cross-origin value, the server's own origin, and runtime authorizations via <see cref="AuthorizeIpcOrigin"/>.
+    /// Single source of truth for both the request guard (<see cref="IsAuthorized"/>) and the CORS
+    /// response headers (<see cref="BuildCorsHeaders"/>) — when the two disagree, the browser blocks a request
+    /// the host has already accepted, and the page sees a network error instead of the command result.
+    /// A loopback origin is deliberately NOT trusted by default: the webview may navigate to an unrelated
+    /// localhost service, and that page holds the token-bearing bridge, so trust must be the host's explicit
+    /// decision rather than a property of the request's source address.
+    /// </summary>
+    private bool IsAllowedIpcOrigin(string origin)
+    {
+        var normalized = NormalizeOrigin(origin);
+        if (normalized is null) return false;
+
+        lock (_originLock)
+        {
+            return _trustedOrigins.Contains(normalized);
+        }
+    }
+
     private List<(string, string)> BuildCorsHeaders(HttpRequest request)
     {
         var headers = new List<(string, string)>();
-        if (_allowedCorsOrigin is null) return headers;
 
         var origin = request.Headers.TryGetValue("Origin", out var o) ? o : "";
-        if (string.Equals(origin.TrimEnd('/'), _allowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(origin)) return headers;
+
+        // The CORS decision varies by request Origin (loopback and possibly the configured dev origin), so any
+        // cache in front of this endpoint must key on it — allowed or not.
+        headers.Add(("Vary", "Origin"));
+        if (IsAllowedIpcOrigin(origin))
         {
             headers.Add(("Access-Control-Allow-Origin", origin));
-            headers.Add(("Vary", "Origin"));
             headers.Add(("Access-Control-Allow-Methods", "POST, OPTIONS"));
             headers.Add(("Access-Control-Allow-Headers", $"Content-Type, {IpcProtocol.TokenHeader}"));
         }
@@ -674,7 +740,11 @@ internal sealed class LocalWebServer : IAsyncDisposable
     // ---- response writing ----
 
     private static Task WriteTextAsync(NetworkStream stream, int status, string reason, string text, bool keepAlive, CancellationToken ct) =>
-        WriteAsync(stream, status, reason, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(text), [], keepAlive, ct);
+        WriteTextAsync(stream, status, reason, text, [], keepAlive, ct);
+
+    private static Task WriteTextAsync(NetworkStream stream, int status, string reason, string text,
+        IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct) =>
+        WriteAsync(stream, status, reason, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(text), headers, keepAlive, ct);
 
     private static async Task WriteAsync(NetworkStream stream, int status, string reason, string? contentType,
         byte[] body, IReadOnlyList<(string Name, string Value)> headers, bool keepAlive, CancellationToken ct, bool headOnly = false)
