@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Ryn.Ipc.Tests" />
+    <InternalsVisibleTo Include="Ryn.Android" />
   </ItemGroup>
 
   <ItemGroup>
