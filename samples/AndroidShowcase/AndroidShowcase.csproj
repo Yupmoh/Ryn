@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.ryn.androidshowcase</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <NoWarn>$(NoWarn);CA1515;CA2007;CA1062;CA1024;XA4211</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AndroidAsset Include="Assets\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ryn.Android\Ryn.Android.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

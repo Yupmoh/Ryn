@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Ryn on iOS</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #151d30;
+      --card: #1c2742;
+      --border: #2e3d60;
+      --text: #f0f4fc;
+      --muted: #8b9bb4;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --accent: #8b5cf6;
+      --radius: 14px;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .container {
+      width: 100%;
+      max-width: 540px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success);
+    }
+    h1 {
+      font-size: clamp(20px, 5.5vw, 26px);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p.subtitle {
+      color: var(--muted);
+      font-size: clamp(12px, 3.5vw, 14px);
+      margin-top: 4px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title span.step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      background: rgba(59, 130, 246, 0.2);
+      color: var(--primary);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    /* Form controls & inputs */
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input {
+      width: 100%;
+      height: 48px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #fff;
+      padding: 0 14px;
+      font-size: 16px; /* 16px prevents iOS/iOS auto-zoom */
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    /* Buttons */
+    button {
+      height: 48px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.1s, background-color 0.2s;
+      user-select: none;
+    }
+    button:active {
+      transform: scale(0.97);
+      background: var(--primary-hover);
+    }
+    .btn-secondary {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:active {
+      background: #233152;
+    }
+    .btn-full {
+      width: 100%;
+    }
+
+    /* Output Displays */
+    .output-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: #93c5fd;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .output-box.success {
+      color: #86efac;
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    /* Responsive Greet Row */
+    .greet-row {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 420px) {
+      .greet-row {
+        flex-direction: column;
+      }
+      .greet-row button {
+        width: 100%;
+      }
+    }
+
+    /* Responsive Math Grid */
+    .math-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 340px) {
+      .math-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .math-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 380px) {
+      .math-actions {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    .math-btn {
+      font-size: 16px;
+      font-weight: 700;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #e2e8f0;
+      height: 46px;
+    }
+    .math-btn:hover, .math-btn:active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .math-result {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .math-result .expr {
+      color: var(--muted);
+      margin-right: 6px;
+    }
+    .math-result .val {
+      color: #60a5fa;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    footer {
+      text-align: center;
+      color: #475569;
+      font-size: 11px;
+      margin-top: auto;
+      padding-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">
+        <span class="badge-dot"></span> Ryn Mobile Engine
+      </div>
+      <h1>Rich Yet Native</h1>
+      <p class="subtitle">C# .NET 10 Backend &bull; [RynCommand] IPC</p>
+    </div>
+
+    <!-- Section 1: Greet -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step">1</span> IPC Command Test
+      </div>
+      <label for="nameInput">Recipient Name</label>
+      <div class="greet-row">
+        <input id="nameInput" type="text" value="iOS User" placeholder="Enter name" />
+        <button onclick="sendGreet()">
+          <span>Greet</span> &rarr;
+        </button>
+      </div>
+      <div id="greetOutput" class="output-box">Tap Greet to call C# backend</div>
+    </div>
+
+    <!-- Section 2: Math Calculator (Fully Responsive) -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step">2</span> Responsive Calculator
+      </div>
+      <div class="math-grid">
+        <div>
+          <label for="numA">Number A</label>
+          <input id="numA" type="number" inputmode="decimal" value="48" placeholder="0" />
+        </div>
+        <div>
+          <label for="numB">Number B</label>
+          <input id="numB" type="number" inputmode="decimal" value="12" placeholder="0" />
+        </div>
+      </div>
+
+      <label>Select Operation</label>
+      <div class="math-actions">
+        <button class="math-btn" onclick="executeOp('+')" title="Add">+</button>
+        <button class="math-btn" onclick="executeOp('−')" title="Subtract">&minus;</button>
+        <button class="math-btn" onclick="executeOp('×')" title="Multiply">&times;</button>
+        <button class="math-btn" onclick="executeOp('÷')" title="Divide">&divide;</button>
+      </div>
+
+      <div id="mathOutput" class="output-box math-result">
+        <span class="expr">Result:</span> <span class="val">Ready</span>
+      </div>
+    </div>
+
+    <!-- Section 3: Native Device Info -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step">3</span> Device Diagnostics
+      </div>
+      <button class="btn-secondary btn-full" onclick="fetchDeviceInfo()" style="margin-bottom: 12px;">
+        <span>Query Native Platform Info</span>
+      </button>
+      <div id="deviceOutput" class="output-box">Tap above to inspect runtime</div>
+    </div>
+
+    <footer>
+      Ryn on iOS &bull; net10.0-ios
+    </footer>
+  </div>
+
+  <script>
+    async function sendGreet() {
+      const name = document.getElementById('nameInput').value.trim() || 'Guest';
+      const output = document.getElementById('greetOutput');
+      output.textContent = 'Calling C# app.greet...';
+      try {
+        const response = await window.__ryn.invoke('app.greet', { name: name });
+        output.textContent = response;
+        output.classList.add('success');
+      } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+        output.classList.remove('success');
+      }
+    }
+
+    async function executeOp(op) {
+      const aRaw = document.getElementById('numA').value;
+      const bRaw = document.getElementById('numB').value;
+      const a = parseFloat(aRaw) || 0;
+      const b = parseFloat(bRaw) || 0;
+      const output = document.getElementById('mathOutput');
+
+      output.innerHTML = '<span class="expr">Computing...</span>';
+
+      try {
+        const result = await window.__ryn.invoke('app.calculate', { a: a, op: op, b: b });
+        output.innerHTML = '<span class="expr">' + a + ' ' + op + ' ' + b + ' =</span> <span class="val">' + result + '</span>';
+        output.classList.add('success');
+      } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+        output.classList.remove('success');
+      }
+    }
+
+    async function fetchDeviceInfo() {
+      const output = document.getElementById('deviceOutput');
+      output.textContent = 'Querying RuntimeInformation...';
+      try {
+        const info = await window.__ryn.invoke('app.deviceInfo');
+        output.textContent = info;
+        output.classList.add('success');
+      } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+        output.classList.remove('success');
+      }
+    }
+  </script>
+</body>
+</html>
+
