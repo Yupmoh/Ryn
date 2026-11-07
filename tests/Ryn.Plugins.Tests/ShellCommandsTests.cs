@@ -842,24 +842,39 @@ public sealed class ShellCommandsTests
             var count = native.Read(ready, ready.Length, 2000);
             count.Should().BeGreaterThan(0);
             System.Text.Encoding.UTF8.GetString(ready, 0, count).Should().Contain("READY");
-            writing = Task.Run(() => native.Write(new byte[8 * 1024 * 1024]));
+            // The writer, Dispose and the exit wait run on dedicated threads: on a busy CI runner, thread-pool
+            // queueing alone could use up these deadlines, while Dispose itself returns in milliseconds.
+            var writerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            writing = OnDedicatedThread(() =>
+            {
+                writerStarted.SetResult();
+                return native.Write(new byte[8 * 1024 * 1024]);
+            });
+            await writerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await Task.Delay(200);
             writing.IsCompleted.Should().BeFalse("raw stdin is saturated and the child never reads");
 
-            await Task.Run(service.Dispose).WaitAsync(TimeSpan.FromSeconds(2));
+            await OnDedicatedThread(service.Dispose).WaitAsync(TimeSpan.FromSeconds(2));
             (await writing.WaitAsync(TimeSpan.FromSeconds(5))).Should().BeFalse();
         }
         finally
         {
             native.RequestKill();
             if (writing is not null) await writing.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Run(() => native.WaitForExit()).WaitAsync(TimeSpan.FromSeconds(5));
+            await OnDedicatedThread(native.WaitForExit).WaitAsync(TimeSpan.FromSeconds(5));
             native.CompleteLifetime();
         }
     }
 
     private static TerminalSessionService TerminalService(TerminalOptions? options = null) =>
         new(Policy(new ShellOptions { AllowedCommands = ["/bin/sh"] }), options ?? new TerminalOptions());
+
+    private static Task OnDedicatedThread(Action action) =>
+        Task.Factory.StartNew(action, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+    private static Task<T> OnDedicatedThread<T>(Func<T> function) =>
+        Task.Factory.StartNew(function, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
     [Fact]
     public void FullPathAllowlist_DoesNotPermitBareInvocation()
     {
