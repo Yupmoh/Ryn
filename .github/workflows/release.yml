@@ -1,7 +1,7 @@
-# On a version tag (v*): publishes matched NuGet and @ryn/terminal npm packages, then creates a
-# GitHub release carrying the framework DLLs (managed assemblies + native libs), the standalone
-# ryn CLI binaries per platform, and the exact terminal package tarball. NuGet packages live on
-# nuget.org; the terminal package lives on npmjs.com.
+# On a version tag (v*): publishes the NuGet packages, then creates a GitHub release carrying the
+# framework DLLs (managed assemblies + native libs), the standalone ryn CLI binaries per platform,
+# and the matching @ryn/terminal package tarball. NuGet packages live on nuget.org; the terminal
+# package is not published to the npm registry, so apps install it from the release asset.
 # Versions come from the tag via MinVer/npm version (e.g. v0.1.0-alpha.2 -> 0.1.0-alpha.2).
 #
 # One-time setup (no API-key secret needed — uses NuGet trusted publishing / OIDC):
@@ -10,9 +10,7 @@
 #      (Set a package glob like Ryn.* so new package IDs are covered on first publish.)
 #   2. In this repo: Settings -> Secrets and variables -> Actions -> Variables ->
 #      add NUGET_USER = your nuget.org username.
-#   3. In this repo: Settings -> Secrets and variables -> Actions -> Secrets ->
-#      add NPM_TOKEN with publish access to the @ryn scope.
-#   4. Cut a release:  git tag v0.1.0-alpha.2 && git push origin v0.1.0-alpha.2
+#   3. Cut a release:  git tag v0.1.0-alpha.2 && git push origin v0.1.0-alpha.2
 name: Release
 
 on:
@@ -127,12 +125,11 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
-          registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: packages/terminal/package-lock.json
 
       # Derive the JS version from the same pushed tag MinVer uses for managed packages. Prepare and
-      # inspect the tarball before either registry is mutated so Shell and @ryn/terminal cannot drift.
+      # inspect the tarball before NuGet is mutated so Shell and @ryn/terminal cannot drift.
       - name: Prepare matched terminal package
         shell: bash
         run: |
@@ -271,19 +268,7 @@ jobs:
       - name: Push to NuGet
         run: dotnet nuget push "./nupkg/*.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
-      # Publish the exact inspected tarball after NuGet succeeds. Both package ecosystems derive their
-      # version from this tag; a JS publish failure fails the release before GitHub assets are created.
-      - name: Push terminal package to npm
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAG=latest
-          [[ "$VERSION" == *-* ]] && TAG=next
-          npm publish ./npm-package/*.tgz --access public --tag "$TAG"
-
-      # The GitHub release carries DLLs, the CLI, and the exact terminal npm tarball (not .nupkgs).
+      # The GitHub release carries DLLs, the CLI, and the exact terminal package tarball (not .nupkgs).
       - name: Assemble framework DLLs
         shell: bash
         run: |

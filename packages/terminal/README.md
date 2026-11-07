@@ -24,16 +24,18 @@ the complete supported-platform, native UI, signing, or clean-install matrix.
 
 ## Install
 
-After the matched JS/Shell candidate is published, install the generic client
-from the registry with `npm install @ryn/terminal`. Before publication, use the
-local tarball procedure below.
-
-The generic client has no xterm or framework dependency. Install the pinned
-optional peers for the first-party xterm integration:
+`@ryn/terminal` is not published to the npm registry. Each Ryn release attaches
+the matching `ryn-terminal-<version>.tgz` to its GitHub release. Install that
+exact asset, using the same version as your Ryn NuGet packages, plus the pinned
+optional peers for the first-party xterm integration (the generic client itself
+has no xterm or framework dependency):
 
 ```bash
-npm install @ryn/terminal @xterm/xterm@6.0.0 @xterm/addon-fit@0.11.0
+npm install https://github.com/Yupmoh/Ryn/releases/download/v<version>/ryn-terminal-<version>.tgz \
+  @xterm/xterm@6.0.0 @xterm/addon-fit@0.11.0
 ```
+
+Before a release, use the local tarball procedure below.
 
 Checkpoint support additionally requires the pinned serializer:
 
@@ -328,7 +330,7 @@ Unix crash-ownership helper in those archives. Release the authoritative
 archives, then repin their real SHA-256 values in `build/native-checksums.txt`;
 local replacement binaries are not release assets. Stage the JS tarball and
 NuGet packages from that pinned commit, verify their package-only consumers, and
-publish the matched set; do not publish `@ryn/terminal` independently of its
+release the matched set; never ship `@ryn/terminal` separately from its
 required Shell protocol. Windows remains deferred, but its deferral does not
 remove any macOS or Linux gate above.
 
@@ -336,17 +338,17 @@ remove any macOS or Linux gate above.
 
 1. Finish and pin authoritative `osx-arm64`, `osx-x64`, `linux-x64`, and
    `linux-arm64` native archives from the candidate commit.
-2. From that same commit, stage the NuGet package set with one version and stage
-   `@ryn/terminal` at its checked-in version; do not rewrite either version in
-   the working tree merely to rehearse consumption.
+2. From that same commit, stage the NuGet package set and the `@ryn/terminal`
+   tarball with one version; the release workflow derives both from the tag.
 3. Install the staged NuGet packages through the isolated feed above and install
    the staged npm tarball into an unrelated frontend; run real terminal sessions
    on every non-Windows RID and confirm the PTY and sidecar native payloads come
    from the matching package.
-4. Publish only the exact verified artifacts. Publish the Shell/NuGet candidate
-   and `@ryn/terminal` as one coordinated release, then verify fresh registry
-   installs resolve those exact versions. Windows validation/publication remains
-   deferred.
+4. Publish only the exact verified artifacts. The release workflow pushes the
+   NuGet packages and attaches the exact `@ryn/terminal` tarball to the same
+   GitHub release; then verify that fresh installs from nuget.org and from that
+   release asset resolve those exact versions. Windows validation/publication
+   remains deferred.
 
 For day-to-day work inside this repository, `packages/terminal` still provides
 `npm install`, `npm run typecheck`, and `npm test`; those source-tree commands do
