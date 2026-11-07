@@ -509,8 +509,9 @@ public sealed class ShellCommandsTests
             GlobalRetentionBytes = 4096,
             MaxReadBytes = 64,
         });
+        // "after" waits for input sent after reattaching, so it can never land before the checkpoint.
         var created = service.Create(
-            "/bin/sh", "[\"-c\",\"printf before; sleep 0.2; printf after\"]", retentionMode: TerminalRetentionMode.Reattachable);
+            "/bin/sh", "[\"-c\",\"printf before; read line; printf after\"]", retentionMode: TerminalRetentionMode.Reattachable);
         var first = service.Attach(created.SessionId, created.AccessToken, 31, "0", 64);
         var before = await service.ReadAsync(created.SessionId, first.AttachmentId, first.Generation, 31, 64, 1000);
         var checkpointOffset = before.EndOffset;
@@ -523,6 +524,8 @@ public sealed class ShellCommandsTests
         var second = service.Attach(created.SessionId, created.AccessToken, 31, checkpointOffset, 64);
         second.Checkpoint.Should().NotBeNull();
         second.Checkpoint!.Offset.Should().Be(checkpointOffset);
+        (await service.WriteAsync(created.SessionId, second.AttachmentId, second.Generation, 31,
+            Convert.ToBase64String("\n"u8))).Ok.Should().BeTrue();
         var tailBytes = new List<byte>();
         var tailOffset = checkpointOffset;
         while (true)

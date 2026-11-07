@@ -206,10 +206,12 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
     public async Task DiscoveryIgnoringCancellationCannotHoldStartupPastDeadline()
     {
         var release = new TaskCompletionSource<SidecarProcessIdentity?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Discovery outlives the deadline, so nothing launches; validation still needs an existing absolute path.
         var manager = CreateManager(Definition("hung-discovery", "exit 99",
             readiness: new SidecarCallbackReadinessProbe(static (_, _) => ValueTask.CompletedTask),
             identity: TokenIdentity(), startupTimeout: TimeSpan.FromMilliseconds(100),
-            externalConnector: new SidecarCallbackExternalConnector((_, _) => new ValueTask<SidecarProcessIdentity?>(release.Task))));
+            externalConnector: new SidecarCallbackExternalConnector((_, _) => new ValueTask<SidecarProcessIdentity?>(release.Task)),
+            executablePath: OperatingSystem.IsWindows() ? WindowsCommandPath : null));
         try
         {
             await Assert.ThrowsAsync<SidecarStartupException>(async () =>
@@ -584,8 +586,7 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
     [WindowsFact]
     public async Task WindowsCrashOwnershipKillsOwnedButExcludesKeepRunningAndExternal()
     {
-        var command = Environment.GetEnvironmentVariable("ComSpec") ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+        var command = WindowsCommandPath;
         var owned = CreateManager(WindowsDefinition("windows-owned", command, keepRunning: false));
         var started = await owned.StartAsync(new SidecarId("windows-owned"));
         GetWindowsLifetime(owned, new SidecarId("windows-owned"))
@@ -723,18 +724,21 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
         var releaseBody = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var headersSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             listener.Start();
-            var serverTask = ServeStalledBodyAsync(listener, releaseBody.Task);
+            var serverTask = ServeStalledBodyAsync(listener, headersSent, releaseBody.Task);
+            // Generous deadline: a cold runner's first request must still reach the stalled body before it expires.
             using var probe = new SidecarAuthenticatedHttpProbe(
                 ListenerUri(listener),
                 "identity",
                 "token",
-                requestTimeout: TimeSpan.FromMilliseconds(150));
+                requestTimeout: TimeSpan.FromSeconds(2));
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                 await probe.VerifyAsync(ProbeContext(), CancellationToken.None));
+            headersSent.Task.IsCompletedSuccessfully.Should().BeTrue("the deadline must expire while the body stalls, after the headers arrived");
             releaseBody.TrySetResult();
             await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
         }
@@ -771,7 +775,7 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
         await stream.WriteAsync(bytes);
     }
 
-    private static async Task ServeStalledBodyAsync(TcpListener listener, Task releaseBody)
+    private static async Task ServeStalledBodyAsync(TcpListener listener, TaskCompletionSource headersSent, Task releaseBody)
     {
         using var client = await listener.AcceptTcpClientAsync();
         await using var stream = client.GetStream();
@@ -781,6 +785,7 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
             "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\n");
         await stream.WriteAsync(headers);
         await stream.FlushAsync();
+        headersSent.TrySetResult();
         await releaseBody;
         try
         {
@@ -935,6 +940,9 @@ public sealed class SidecarLifecycleTests : IAsyncLifetime
     }
 
     private static string ShellPath => File.Exists("/bin/sh") ? "/bin/sh" : "/usr/bin/sh";
+
+    private static string WindowsCommandPath => Environment.GetEnvironmentVariable("ComSpec") ?? Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
 
     private sealed class TestPaths(string root) : IRynPaths
     {
