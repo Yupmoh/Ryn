@@ -376,7 +376,18 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         Saucer.saucer_window_start_drag(_window);
     });
 
-    public void StartResize(WindowEdge edge) => RunOnUi(() => { if (_window != null) Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge); });
+    public void StartResize(WindowEdge edge) => RunOnUi(() =>
+    {
+        if (_window == null) return;
+        if (OperatingSystem.IsLinux())
+        {
+            // saucer's GTK start_resize re-posts itself forever instead of reaching GDK; start it directly.
+            if (_cachedResizable)
+                LinuxWindowResize.Start(GetNativeWindowHandle(), edge);
+            return;
+        }
+        Saucer.saucer_window_start_resize(_window, (saucer_window_edge)edge);
+    });
 
     /// <summary>
     /// Marshals a native window operation onto saucer's UI thread via the application host. Native
