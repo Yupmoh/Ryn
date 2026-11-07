@@ -105,7 +105,7 @@ internal sealed unsafe class NativeAppHost : IDisposable
         Saucer.saucer_application_options_free(appOpts);
         if (_app == null) throw new InvalidOperationException($"Failed to create saucer application (error code: {error})");
         if (cancellationToken.CanBeCanceled)
-            _quitRegistration = cancellationToken.Register(() => { if (_app != null) Saucer.saucer_application_quit(_app); });
+            _quitRegistration = cancellationToken.Register(Quit);
         _selfHandle = NativeCallbackHelper.Alloc(this);
         var exitCode = Saucer.saucer_application_run(_app,
             (delegate* unmanaged[Cdecl]<saucer_application*, void*, void>)&OnReady,
@@ -136,7 +136,7 @@ internal sealed unsafe class NativeAppHost : IDisposable
                 // saucer loop so Run() can return and dispose cleanly, complete any open per-window close TCS so
                 // a WaitForCloseAsync awaiter is released, then rethrow into NativeGuard, which routes the
                 // exception to RynApplication's UnhandledException surface (ARC-01/INT-01/PAP-09).
-                if (self._app != null) Saucer.saucer_application_quit(self._app);
+                self.Quit();
                 self.CompleteAllCloseSignals();
                 throw;
             }
@@ -254,7 +254,7 @@ internal sealed unsafe class NativeAppHost : IDisposable
         if (empty)
         {
             // Last window closed: quit the loop. Its native handles are freed by DisposeNative after Run returns.
-            if (_app != null) Saucer.saucer_application_quit(_app);
+            Quit();
         }
         else
         {
@@ -281,17 +281,26 @@ internal sealed unsafe class NativeAppHost : IDisposable
         var windows = Windows;
         if (windows.Count == 0)
         {
-            if (_app != null) Saucer.saucer_application_quit(_app);
+            Quit();
             return;
         }
         foreach (var window in windows)
             window.CloseNativeWindow();
     });
 
-    /// <summary>Quits the saucer loop. Must be called on the UI thread.</summary>
+    /// <summary>
+    /// Quits the saucer loop. Safe from any thread: saucer marshals the stop onto its UI thread before
+    /// returning. On macOS this also wakes the event loop, because <c>[NSApp stop:]</c> takes effect only after
+    /// AppKit handles another event; without the wake an idle app waits for unrelated input before
+    /// <c>saucer_application_run</c> returns.
+    /// </summary>
     internal void Quit()
     {
-        if (_app != null) Saucer.saucer_application_quit(_app);
+        if (_app == null)
+            return;
+        Saucer.saucer_application_quit(_app);
+        if (OperatingSystem.IsMacOS())
+            MacOsEventLoop.Wake();
     }
 
     /// <summary>
