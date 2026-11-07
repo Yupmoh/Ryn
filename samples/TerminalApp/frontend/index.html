@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*" />
+    <title>Ryn Terminal</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Acknowledged PTY / xterm 6</p>
+          <h1>Ryn Terminal</h1>
+        </div>
+        <div class="actions">
+          <button id="stress" type="button">Stress 2 MiB</button>
+          <button id="checkpoint" type="button">Checkpoint</button>
+          <button id="terminate" class="danger" type="button">Terminate</button>
+        </div>
+      </header>
+      <section class="telemetry" aria-label="Terminal status">
+        <span id="state" data-tone="waiting">Starting</span>
+        <span id="renderer">Renderer: built-in</span>
+        <span id="metrics">Waiting for metrics</span>
+      </section>
+      <section id="terminal" class="terminal-stage" aria-label="Interactive terminal"></section>
+      <footer>
+        <span>Parser-consumed ACKs</span>
+        <span>Finite credit</span>
+        <span>Resize lease</span>
+        <span>Optional WebGL</span>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

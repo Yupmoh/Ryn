@@ -449,6 +449,20 @@ public sealed class PathsService(IRynPaths paths)
 }
 ```
 
+For a terminal UI, register `services.AddRynTerminal()` alongside `AddRynShell`,
+grant the required `terminal` capabilities, and use the first-party
+[`@ryn/terminal` client and xterm adapter](../packages/terminal/README.md).
+The [TerminalApp sample](../samples/TerminalApp) uses this acknowledged transport
+by default: finite decoded-byte credit bounds delivery while the renderer is slow.
+The client ACKs consumer completion, not GPU paint. Its status includes retention,
+credit, pause duration and sampled ACK latency; state callbacks report observed
+pressure transitions. These additions require a matching Shell build; see the
+client guide for current local-package availability.
+
+The following `shell.pty*` commands are the **legacy raw integration API**, not
+the recommended terminal UI path. They preserve their existing push events and
+do not acquire an ACK requirement; custom consumers own their output handling.
+
 > **`shell.pty` platform support.** The PTY commands use ConPTY on Windows (Windows 10 1809+) and a native `ryn-pty` shim on macOS and Linux. Spawn with `shell.pty({ command, argsJson, cols?, rows? })`; output arrives as base64 chunks on `shell.pty.stdout.{sessionId}`, and completion arrives on `shell.pty.exit.{sessionId}`. Use `shell.ptyWrite`, `shell.ptyResize`, `shell.ptySignal`, and `shell.ptyKill` for the live session. PTY children honor `ShellOptions.WorkingDirectory`, `InheritEnvironment`, and `ScrubEnvironmentVariables`. If the native shim is missing, `shell.pty` throws a clear `PlatformNotSupportedException` rather than falling back to an unsafe path.
 
 

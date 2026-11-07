@@ -2,17 +2,15 @@ using Ryn.Core;
 using Ryn.Ipc;
 using Ryn.Plugins.Shell;
 
-#pragma warning disable CA1849
-var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html"));
-#pragma warning restore CA1849
 
-var app = RynApplication.CreateBuilder()
+#pragma warning disable CA2007
+await using var app = RynApplication.CreateBuilder()
     .ConfigureOptions(opts =>
     {
         opts.Title = "Ryn Terminal";
-        opts.Width = 900;
-        opts.Height = 600;
-        opts.Html = html;
+        opts.Width = 1100;
+        opts.Height = 720;
+        opts.ContentDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot");
     })
     .ConfigureServices(services =>
     {
@@ -27,9 +25,9 @@ var app = RynApplication.CreateBuilder()
             var defaultShell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
             shell.AllowedCommands.Add(defaultShell);
         });
+        services.AddRynTerminal();
     })
     .Build();
 
-#pragma warning disable CA2007
 await app.RunAsync();
 #pragma warning restore CA2007

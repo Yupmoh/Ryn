@@ -1,8 +1,11 @@
 {
   "capabilities": {
     "shell": {
-      "allow": ["pty", "ptyWrite", "ptyResize", "ptySignal", "ptyMetrics", "ptyKill"],
+      "allow": [],
       "commands": ["/bin/bash", "cmd.exe"]
+    },
+    "terminal": {
+      "allow": ["create", "attach", "read", "ack", "write", "detach", "terminate", "checkpoint", "claimResize", "resize", "releaseResize", "status"]
     }
   }
 }

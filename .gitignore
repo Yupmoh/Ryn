@@ -13,6 +13,7 @@ out/
 !/packages/terminal/
 /packages/terminal/node_modules/
 /packages/terminal/dist/
+/samples/TerminalApp/frontend/node_modules/
 *.nuget.props
 *.nuget.targets
 

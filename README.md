@@ -381,7 +381,7 @@ Output:
 | [HelloWindow](https://github.com/Yupmoh/Ryn/tree/main/samples/HelloWindow) | Minimal IPC demo | `dotnet run --project samples/HelloWindow` |
 | [Showcase](https://github.com/Yupmoh/Ryn/tree/main/samples/Showcase) | Full-featured demo with all plugins | `dotnet run --project samples/Showcase` |
 | [ViteApp](https://github.com/Yupmoh/Ryn/tree/main/samples/ViteApp) | URL-backed frontend for Vite dev servers | `dotnet run --project samples/ViteApp` |
-| [TerminalApp](https://github.com/Yupmoh/Ryn/tree/main/samples/TerminalApp) | Interactive streaming PTY with resize, signals, metrics, and lifecycle handling | `dotnet run --project samples/TerminalApp` |
+| [TerminalApp](https://github.com/Yupmoh/Ryn/tree/main/samples/TerminalApp) | xterm.js terminal on the acknowledged `terminal.*` API with flow control, resize ownership, checkpoints, and live metrics | `dotnet run --project samples/TerminalApp` |
 | [FileManager](https://github.com/Yupmoh/Ryn/tree/main/samples/FileManager) | File browser with breadcrumb nav and preview | `dotnet run --project samples/FileManager` |
 | [MarkdownEditor](https://github.com/Yupmoh/Ryn/tree/main/samples/MarkdownEditor) | Split-pane editor with live preview and native dialogs | `dotnet run --project samples/MarkdownEditor` |
 | [VueApp](https://github.com/Yupmoh/Ryn/tree/main/samples/VueApp) | Vue 3 + Vite frontend with typed IPC | `dotnet run --project samples/VueApp` |
