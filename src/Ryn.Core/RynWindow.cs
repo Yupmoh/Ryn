@@ -478,6 +478,11 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         // GPU acceleration and engine flags must be set on the options before the webview is created — they
         // configure how the render process is spun up, so there is no after-the-fact equivalent on a live webview.
         Saucer.saucer_webview_options_set_hardware_acceleration(webviewOpts, _options.HardwareAcceleration ? (byte)1 : (byte)0);
+        // Ryn's injected title-bar script owns the data-webview-* contract for every non-Native style. saucer's
+        // built-in attribute script handles the same attributes on mousedown with its own value grammar, so leaving
+        // it enabled makes one press act twice (a maximize button toggles back, resize edges disagree).
+        if (_options.TitleBarStyle is not TitleBarStyle.Native)
+            Saucer.saucer_webview_options_set_attributes(webviewOpts, 0);
         if (_options.BrowserFlags.Count > 0)
         {
             Span<byte> flagBuf = stackalloc byte[256];
