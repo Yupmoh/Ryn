@@ -729,7 +729,7 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
             return r.bottom <= strip * 1.5;
           }
           function edgeFor(v){
-            switch((v||'').toLowerCase()){
+            switch((v||'').toLowerCase().replace(/[-_\s]/g,'')){
               case 'top': return 1; case 'bottom': return 2; case 'left': return 4; case 'right': return 8;
               case 'topleft': return 5; case 'topright': return 9;
               case 'bottomleft': return 6; case 'bottomright': return 10; default: return 10;
