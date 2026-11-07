@@ -1,0 +1,71 @@
+{
+  "name": "@ryn/terminal",
+  "version": "0.1.0-alpha.0",
+  "description": "Framework-neutral Ryn terminal transport and xterm.js adapter",
+  "keywords": [
+    "ryn",
+    "terminal",
+    "pty",
+    "xterm"
+  ],
+  "homepage": "https://github.com/Yupmoh/Ryn#readme",
+  "bugs": "https://github.com/Yupmoh/Ryn/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yupmoh/Ryn.git",
+    "directory": "packages/terminal"
+  },
+  "author": "Moh",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./xterm": {
+      "types": "./src/xterm.d.ts",
+      "import": "./src/xterm.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@xterm/addon-fit": {
+      "optional": true
+    },
+    "@xterm/addon-serialize": {
+      "optional": true
+    },
+    "@xterm/xterm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/xterm": "6.0.0",
+    "typescript": "~5.9.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

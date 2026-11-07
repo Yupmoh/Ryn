@@ -8,6 +8,11 @@ out/
 *.nupkg
 *.snupkg
 **/packages/
+!/packages/
+/packages/*
+!/packages/terminal/
+/packages/terminal/node_modules/
+/packages/terminal/dist/
 *.nuget.props
 *.nuget.targets
 
