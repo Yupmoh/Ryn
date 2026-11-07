@@ -1,23 +1,68 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
+  <PropertyGroup Condition="'$(mobile)' == 'false' or ('$(android)' == 'false' and '$(ios)' == 'false')">
     <TargetFramework>net10.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>RynApp1</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup Condition="'$(mobile)' != 'false' and ('$(android)' != 'false' or '$(ios)' != 'false')">
+    <!-- Multi-target: net10.0 for Desktop, net10.0-android for Android, net10.0-ios for iOS -->
+    <TargetFrameworks>net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>RynApp1</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Desktop Configuration -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <OutputType>WinExe</OutputType>
+  </PropertyGroup>
+
+  <!-- Android Configuration -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <TargetSdkVersion>36</TargetSdkVersion>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+  </PropertyGroup>
+
+  <!-- iOS Configuration -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <!-- Shared Web Content (Desktop) -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-android' and '$(TargetFramework)' != 'net10.0-ios'">
     <Content Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="ryn.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Single Ryn metapackage: pulls in Ryn.Core + Ryn.Interop and, transitively, Ryn.Ipc (which ships
-         the [RynCommand] source generator as an analyzer). The version is substituted from MinVer when
-         Ryn.Templates is packed (see Ryn.Templates.csproj), so it always matches the template's release. -->
+  <!-- Shared Web Content (Android) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+    <AndroidAsset Include="wwwroot/**" />
+    <AndroidAsset Include="ryn.json" />
+  </ItemGroup>
+
+  <!-- Shared Web Content (iOS) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
+    <BundleResource Include="wwwroot/**" />
+    <BundleResource Include="ryn.json" />
+  </ItemGroup>
+
+  <!-- NuGet References -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-android' and '$(TargetFramework)' != 'net10.0-ios'">
     <PackageReference Include="Ryn" Version="RYN_PACKAGE_VERSION" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+    <PackageReference Include="Ryn.Android" Version="RYN_PACKAGE_VERSION" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
+    <PackageReference Include="Ryn.iOS" Version="RYN_PACKAGE_VERSION" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json.schemastore.org/template",
   "author": "Ryn",
-  "classifications": ["Desktop", "Web", "Native"],
+  "classifications": ["Desktop", "Mobile", "Web", "Native", "iOS", "Android"],
   "identity": "Ryn.App",
   "name": "Ryn Application",
   "shortName": "ryn",
@@ -19,6 +19,24 @@
       "defaultValue": "net10.0",
       "replaces": "net10.0"
     },
+    "mobile": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Enable mobile support (Android and iOS)"
+    },
+    "android": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Enable Android mobile support"
+    },
+    "ios": {
+      "type": "parameter",
+      "datatype": "bool",
+      "defaultValue": "true",
+      "description": "Enable iOS mobile support"
+    },
     "skipRestore": {
       "type": "parameter",
       "datatype": "bool",
@@ -26,6 +44,27 @@
       "description": "If specified, skips the automatic restore of the project on create."
     }
   },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!android)",
+          "exclude": [
+            "MainActivity.cs",
+            "AndroidManifest.xml"
+          ]
+        },
+        {
+          "condition": "(!ios)",
+          "exclude": [
+            "IosViewController.cs",
+            "IosAppDelegate.cs",
+            "Info.plist"
+          ]
+        }
+      ]
+    }
+  ],
   "primaryOutputs": [
     { "path": "RynApp1.csproj" }
   ],

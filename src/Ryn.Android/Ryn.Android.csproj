@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <RootNamespace>Ryn.Android</RootNamespace>
+    <Description>Android webview host and activity integration for Ryn</Description>
+    <PackageTags>ryn;android;mobile;webview</PackageTags>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NoWarn>$(NoWarn);CA1416;CA1062;CA1031;CA1308;CA1307;CA2000;IL2026;CS0067</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Ipc\Ryn.Ipc.csproj" />
+  </ItemGroup>
+</Project>

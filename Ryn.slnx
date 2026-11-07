@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/AndroidShowcase/AndroidShowcase.csproj" />
+    <Project Path="samples/IosShowcase/IosShowcase.csproj" />
     <Project Path="samples/HelloWindow/HelloWindow.csproj" />
     <Project Path="samples/MultiWindow/MultiWindow.csproj" />
     <Project Path="samples/Showcase/Showcase.csproj" />
@@ -18,6 +20,8 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Ryn/Ryn.csproj" />
+    <Project Path="src/Ryn.Android/Ryn.Android.csproj" />
+    <Project Path="src/Ryn.iOS/Ryn.iOS.csproj" />
     <Project Path="src/Ryn.Cli/Ryn.Cli.csproj" />
     <Project Path="src/Ryn.Callbacks/Ryn.Callbacks.csproj" />
     <Project Path="src/Ryn.Callbacks.Generator/Ryn.Callbacks.Generator.csproj" />

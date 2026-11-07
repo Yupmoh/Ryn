@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <RootNamespace>IosShowcase</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>$(NoWarn);CA1050;CA1515;CA2000;CA1711;CA1010;CA1422;CS8765;CA1024</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <BundleResource Include="wwwroot/**" />
+    <BundleResource Include="ryn.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc\Ryn.Ipc.csproj" />
+    <ProjectReference Include="..\..\src\Ryn.Ipc.Generator\Ryn.Ipc.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Ryn.iOS\Ryn.iOS.csproj" />
+  </ItemGroup>
+</Project>
