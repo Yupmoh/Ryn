@@ -7,13 +7,11 @@
 # the download (non-zero exit) so an unpinned or tampered artifact is never used. The only
 # override is RYN_ALLOW_UNVERIFIED_NATIVE=1, which downgrades a *missing* pin to a warning.
 #
-# To (re)generate from the authoritative GitHub release archives:
-#   ./build/download-native.sh pin            # all RIDs
-#   ./build/download-native.sh pin osx-x64    # one RID
-# then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}
-# from the latest native-v* release and run  shasum -a 256 <archive>.)
-0543bc90af374d5a21603b3c00f7987af8a40dbca263508128e0d5b69ddc4c98  saucer-bindings-osx-arm64.tar.gz
-30ffcf430878b049580e2e69064c9d4fb9d77c6e49559c0eefbbf7ed0f4d73f0  saucer-bindings-osx-x64.tar.gz
-58f5a0f3277c15880773d1dbeaa2363b12f75f3b8ba1600440ef50fa2ed92791  saucer-bindings-linux-x64.tar.gz
-535c9081b72ffc76ebd3d8d7789ffb5dfd08fa5198d4706f501237f0baa75500  saucer-bindings-linux-arm64.tar.gz
-d8e2f1e011332fc1dafe1d4799698024f51d8621922c6612da18558cfe25846b  saucer-bindings-win-x64.zip
+# To regenerate from the newest complete native-v* GitHub release:
+#   ./build/download-native.sh pin
+# then review and commit. All RIDs are resolved from one release and updated atomically.
+99e2f9f1a6a2307a9206472bc2e0c6854e72d9d0c62b9fc258e28bf618800c67  saucer-bindings-osx-arm64.tar.gz
+6bf77795e58fb95ce26207b6c1f5a9edd65d7e1aaee194ca58778e95ff9d099e  saucer-bindings-osx-x64.tar.gz
+7647b58daf276a9bab4b2f6850dc5b53f996ab98a41f34da5af249ff53bafef4  saucer-bindings-linux-x64.tar.gz
+651b5cba697862840ed31b299821b9da2274bb584c2930b3c821d85339d20da0  saucer-bindings-linux-arm64.tar.gz
+8db73c8f785103b99f017b7ca2595b9319d56c2909b07c88b9eac81c245d3d2f  saucer-bindings-win-x64.zip
