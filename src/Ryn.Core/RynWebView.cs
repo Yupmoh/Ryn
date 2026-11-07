@@ -186,6 +186,10 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     private nint _app;
     private nint _selfHandle;
 
+    // Application host whose UI thread finishes async scheme responses on macOS (CompleteNativeResponse).
+    // Null for a webview built without a host, which completes inline on the calling thread.
+    private readonly NativeAppHost? _host;
+
     /// <summary>
     /// Pending host-initiated JS evals, keyed by id. Each carries a per-eval random nonce that the eval
     /// response must present (constant-time compare) before the result is accepted — so page script that
@@ -254,10 +258,11 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
     /// </summary>
     private int _inFlightResponses;
 
-    internal unsafe RynWebView(saucer_webview* webview, saucer_application* app, TimeSpan? ipcCommandTimeout = null)
+    internal unsafe RynWebView(saucer_webview* webview, saucer_application* app, TimeSpan? ipcCommandTimeout = null, NativeAppHost? host = null)
     {
         _webview = (nint)webview;
         _app = (nint)app;
+        _host = host;
         _ipcCommandTimeout = ipcCommandTimeout ?? TimeSpan.FromSeconds(30);
         _selfHandle = (nint)NativeCallbackHelper.Alloc(this);
 
@@ -892,47 +897,48 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         RynSchemeResponse response = default;
         try
         {
-            response = await Task.Run(() =>
+            ReadOnlyMemory<byte> body;
+            try
             {
-                var canonicalRoot = RynPath.Canonicalize(contentRoot);
-                var canonicalFile = RynPath.Canonicalize(filePath);
-                if (!RynPath.IsContainedIn(canonicalFile, canonicalRoot, RynPath.HostComparison)
-                    || !System.IO.File.Exists(canonicalFile))
-                    return RynSchemeResponse.NotFound();
-
-                var mime = GetMimeType(Path.GetExtension(canonicalFile));
-                if (range is not null)
+                response = await Task.Run(() =>
                 {
-                    var ranged = RynSchemeResponse.FileRange(canonicalFile, range, mime);
-                    if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase) && ranged.Content is not null)
+                    var canonicalRoot = RynPath.Canonicalize(contentRoot);
+                    var canonicalFile = RynPath.Canonicalize(filePath);
+                    if (!RynPath.IsContainedIn(canonicalFile, canonicalRoot, RynPath.HostComparison)
+                        || !System.IO.File.Exists(canonicalFile))
+                        return RynSchemeResponse.NotFound();
+
+                    var mime = GetMimeType(Path.GetExtension(canonicalFile));
+                    if (range is not null)
                     {
-                        ranged.Content.Dispose();
-                        ranged = ranged with { Content = null };
+                        var ranged = RynSchemeResponse.FileRange(canonicalFile, range, mime);
+                        if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase) && ranged.Content is not null)
+                        {
+                            ranged.Content.Dispose();
+                            ranged = ranged with { Content = null };
+                        }
+                        return ranged;
                     }
-                    return ranged;
-                }
 
-                var info = new FileInfo(canonicalFile);
-                if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
-                    return new RynSchemeResponse(200, mime, ReadOnlyMemory<byte>.Empty, null, info.Length,
-                        new Dictionary<string, string> { ["Accept-Ranges"] = "bytes" });
-                return RynSchemeResponse.File(canonicalFile, mime);
-            }).ConfigureAwait(false);
-
-            if (!_disposed)
-                unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, response, origin); }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            if (!_disposed)
-                unsafe { Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED); }
+                    var info = new FileInfo(canonicalFile);
+                    if (string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase))
+                        return new RynSchemeResponse(200, mime, ReadOnlyMemory<byte>.Empty, null, info.Length,
+                            new Dictionary<string, string> { ["Accept-Ranges"] = "bytes" });
+                    return RynSchemeResponse.File(canonicalFile, mime);
+                }).ConfigureAwait(false);
+                body = ReadSchemeBody(response);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                CompleteNativeResponse(executorHandle, RejectFailed);
+                return;
+            }
+            CompleteNativeResponse(executorHandle, executor => AcceptSchemeResponse(executor, response, body, origin));
         }
         finally
         {
             if (response.Content is not null)
                 await response.Content.DisposeAsync().ConfigureAwait(false);
-            if (!_disposed)
-                unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
             EndNativeResponse();
         }
     }
@@ -1046,24 +1052,49 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
 
     private void EndNativeResponse() => Interlocked.Decrement(ref _inFlightResponses);
 
+    /// <summary>
+    /// Finishes an async scheme response begun by <see cref="TryBeginNativeResponse"/>: runs
+    /// <paramref name="complete"/> (accept or reject), then frees the executor copy. Both are skipped once
+    /// disposal began, because the webview that backs the copy may already be freed (INT-03). On macOS the
+    /// native work runs on saucer's UI thread: saucer's WebKit scheme handler holds its task lock while
+    /// WKURLSchemeTask delivers a response, WebKit can then wait synchronously for the main thread, and the main
+    /// thread can be waiting for that same lock to answer another ryn:// request. Completing every response on
+    /// the main thread keeps that lock single-threaded. Other platforms complete inline on the calling thread.
+    /// </summary>
+    private void CompleteNativeResponse(nint executorHandle, Action<nint> complete)
+    {
+        if (OperatingSystem.IsMacOS() && _host is { IsOnUiThread: false } host)
+        {
+            host.RunOnUi(() => CompleteNativeResponseCore(executorHandle, complete));
+            return;
+        }
+        CompleteNativeResponseCore(executorHandle, complete);
+    }
+
+    private unsafe void CompleteNativeResponseCore(nint executorHandle, Action<nint> complete)
+    {
+        if (_disposed)
+            return;
+        try
+        {
+            complete(executorHandle);
+        }
+        finally
+        {
+            Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle);
+        }
+    }
+
+    private static unsafe void RejectFailed(nint executorHandle) =>
+        Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED);
+
     private async Task RespondToCommandAsync(string command, byte[] args, nint executorHandle, string? origin)
     {
         try
         {
             var (ok, data) = await ExecuteCommandAsync(command, args).ConfigureAwait(false);
-            // Skip the native write+free entirely if disposal began while the command ran: the webview that
-            // backs this executor copy may already be freed, so accept/free would be a use-after-free (INT-03).
-            if (!_disposed)
-            {
-                try
-                {
-                    unsafe { WriteCommandResponse((saucer_scheme_executor*)executorHandle, ok, data, origin); }
-                }
-                finally
-                {
-                    unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
-                }
-            }
+            var body = Encoding.UTF8.GetBytes(data);
+            CompleteNativeResponse(executorHandle, executor => WriteCommandResponse(executor, ok, body, origin));
         }
         finally
         {
@@ -1094,9 +1125,9 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         }
     }
 
-    private static unsafe void WriteCommandResponse(saucer_scheme_executor* executor, bool ok, string data, string? origin)
+    private static unsafe void WriteCommandResponse(nint executorHandle, bool ok, byte[] bodyBytes, string? origin)
     {
-        var bodyBytes = Encoding.UTF8.GetBytes(data);
+        var executor = (saucer_scheme_executor*)executorHandle;
         saucer_stash* stash;
         if (bodyBytes.Length > 0)
         {
@@ -1226,69 +1257,72 @@ public sealed class RynWebView : IRynWebView, Internal.ILocalServerHost, IDispos
         try
         {
             RynSchemeResponse rynResponse;
+            ReadOnlyMemory<byte> body;
             try
             {
                 rynResponse = await handler(request).ConfigureAwait(false);
+                // The handler transfers stream ownership to the serving path. If shutdown wins the race
+                // before the body is read, dispose it here rather than relying on the native executor.
+                responseContent = rynResponse.Content;
+                if (_disposed)
+                    return;
+                body = ReadSchemeBody(rynResponse);
+                responseContent = null;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                if (!_disposed)
-                    unsafe { Saucer.saucer_scheme_executor_reject((saucer_scheme_executor*)executorHandle, saucer_scheme_error.SAUCER_SCHEME_ERROR_FAILED); }
+                CompleteNativeResponse(executorHandle, RejectFailed);
                 return;
             }
-
-            // The handler transfers stream ownership to the serving path. If shutdown wins the race
-            // before native accept, dispose it here rather than relying on the native executor.
-            responseContent = rynResponse.Content;
-            if (!_disposed)
-            {
-                unsafe { AcceptSchemeResponse((saucer_scheme_executor*)executorHandle, rynResponse, origin); }
-                responseContent = null;
-            }
+            CompleteNativeResponse(executorHandle, executor => AcceptSchemeResponse(executor, rynResponse, body, origin));
         }
         finally
         {
             if (responseContent is not null)
                 await responseContent.DisposeAsync().ConfigureAwait(false);
-            if (!_disposed)
-                unsafe { Saucer.saucer_scheme_executor_free((saucer_scheme_executor*)executorHandle); }
             EndNativeResponse();
         }
     }
 
-    private static unsafe void AcceptSchemeResponse(saucer_scheme_executor* executor, RynSchemeResponse rynResponse, string? origin)
+    /// <summary>
+    /// Materializes a scheme response body on the calling worker thread, consuming and disposing a streamed
+    /// <see cref="RynSchemeResponse.Content"/>, so the UI thread only builds and accepts the native response.
+    /// </summary>
+    private static ReadOnlyMemory<byte> ReadSchemeBody(RynSchemeResponse rynResponse)
     {
-        saucer_stash* stash;
-        long bodyLength;
-        if (rynResponse.Content is { } content)
+        if (rynResponse.Content is not { } content)
+            return rynResponse.Body;
+
+        using (content)
+        using (var ms = new MemoryStream())
         {
-            using (content)
-            using (var ms = new MemoryStream())
+            var remaining = rynResponse.ContentLength ?? long.MaxValue;
+            var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+            try
             {
-                var remaining = rynResponse.ContentLength ?? long.MaxValue;
-                var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-                try
+                while (remaining > 0)
                 {
-                    while (remaining > 0)
-                    {
-                        var read = content.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-                        if (read == 0) break;
-                        ms.Write(buffer, 0, read);
-                        remaining -= read;
-                    }
+                    var read = content.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                    if (read == 0) break;
+                    ms.Write(buffer, 0, read);
+                    remaining -= read;
                 }
-                finally { ArrayPool<byte>.Shared.Return(buffer); }
-                bodyLength = ms.Length;
-                var bytes = ms.GetBuffer().AsSpan(0, checked((int)bodyLength));
-                fixed (byte* bodyPtr = bytes) stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)bytes.Length);
             }
+            finally { ArrayPool<byte>.Shared.Return(buffer); }
+            return ms.GetBuffer().AsMemory(0, checked((int)ms.Length));
         }
-        else if (rynResponse.Body.Length > 0)
+    }
+
+    private static unsafe void AcceptSchemeResponse(nint executorHandle, RynSchemeResponse rynResponse, ReadOnlyMemory<byte> body, string? origin)
+    {
+        var executor = (saucer_scheme_executor*)executorHandle;
+        saucer_stash* stash;
+        if (body.Length > 0)
         {
-            bodyLength = rynResponse.Body.Length;
-            fixed (byte* bodyPtr = rynResponse.Body.Span) stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)rynResponse.Body.Length);
+            fixed (byte* bodyPtr = body.Span) stash = Saucer.saucer_stash_new_from(bodyPtr, (nuint)body.Length);
         }
-        else { bodyLength = 0; stash = Saucer.saucer_stash_new_empty(); }
+        else { stash = Saucer.saucer_stash_new_empty(); }
+        long bodyLength = body.Length;
         Span<byte> mimeBuf = stackalloc byte[256];
         var mime = Utf8String.Create(rynResponse.ContentType, mimeBuf);
         var response = Saucer.saucer_scheme_response_new(stash, mime.Pointer);

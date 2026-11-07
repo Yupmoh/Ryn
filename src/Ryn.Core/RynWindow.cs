@@ -490,7 +490,7 @@ public sealed unsafe class RynWindow : IRynWindow, IDisposable
         _normalY = iy;
         _normalWidth = _cachedWidth;
         _normalHeight = _cachedHeight;
-        _rynWebView = new RynWebView(_webview, app, _options.IpcCommandTimeout);
+        _rynWebView = new RynWebView(_webview, app, _options.IpcCommandTimeout, _host);
         // Stamp the webview with its owning window so an IPC command dispatched from this window's page routes
         // window.* operations back to THIS window (via the ambient CurrentWindow set in ExecuteCommandAsync).
         _rynWebView.SetOwningWindow(this);
