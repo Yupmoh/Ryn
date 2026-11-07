@@ -417,6 +417,7 @@ use page CSS pixels; Ryn converts them to native coordinates automatically.
 | Dialog | `Ryn.Plugins.Dialog` | `AddRynDialog()` | `dialog.message`, `dialog.confirm`, `dialog.openFile`, `dialog.openFiles`, `dialog.openFolder`, `dialog.save`, plus secure picker commands below |
 | Clipboard | `Ryn.Plugins.Clipboard` | `AddRynClipboard()` | `clipboard.readText`, `clipboard.writeText`, `clipboard.hasText`, `clipboard.clear` |
 | Shell | `Ryn.Plugins.Shell` | `AddRynShell(opts => ...)` | `shell.execute`, `shell.open`, `shell.spawn`, `shell.kill`, `shell.pty`, `shell.ptyWrite`, `shell.ptyResize`, `shell.ptySignal`, `shell.ptyMetrics`, `shell.ptyKill` |
+| Sidecar | `Ryn.Plugins.Sidecar` | `AddRynSidecars(opts => ...)` | Host-only lifecycle API; no renderer commands |
 | Notification | `Ryn.Plugins.Notification` | `AddRynNotification()` | `notification.send`, `notification.sendWithSound`, `notification.sendWithIcon`, `notification.sendWithId`, `notification.isSupported`, `notification.isPermissionGranted`, `notification.requestPermission` |
 | Audio | `Ryn.Plugins.Audio` | `AddRynAudio()` | `audio.play`, `audio.playSystem`, `audio.stop`, `audio.setVolume`, `audio.isPlaying` |
 | Tray | `Ryn.Plugins.Tray` | `AddRynTray(opts => ...)` | `tray.show`, `tray.hide`, `tray.setTooltip`, `tray.setMenu`, `tray.notify` |

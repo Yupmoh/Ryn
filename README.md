@@ -46,7 +46,7 @@ How Ryn compares on the axes that matter for a small, native, web-UI desktop app
 | Renderer | OS webview | OS webview | OS webview | bundled Chromium | OS webview |
 | Hello-world binary | ~5 MB | ~3–10 MB | ~1 MB wrapper¹ | ~100+ MB | tens of MB |
 | NativeAOT | yes | n/a (Rust) | no | no | no |
-| First-party plugins | 12 | many | none | none | n/a |
+| First-party plugins | 13 | many | none | none | n/a |
 | Capability sandbox | yes (deny-by-default) | yes | no | no | no |
 | IPC source generator | yes | n/a | no | no | n/a |
 | Scaffold/dev/bundle CLI | yes | yes | no | partial | dotnet |
@@ -126,6 +126,7 @@ dotnet add package Ryn.Plugins.FileSystem
 dotnet add package Ryn.Plugins.Dialog
 dotnet add package Ryn.Plugins.Clipboard
 dotnet add package Ryn.Plugins.Shell
+dotnet add package Ryn.Plugins.Sidecar
 dotnet add package Ryn.Plugins.Notification
 dotnet add package Ryn.Plugins.Audio
 dotnet add package Ryn.Plugins.Tray

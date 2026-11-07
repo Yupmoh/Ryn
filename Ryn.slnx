@@ -34,6 +34,7 @@
     <Project Path="src/Ryn.Plugins.MenuBar/Ryn.Plugins.MenuBar.csproj" />
     <Project Path="src/Ryn.Plugins.Notification/Ryn.Plugins.Notification.csproj" />
     <Project Path="src/Ryn.Plugins.Shell/Ryn.Plugins.Shell.csproj" />
+    <Project Path="src/Ryn.Plugins.Sidecar/Ryn.Plugins.Sidecar.csproj" />
     <Project Path="src/Ryn.Plugins.Tray/Ryn.Plugins.Tray.csproj" />
     <Project Path="src/Ryn.Plugins.Updater/Ryn.Plugins.Updater.csproj" />
     <Project Path="src/Ryn.Plugins.WebViewPane/Ryn.Plugins.WebViewPane.csproj" />

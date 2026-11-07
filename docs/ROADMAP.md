@@ -140,7 +140,7 @@ third-party participation story is still being shaped, so that part is
 
 ### Desktop integration set (single-instance, autostart, sidecars, runtime scope grants)
 
-Ryn still has no single-instance mechanism, autostart support, or sidecar concept. Runtime filesystem grants are now available for native picker results through the `dialog.openFileSecure`, `dialog.openFilesSecure`, `dialog.openFolderSecure`, and `dialog.saveSecure` commands; grants are scoped to an operation and can be resolved by the host through `IFileAccessGrants`. Browser `FileDrop` remains names-only, so it cannot securely grant native filesystem paths. The remaining desktop integration work spans `Ryn.Core`, the dialog plugin, and the bundler. Status: **Planned**. (tracks CMP-11)
+Ryn still has no single-instance mechanism or autostart support. Managed sidecars are available through the host-only `Ryn.Plugins.Sidecar` plugin (identity-checked readiness, owned versus attached lifecycles, and host-crash cleanup). Runtime filesystem grants are now available for native picker results through the `dialog.openFileSecure`, `dialog.openFilesSecure`, `dialog.openFolderSecure`, and `dialog.saveSecure` commands; grants are scoped to an operation and can be resolved by the host through `IFileAccessGrants`. Browser `FileDrop` remains names-only, so it cannot securely grant native filesystem paths. The remaining desktop integration work spans `Ryn.Core`, the dialog plugin, and the bundler. Status: **Planned**. (tracks CMP-11)
 
 ## Under consideration
 

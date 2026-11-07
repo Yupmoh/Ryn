@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Ryn.Plugins.Sidecar</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Identity-safe managed sidecar lifecycle services with crash-owned native process supervision for Ryn applications</Description>
+    <PackageTags>ryn;plugin;sidecar;process;supervision;native</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ryn.Plugins.Tests" />
+    <ProjectReference Include="..\Ryn.Core\Ryn.Core.csproj" />
+    <ProjectReference Include="..\Ryn.Interop\Ryn.Interop.csproj" />
+  </ItemGroup>
+</Project>

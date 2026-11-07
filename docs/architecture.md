@@ -393,6 +393,129 @@ The dual registration pattern (`AddSingleton<ClipboardPlugin>()` + `AddSingleton
 
 Plugin commands use a dot-separated prefix: `fs.readTextFile`, `clipboard.writeText`, `shell.execute`. The prefix maps to a capability rule in `ryn.json`. The source generator derives command names from method names, and the plugin's command class conventionally uses `[RynCommand("prefix.methodName")]` to set the full qualified name.
 
+### Managed sidecars (unreleased)
+
+`Ryn.Plugins.Sidecar` is host-only: register approved `SidecarDefinition` instances
+with `AddRynSidecars`, then resolve `ISidecarManager` from `app.Services`. It adds
+no renderer command router. Executable paths must be absolute; arguments are
+passed through `ProcessStartInfo.ArgumentList`, not shell interpolation. Identity
+and readiness callbacks are trusted application code and must verify the intended
+service; an open port or a returned PID alone is not authentication.
+
+Await `StartAsync(id)` before using a service. `AttachAsync(id)` authenticates an
+external instance without granting ownership: `StopAsync`, update quiescence and
+ordinary disposal never kill it. Normal plugin disposal stops owned processes
+unless `KeepRunning` is selected. Keep-running configurations need authenticated
+external discovery for later reassociation. In-process terminal sessions do not
+survive host exit, even when a separate managed sidecar does.
+
+For updates, the host must enter quiescence explicitly:
+
+```csharp
+// using Microsoft.Extensions.DependencyInjection;
+// using Ryn.Plugins.Sidecar;
+// using Ryn.Plugins.Updater;
+var sidecars = app.Services.GetRequiredService<ISidecarManager>();
+var updater = app.Services.GetRequiredService<UpdaterService>();
+
+await sidecars.StopForUpdateAsync(cancellationToken);
+await updater.ApplyUpdateAsync(downloadHandle, cancellationToken);
+```
+
+`StopForUpdateAsync()` permanently closes this manager to new `StartAsync` and
+`AttachAsync` calls as soon as quiescence begins, cancels pending restarts, and
+stops every owned instance, including `KeepRunning` instances. Await it before
+replacing any executable or calling the existing updater. A cancelled/failed
+wait does not reopen launches; retry quiescence or abandon the update. Create a
+new host after update rather than reusing the manager. There is no automatic
+updater participant hook or atomic sidecar-payload replacement in this package.
+The application must package RID-specific executables with their licenses,
+signatures and executable permissions and surface external-version mismatches
+without trying to upgrade a process it does not own.
+
+External discovery metadata is checked against the live process start time and
+executable before authentication/readiness and again before publishing ready
+state. Discovery, identity and readiness asynchronous waits share the startup
+deadline. Host callbacks must still honor cancellation and avoid synchronous
+blocking: ending the manager's wait does not abort arbitrary callback code.
+An external process that exits while readiness is being checked is rejected,
+not published as a ready service.
+
+HTTP readiness is restricted to loopback, rejects redirects, bypasses proxies,
+limits identity responses, and applies a deadline through body consumption.
+Diagnostics have bounded lines/history and configured secret redaction. On
+Windows, owned non-keep-running sidecars launch suspended and are assigned to a
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` Job Object before their first instruction
+can run. The child inherits only its null-input and diagnostic pipe handles.
+Closing the host, including an abrupt crash, closes the retained Job Object
+handle and the kernel terminates every process still in that job; explicit stop
+uses the same owned job rather than a PID scan. Keep-running launches and
+external attachments are never put in the job and therefore survive host exit.
+
+On Unix, an owned non-keep-running sidecar runs in a new process group supervised
+by a native watchdog. The watchdog kills that group when the host control pipe
+closes, and cleans up remaining group members when the root process exits.
+This is lifecycle ownership, not a sandbox: a helper that deliberately leaves
+the group with `setsid` or `setpgid` can escape group cleanup. Use trusted helpers
+that do not daemonize; arbitrary detached descendants are not covered. The
+watchdog itself must remain alive to enforce host-crash cleanup. Keep-running
+and external services bypass this watchdog policy.
+
+Unix crash ownership requires the native `libryn-sidecar.dylib` or
+`libryn-sidecar.so` helper from the same source revision. Before release, rebuild
+the authoritative native archives for `osx-arm64`, `osx-x64`, `linux-x64`, and
+`linux-arm64`, include the matching helper, publish those archives, and repin
+their real SHA-256 values in `build/native-checksums.txt`. Then repeat fresh
+package-only runtime checks for every RID. Local helper builds or locally packed
+NuGet files do not satisfy that release gate; Windows uses its existing Job
+Object implementation and has no new helper asset.
+
+To rehearse an independent package-only sidecar consumer before publication,
+pack one checkout into an isolated feed and consume only that feed's package:
+
+```bash
+repo=/absolute/path/to/Ryn
+feed="$(mktemp -d)/ryn-sidecar-feed"
+mkdir -p "$feed"
+version=99.0.0-rc-audit
+
+dotnet pack "$repo/src/Ryn.Interop/Ryn.Interop.csproj" -c Release -o "$feed" -p:MinVerVersionOverride="$version"
+dotnet pack "$repo/src/Ryn.Core/Ryn.Core.csproj" -c Release -o "$feed" -p:MinVerVersionOverride="$version"
+dotnet pack "$repo/src/Ryn.Plugins.Sidecar/Ryn.Plugins.Sidecar.csproj" -c Release -o "$feed" -p:MinVerVersionOverride="$version"
+
+consumer="$(mktemp -d)/ryn-sidecar-consumer"
+dotnet new console -n Host -o "$consumer/Host" -f net10.0
+cat > "$consumer/Host/NuGet.Config" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <config>
+    <add key="globalPackagesFolder" value="$consumer/packages" />
+  </config>
+  <packageSources>
+    <clear />
+    <add key="ryn-local" value="$feed" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+  <packageSourceMapping>
+    <packageSource key="ryn-local"><package pattern="Ryn*" /></packageSource>
+    <packageSource key="nuget.org"><package pattern="Microsoft.*" /></packageSource>
+  </packageSourceMapping>
+</configuration>
+EOF
+(cd "$consumer/Host" && dotnet add package Ryn.Plugins.Sidecar --version "$version")
+```
+
+The source mapping keeps every `Ryn*` dependency on the isolated feed while
+allowing third-party dependencies from NuGet.org. The shared version override
+and isolated package cache prevent stale packages from satisfying the restore.
+The consumer project must contain no Ryn `ProjectReference`. Register a
+host-owned `SidecarDefinition`
+through `AddRynSidecars`, exercise its real identity/readiness protocol, and
+publish/run for one verified RID at a time. A successful local pack does not
+claim that `Ryn.Plugins.Sidecar` is published or that RID payload packaging,
+signatures, update/relaunch, Windows process-tree behavior, or the complete
+supported-platform matrix has passed.
+
 ## 6. Content Serving Modes
 
 `RynOptions` supports four mutually exclusive content sources, evaluated in this priority order in `InitializeNative()`:

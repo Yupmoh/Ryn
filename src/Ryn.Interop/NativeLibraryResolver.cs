@@ -10,6 +10,7 @@ public static class NativeLibraryResolver
     {
         "saucer-bindings",
         "ryn-pty",
+        "ryn-sidecar",
     };
 
     public static void Register()

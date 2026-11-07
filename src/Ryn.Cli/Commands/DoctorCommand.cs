@@ -85,7 +85,7 @@ internal static class DoctorCommand
 
     // Native libraries Ryn loads at runtime. Mirrors NativeLibraryResolver._knownLibraries so the
     // doctor probes exactly the files the resolver will look for.
-    private static readonly string[] KnownNativeLibs = ["saucer-bindings", "ryn-pty"];
+    private static readonly string[] KnownNativeLibs = ["saucer-bindings", "ryn-pty", "ryn-sidecar"];
 
     private static CheckResult CheckNativeLibs()
     {

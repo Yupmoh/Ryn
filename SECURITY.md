@@ -101,6 +101,19 @@ reattachable sessions require a valid consumed-offset checkpoint before older by
 backpressure instead of silently dropping history. These sessions live only inside the running Ryn host and do
 not survive process exit.
 
+## Managed sidecars
+
+`Ryn.Plugins.Sidecar` is host-only and does not register renderer commands. Sidecar definitions must use
+absolute paths to trusted, application-packaged executables; fixed arguments are passed without shell
+interpolation. Identity, external discovery, and readiness callbacks are trusted host code and must
+authenticate the intended service rather than accepting an open port or PID alone.
+
+On macOS and Linux, owned non-keep-running processes depend on the matching RID-specific
+`libryn-sidecar` watchdog shipped transitively by `Ryn.Interop`; it enforces host-crash cleanup but is not
+a sandbox against a deliberately daemonizing child. Before distributing either platform, verify that the
+published `Ryn.Interop` package contains the helper built from the same source revision. Windows uses Job
+Objects and requires no `ryn-sidecar` native asset.
+
 ## IPC transport
 
 - The default transport is the in-process `ryn://` scheme handler — not reachable by other processes.
