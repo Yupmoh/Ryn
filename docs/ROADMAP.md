@@ -156,5 +156,3 @@ exists, and the design (AOT compatibility, asset serving, interop surface, a
 `ryn new --blazor` template, and a sample) is still open. Until it is committed,
 Ryn's frontend story is HTML/CSS/JS with the framework templates above. Status:
 **Under consideration**. (tracks CMP-02)
-</content>
-</invoke>
