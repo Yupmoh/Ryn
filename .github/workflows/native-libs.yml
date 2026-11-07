@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - "vendor/saucer-bindings"
+      - "src/Ryn.Plugins.Shell/native/ryn_pty.c"
+      - "src/Ryn.Plugins.Sidecar/native/ryn_sidecar.c"
       - ".github/workflows/native-libs.yml"
       - "build/saucer-macos13.patch"
       - "build/saucer-windows-icon.patch"
@@ -225,6 +227,43 @@ jobs:
           PTY_SRC="src/Ryn.Plugins.Shell/native/ryn_pty.c"
           PTY_LIB="${{ matrix.lib-prefix }}ryn-pty${{ matrix.lib-ext }}"
           cc -shared -fPIC -O2 ${{ matrix.cc-args }} -lutil -o "staging/$PTY_LIB" "$PTY_SRC"
+
+      - name: Build ryn-sidecar watchdog (Unix only)
+        if: matrix.rid != 'win-x64'
+        shell: bash
+        run: |
+          SIDECAR_SRC="src/Ryn.Plugins.Sidecar/native/ryn_sidecar.c"
+          SIDECAR_LIB="${{ matrix.lib-prefix }}ryn-sidecar${{ matrix.lib-ext }}"
+          cc -shared -fPIC -O2 ${{ matrix.cc-args }} -o "staging/$SIDECAR_LIB" "$SIDECAR_SRC"
+
+      # The C shims are Unix-only. Windows ConPTY resize and Job Object sidecar paths are managed
+      # P/Invokes already implemented in-tree but remain unverified for this candidate.
+      - name: Verify Ryn native entrypoints (Unix only)
+        if: matrix.rid != 'win-x64'
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            list_exports() { nm -gU "$1"; }
+          else
+            list_exports() { nm -D --defined-only "$1"; }
+          fi
+
+          verify_exports() {
+            local library="$1"; shift
+            local symbols; symbols=$(list_exports "$library")
+            local symbol
+            for symbol in "$@"; do
+              if ! printf '%s\n' "$symbols" | grep -Eq "[[:space:]]_?${symbol}$"; then
+                echo "::error::Missing required entrypoint ${symbol} in ${library}"
+                exit 1
+              fi
+            done
+          }
+
+          verify_exports "staging/${{ matrix.lib-prefix }}ryn-pty${{ matrix.lib-ext }}" \
+            ryn_pty_spawn ryn_pty_resize
+          verify_exports "staging/${{ matrix.lib-prefix }}ryn-sidecar${{ matrix.lib-ext }}" \
+            ryn_sidecar_spawn ryn_sidecar_wait
 
       - name: Verify native compatibility (Linux)
         if: runner.os == 'Linux'

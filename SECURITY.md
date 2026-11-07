@@ -162,7 +162,10 @@ updater refuses to download** — there is no unverified-update path.
 ## Native-library integrity
 
 `build/download-native.sh` / `.ps1` verify every downloaded native archive against a pinned SHA-256 in
-`build/native-checksums.txt` before extraction; a mismatch aborts.
+`build/native-checksums.txt` before extraction; a mismatch aborts. On macOS and Linux, the archive consumed
+by `Ryn.Interop` must also contain the matching `libryn-pty` shim and the matching `libryn-sidecar` watchdog.
+Treat those managed/native artifacts as one release unit; a successful managed restore cannot prove the
+required native ABI or exports are present.
 
 ## Reporting a vulnerability
 

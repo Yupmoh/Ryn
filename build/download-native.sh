@@ -8,7 +8,7 @@ set -euo pipefail
 #   ./build/download-native.sh              # download for current platform
 #   ./build/download-native.sh all          # download for all platforms
 #   ./build/download-native.sh osx-x64      # download for specific RID
-#   ./build/download-native.sh pin [rid...] # (re)pin native-checksums.txt from the release archives
+#   ./build/download-native.sh pin          # atomically repin the complete native release
 #
 # Downloads are verified against build/native-checksums.txt and fail CLOSED: a checksum mismatch or a
 # missing pin aborts (non-zero exit). Set RYN_ALLOW_UNVERIFIED_NATIVE=1 to downgrade a *missing* pin to
@@ -114,52 +114,86 @@ verify_checksum() {
     return 0
 }
 
+# Resolve one authoritative native-v* release. Every RID in an `all` or `pin` operation must come
+# from this same release so independent asset-name matches cannot silently assemble a mixed native ABI.
+resolve_native_release() {
+    if [[ -n "${NATIVE_RELEASE_JSON:-}" ]]; then
+        return 0
+    fi
+
+    local auth_hdr releases_json
+    auth_hdr="$(auth_header)"
+    releases_json=$(curl -sS -H "$auth_hdr" -H "Accept: application/vnd.github+json" "$API_BASE/releases?per_page=100" 2>/dev/null) || {
+        echo "    Failed to query GitHub API."
+        return 1
+    }
+    NATIVE_RELEASE_JSON=$(printf '%s' "$releases_json" | python3 -c '
+import json, sys
+required = {
+    "saucer-bindings-osx-arm64.tar.gz",
+    "saucer-bindings-osx-x64.tar.gz",
+    "saucer-bindings-linux-x64.tar.gz",
+    "saucer-bindings-linux-arm64.tar.gz",
+    "saucer-bindings-win-x64.zip",
+}
+releases = []
+for release in json.load(sys.stdin):
+    if not release.get("tag_name", "").startswith("native-v"):
+        continue
+    names = {asset.get("name") for asset in release.get("assets", [])}
+    if required <= names:
+        releases.append(release)
+releases.sort(key=lambda r: r.get("published_at") or r.get("created_at") or "", reverse=True)
+if not releases:
+    sys.exit(1)
+print(json.dumps(releases[0], separators=(",", ":")))
+' 2>/dev/null) || true
+
+    if [[ -z "${NATIVE_RELEASE_JSON:-}" ]]; then
+        echo "    No complete native-v* release found."
+        return 1
+    fi
+    NATIVE_RELEASE_TAG=$(printf '%s' "$NATIVE_RELEASE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+    export NATIVE_RELEASE_JSON NATIVE_RELEASE_TAG
+}
+
 # Download the release asset for a RID into $tmp_file (no checksum verification here).
 # Echoes nothing; returns 0 on success with the file at the caller-provided path.
 fetch_archive() {
     local archive_name="$1" tmp_file="$2"
-    local auth_hdr
+    local auth_hdr asset_url
     auth_hdr="$(auth_header)"
+    resolve_native_release || return 1
 
-    # Query releases via REST API
-    local releases_json
-    releases_json=$(curl -sS -H "$auth_hdr" -H "Accept: application/vnd.github+json" "$API_BASE/releases" 2>/dev/null) || {
-        echo "    Failed to query GitHub API."
-        return 1
-    }
-
-    # Find the asset URL — try all releases, prefer native-v* tagged ones
-    local asset_url=""
-    asset_url=$(echo "$releases_json" | python3 -c "
+    asset_url=$(printf '%s' "$NATIVE_RELEASE_JSON" | python3 -c '
 import json, sys
-releases = json.load(sys.stdin)
-for r in releases:
-    for a in r.get('assets', []):
-        if a['name'] == '$archive_name':
-            print(a['url'])
-            sys.exit(0)
+release, name = json.load(sys.stdin), sys.argv[1]
+for asset in release.get("assets", []):
+    if asset.get("name") == name:
+        print(asset["url"])
+        sys.exit(0)
 sys.exit(1)
-" 2>/dev/null) || true
+' "$archive_name" 2>/dev/null) || true
 
     if [[ -z "$asset_url" ]]; then
-        echo "    No release found containing $archive_name."
+        echo "    $archive_name not found in native release $NATIVE_RELEASE_TAG."
         return 1
     fi
 
-    echo "    Found asset, downloading..."
-
+    echo "    Found in $NATIVE_RELEASE_TAG, downloading..."
     if ! curl -sS -L -H "$auth_hdr" -H "Accept: application/octet-stream" -o "$tmp_file" "$asset_url"; then
         echo "    Download failed."
         return 1
     fi
 }
 
-# Regenerate build/native-checksums.txt from the authoritative GitHub release archives.
-# This is the *only* sanctioned way to (re)pin: it downloads each published archive and records
-# its real SHA-256. Run it once per native-v* release, review the diff, and commit the result.
+# Regenerate build/native-checksums.txt from one complete authoritative native release.
+# Pins are atomic: a missing RID leaves the current file untouched rather than writing a partial set.
 pin_checksums() {
-    local rids=("$@")
-    [[ ${#rids[@]} -eq 0 ]] && rids=("${ALL_RIDS[@]}")
+    if [[ $# -ne 0 ]]; then
+        echo "Pinning individual RIDs is not supported; native ABI pins must be updated as one release set."
+        return 1
+    fi
 
     local tmp_pins="/tmp/native-checksums.new.txt"
     {
@@ -172,21 +206,19 @@ pin_checksums() {
         echo "# the download (non-zero exit) so an unpinned or tampered artifact is never used. The only"
         echo "# override is RYN_ALLOW_UNVERIFIED_NATIVE=1, which downgrades a *missing* pin to a warning."
         echo "#"
-        echo "# To (re)generate from the authoritative GitHub release archives:"
-        echo "#   ./build/download-native.sh pin            # all RIDs"
-        echo "#   ./build/download-native.sh pin osx-x64    # one RID"
-        echo "# then review and commit. (Manual equivalent: download each saucer-bindings-<rid>.{tar.gz,zip}"
-        echo "# from the latest native-v* release and run  shasum -a 256 <archive>.)"
+        echo "# To regenerate from the newest complete native-v* GitHub release:"
+        echo "#   ./build/download-native.sh pin"
+        echo "# then review and commit. All RIDs are resolved from one release and updated atomically."
     } > "$tmp_pins"
 
     local rid ext archive_name tmp_file sum failed=0
-    for rid in "${rids[@]}"; do
+    for rid in "${ALL_RIDS[@]}"; do
         ext="$(archive_ext "$rid")"
         archive_name="saucer-bindings-${rid}${ext}"
         tmp_file="/tmp/$archive_name"
         echo "==> Pinning $archive_name..."
         if ! fetch_archive "$archive_name" "$tmp_file"; then
-            echo "    Could not fetch $archive_name — skipping."
+            echo "    Could not fetch $archive_name."
             failed=1
             continue
         fi
@@ -196,10 +228,15 @@ pin_checksums() {
         echo "    $sum"
     done
 
+    if [[ "$failed" -ne 0 ]]; then
+        rm -f "$tmp_pins"
+        echo "==> Pinning failed; existing $CHECKSUMS_FILE was not changed."
+        return 1
+    fi
+
     mv "$tmp_pins" "$CHECKSUMS_FILE"
     echo ""
-    echo "==> Wrote $CHECKSUMS_FILE. Review the diff and commit."
-    return "$failed"
+    echo "==> Wrote $CHECKSUMS_FILE from $NATIVE_RELEASE_TAG. Review the diff and commit."
 }
 
 download_rid() {
@@ -247,9 +284,14 @@ case "${1:-}" in
         ;;
     all)
         echo "==> Downloading native libraries for all platforms..."
+        failed=0
         for rid in "${ALL_RIDS[@]}"; do
-            download_rid "$rid" || echo "    WARNING: Failed for $rid, skipping."
+            download_rid "$rid" || failed=1
         done
+        if [[ "$failed" -ne 0 ]]; then
+            echo "==> One or more native archives failed; refusing an incomplete mixed-platform set."
+            exit 1
+        fi
         ;;
     "")
         rid="$(detect_rid)"

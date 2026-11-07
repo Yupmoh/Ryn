@@ -1,7 +1,8 @@
-# On a version tag (v*): publishes all packages to NuGet.org, and creates a GitHub release
-# carrying the framework DLLs (managed assemblies + native libs) and the standalone ryn CLI
-# binaries per platform — NOT the .nupkgs (those live on nuget.org).
-# Versions come from the tag via MinVer (e.g. tag v0.1.0-alpha.2 -> 0.1.0-alpha.2).
+# On a version tag (v*): publishes matched NuGet and @ryn/terminal npm packages, then creates a
+# GitHub release carrying the framework DLLs (managed assemblies + native libs), the standalone
+# ryn CLI binaries per platform, and the exact terminal package tarball. NuGet packages live on
+# nuget.org; the terminal package lives on npmjs.com.
+# Versions come from the tag via MinVer/npm version (e.g. v0.1.0-alpha.2 -> 0.1.0-alpha.2).
 #
 # One-time setup (no API-key secret needed — uses NuGet trusted publishing / OIDC):
 #   1. On nuget.org: Account -> Trusted Publishing -> add a GitHub Actions policy with
@@ -9,7 +10,9 @@
 #      (Set a package glob like Ryn.* so new package IDs are covered on first publish.)
 #   2. In this repo: Settings -> Secrets and variables -> Actions -> Variables ->
 #      add NUGET_USER = your nuget.org username.
-#   3. Cut a release:  git tag v0.1.0-alpha.2 && git push origin v0.1.0-alpha.2
+#   3. In this repo: Settings -> Secrets and variables -> Actions -> Secrets ->
+#      add NPM_TOKEN with publish access to the @ryn scope.
+#   4. Cut a release:  git tag v0.1.0-alpha.2 && git push origin v0.1.0-alpha.2
 name: Release
 
 on:
@@ -120,67 +123,45 @@ jobs:
           cache: true
           cache-dependency-path: Directory.Packages.props
 
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: packages/terminal/package-lock.json
+
+      # Derive the JS version from the same pushed tag MinVer uses for managed packages. Prepare and
+      # inspect the tarball before either registry is mutated so Shell and @ryn/terminal cannot drift.
+      - name: Prepare matched terminal package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm ci --prefix packages/terminal
+          npm version "$VERSION" --prefix packages/terminal --no-git-tag-version --allow-same-version
+          npm test --prefix packages/terminal
+          npm run typecheck --prefix packages/terminal
+          mkdir -p npm-package
+          npm pack ./packages/terminal --pack-destination npm-package
+
+          TARBALL=$(find npm-package -maxdepth 1 -name '*.tgz' -print -quit)
+          test -n "$TARBALL"
+          PACKAGE_VERSION=$(tar -xOf "$TARBALL" package/package.json | node -e \
+            'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).version))')
+          test "$PACKAGE_VERSION" = "$VERSION"
+          CONTENTS=$(tar -tzf "$TARBALL")
+          for path in package/src/index.js package/src/index.d.ts package/src/xterm.js package/src/xterm.d.ts; do
+            printf '%s\n' "$CONTENTS" | grep -qx "$path"
+          done
+
+      # Use the same fail-closed downloader used by local/CI builds. It selects the newest complete native-v*
+      # release for the whole RID set, verifies every pinned checksum before extraction, and rejects
+      # incomplete sets instead of mixing matching asset names from different native releases.
       - name: Download native libraries for all platforms
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          RIDS="osx-arm64 osx-x64 linux-x64 linux-arm64 win-x64"
-
-          # Resolve the native-libs release by tag (don't rely on "latest" — version releases are
-          # prereleases too, so GitHub may report no latest). --json/--jq avoids tab-capture bugs.
-          #
-          # TST-05: select the MOST RECENT native-v* release by publish date, not the lexicographic
-          # max of the tag name. Tags carry a random {shortsha} suffix and old releases persist, so
-          # `sort_by(.tagName)|last` could SHIP a stale native lib in the published packages. Sorting
-          # by publishedAt (falling back to createdAt) always picks the newest build.
-          TAG=$(gh release list --repo ${{ github.repository }} --limit 50 --json tagName,createdAt,publishedAt \
-                  --jq 'map(select(.tagName | startswith("native-v"))) | sort_by(.publishedAt // .createdAt) | last.tagName')
-          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
-            echo "FATAL: no native-v* release found"; exit 1
-          fi
-          echo "Using native-libs release: $TAG"
-
-          for RID in $RIDS; do
-            EXT=".tar.gz"
-            if [ "$RID" = "win-x64" ]; then EXT=".zip"; fi
-            ARCHIVE="saucer-bindings-${RID}${EXT}"
-            DEST="src/Ryn.Interop/runtimes/${RID}/native"
-            mkdir -p "$DEST"
-
-            if ! gh release download "$TAG" --repo ${{ github.repository }} --pattern "$ARCHIVE" --dir /tmp --clobber; then
-              echo "FATAL: $ARCHIVE not found in release $TAG"; exit 1
-            fi
-
-            # Supply-chain guard (SUP-01): verify the downloaded archive against its pinned SHA-256
-            # in build/native-checksums.txt BEFORE extracting. Fails CLOSED — a mismatch OR a missing
-            # pin aborts the release so a tampered, corrupt, or unpinned artifact is never shipped.
-            EXPECTED=$(grep -E "[[:space:]]${ARCHIVE}\$" build/native-checksums.txt | grep -v '^#' | awk '{print $1}' | head -n1)
-            if [ -z "$EXPECTED" ]; then
-              echo "FATAL: no pinned checksum for $ARCHIVE in build/native-checksums.txt (fail-closed supply-chain check)"; exit 1
-            fi
-            ACTUAL=$(if command -v sha256sum >/dev/null 2>&1; then sha256sum "/tmp/$ARCHIVE"; else shasum -a 256 "/tmp/$ARCHIVE"; fi | awk '{print $1}')
-            if [ "$ACTUAL" != "$EXPECTED" ]; then
-              echo "FATAL: CHECKSUM MISMATCH for $ARCHIVE — expected $EXPECTED but got $ACTUAL"; exit 1
-            fi
-            echo "Checksum verified for $ARCHIVE ($EXPECTED)"
-
-            if [ "$EXT" = ".zip" ]; then
-              unzip -o "/tmp/$ARCHIVE" -d "$DEST"
-            else
-              tar -xzf "/tmp/$ARCHIVE" -C "$DEST"
-            fi
-            echo "Downloaded native libs for $RID"
-          done
-
-          # Verify all expected files exist
-          for RID in $RIDS; do
-            COUNT=$(find "src/Ryn.Interop/runtimes/${RID}/native" -type f | wc -l)
-            if [ "$COUNT" -eq 0 ]; then
-              echo "FATAL: No native files found for $RID"
-              exit 1
-            fi
-            echo "$RID: $COUNT native file(s)"
-          done
+        run: bash build/download-native.sh all
 
       - name: Restore
         run: dotnet restore
@@ -188,10 +169,12 @@ jobs:
       - name: Build
         run: dotnet build -c Release   # MinVer sets the version from the pushed tag
 
-      # The live PTY unit test loads the Linux shim by bare P/Invoke name. Keep the runtime asset in
-      # its package location and also place it beside the test host before executing the suite.
-      - name: Copy PTY shim to plugin test output
-        run: cp src/Ryn.Interop/runtimes/linux-x64/native/libryn-pty.so tests/Ryn.Plugins.Tests/bin/Release/net10.0/
+      # Live plugin tests load the Linux shims by bare P/Invoke name. Keep runtime assets in their
+      # package location and also place both Unix plugin libraries beside the test host.
+      - name: Copy plugin native libraries to test output
+        run: |
+          cp src/Ryn.Interop/runtimes/linux-x64/native/libryn-pty.so tests/Ryn.Plugins.Tests/bin/Release/net10.0/
+          cp src/Ryn.Interop/runtimes/linux-x64/native/libryn-sidecar.so tests/Ryn.Plugins.Tests/bin/Release/net10.0/
 
       # Unit tests only. Integration tests need per-OS native libs and a copy step (see
       # build.yml's matrix) — that's the integration gate; the single-runner release job
@@ -212,12 +195,14 @@ jobs:
         run: |
           # Required native files per RID. The saucer engine is listed explicitly so a
           # missing-engine regression (which shipped before) fails the release loudly.
+          # Windows Saucer packaging remains supported. ConPTY resize and Job Object sidecars are implemented
+          # but unverified/deferred for this candidate.
           rid_files() {
             case "$1" in
-              osx-arm64) echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
-              osx-x64)   echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib" ;;
-              linux-x64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so" ;;
-              linux-arm64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so" ;;
+              osx-arm64) echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib libryn-sidecar.dylib" ;;
+              osx-x64)   echo "libsaucer.dylib libsaucer-bindings.dylib libsaucer-bindings-desktop.dylib libryn-pty.dylib libryn-sidecar.dylib" ;;
+              linux-x64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so libryn-sidecar.so" ;;
+              linux-arm64) echo "libsaucer.so libsaucer-bindings.so libsaucer-bindings-desktop.so libryn-pty.so libryn-sidecar.so" ;;
               win-x64)   echo "saucer.dll saucer-bindings.dll saucer-bindings-desktop.dll WebView2Loader.dll" ;;
             esac
           }
@@ -286,7 +271,19 @@ jobs:
       - name: Push to NuGet
         run: dotnet nuget push "./nupkg/*.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
-      # The GitHub release carries the DLLs + the CLI (NOT the .nupkgs — those go to nuget.org).
+      # Publish the exact inspected tarball after NuGet succeeds. Both package ecosystems derive their
+      # version from this tag; a JS publish failure fails the release before GitHub assets are created.
+      - name: Push terminal package to npm
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG=latest
+          [[ "$VERSION" == *-* ]] && TAG=next
+          npm publish ./npm-package/*.tgz --access public --tag "$TAG"
+
+      # The GitHub release carries DLLs, the CLI, and the exact terminal npm tarball (not .nupkgs).
       - name: Assemble framework DLLs
         shell: bash
         run: |
@@ -312,11 +309,11 @@ jobs:
           generate_release_notes: true
           # A tag with a prerelease suffix (e.g. v0.1.0-alpha.1) marks the release as a prerelease.
           prerelease: ${{ contains(github.ref_name, '-') }}
-          # DLLs (managed assemblies + native libs) and the standalone CLI binaries. No .nupkgs.
+          # DLLs, native runtimes, CLI binaries, and the exact matched terminal tarball. No .nupkgs.
           files: |
             ./Ryn-*-dlls.zip
             ./cli-bin/ryn-*
-
+            ./npm-package/*.tgz
   # Unlist the internal "plumbing" packages so only Ryn + plugins + CLI + Templates are visible on
   # nuget.org. The Ryn metapackage still restores them by exact version (unlist is not delete).
   # Runs as its own job AFTER publishing so it never delays or risks the release, and is best-effort
@@ -441,6 +438,7 @@ jobs:
             Ryn.Plugins.MenuBar
             Ryn.Plugins.Notification
             Ryn.Plugins.Shell
+            Ryn.Plugins.Sidecar
             Ryn.Plugins.Tray
             Ryn.Plugins.Updater
             Ryn.Plugins.WebViewPane

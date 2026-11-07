@@ -105,6 +105,15 @@ if [[ "$OS" != MINGW* && "$OS" != MSYS* && "$OS" != CYGWIN* && -f "$PTY_SRC" ]];
     echo "   $PTY_LIB"
 fi
 
+# Build the Unix owned-sidecar crash watchdog (separate from PTY semantics and ABI).
+SIDECAR_SRC="$REPO_ROOT/src/Ryn.Plugins.Sidecar/native/ryn_sidecar.c"
+if [[ "$OS" != MINGW* && "$OS" != MSYS* && "$OS" != CYGWIN* && -f "$SIDECAR_SRC" ]]; then
+    echo "==> Building ryn-sidecar watchdog..."
+    SIDECAR_LIB="${LIB_PREFIX}ryn-sidecar${LIB_EXT}"
+    cc -shared -fPIC -O2 -o "$DEST_DIR/$SIDECAR_LIB" "$SIDECAR_SRC"
+    echo "   $SIDECAR_LIB"
+fi
+
 echo ""
 echo "==> Verifying library..."
 if command -v nm &> /dev/null; then

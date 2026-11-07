@@ -12,8 +12,8 @@
          - RID-less build/run (no -r): the host RID ($(NETCoreSdkRuntimeIdentifier)), which is what
            RuntimeInformation.RuntimeIdentifier resolves to at run time on the same machine, so the
            resolver still finds the lib.
-       This covers the saucer engine/bindings AND the ryn-pty shim alike — both live under
-       runtimes/{rid}/native/ — so shell.pty's hard native dependency ships for the target RID. -->
+       This covers every first-party native payload under runtimes/{rid}/native/: the saucer
+       engine/bindings, Unix ryn-pty shim, and Unix ryn-sidecar watchdog. -->
   <PropertyGroup>
     <_RynNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_RynNativeRid>
     <_RynNativeRid Condition="'$(_RynNativeRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_RynNativeRid>
