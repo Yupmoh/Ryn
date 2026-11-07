@@ -39,6 +39,33 @@ public sealed class PluginDependencyInjectionTests : IDisposable
     }
 
     [Fact]
+    public async Task TerminalRegistration_BuildsThroughRealApplicationExtensions()
+    {
+        var builder = RynApplication.CreateBuilder();
+        builder.ConfigureServices(services =>
+        {
+            services.AddRynShell(o => o.AllowedCommands.Add("echo"));
+            services.AddRynTerminal();
+        });
+
+        await using var app = builder.Build();
+
+        app.Services.GetRequiredService<TerminalSessionService>().Should().NotBeNull();
+        app.Services.GetRequiredService<TerminalCommands>().Should().NotBeNull();
+        app.Services.GetServices<ShellExecutionPolicy>().Should().ContainSingle();
+        app.Services.GetServices<IRynPlugin>().Should().ContainSingle(plugin => plugin is ShellPlugin);
+    }
+
+    [Fact]
+    public void TerminalRegistration_RequiresConfiguredShellPolicy()
+    {
+        var services = new ServiceCollection();
+        var register = () => services.AddRynTerminal();
+
+        register.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void TwoContainers_EnforceIndependentFileSystemPolicies()
     {
         // The crux of finding 6: with config on per-app instances instead of a global static, two apps in

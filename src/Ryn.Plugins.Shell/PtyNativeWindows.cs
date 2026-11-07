@@ -108,6 +108,15 @@ internal static class PtyNativeWindows
         IntPtr lpOverlapped);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool PeekNamedPipe(
+        IntPtr hNamedPipe,
+        IntPtr lpBuffer,
+        int nBufferSize,
+        IntPtr lpBytesRead,
+        out int lpTotalBytesAvail,
+        IntPtr lpBytesLeftThisMessage);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -400,6 +409,30 @@ internal static class PtyNativeWindows
 
             return bytesRead;
         }
+    }
+
+    internal static bool WaitReadable(IntPtr handle, int timeoutMilliseconds)
+    {
+        var deadline = Environment.TickCount64 + timeoutMilliseconds;
+        while (true)
+        {
+            if (!PeekNamedPipe(handle, IntPtr.Zero, 0, IntPtr.Zero, out var available, IntPtr.Zero))
+                return true;
+            if (available > 0)
+                return true;
+            if (Environment.TickCount64 >= deadline)
+                return false;
+            Thread.Sleep(10);
+        }
+    }
+
+    internal static int Read(IntPtr handle, byte[] buffer, int count, int timeoutMilliseconds)
+    {
+        if (!WaitReadable(handle, timeoutMilliseconds))
+            return -2;
+        if (!PeekNamedPipe(handle, IntPtr.Zero, 0, IntPtr.Zero, out var available, IntPtr.Zero))
+            return 0;
+        return available > 0 ? Read(handle, buffer, Math.Min(count, available)) : 0;
     }
 
     /// <summary>

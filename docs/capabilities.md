@@ -37,7 +37,7 @@ The file has two independent top-level objects:
 
 Keys are **plugin prefixes** (the part before the dot in a command name). `app` is the
 prefix for your own `[RynCommand("app.*")]` methods; each plugin owns its own prefix
-(`fs`, `shell`, `clipboard`, `dialog`, `notification`, `audio`, `tray`, `menubar`, `badge`, `globalShortcut`, `webviewPane`, `updater`).
+(`fs`, `shell`, `terminal`, `clipboard`, `dialog`, `notification`, `audio`, `tray`, `menubar`, `badge`, `globalShortcut`, `webviewPane`, `updater`).
 
 Each value is one of three forms:
 
@@ -111,6 +111,27 @@ over the legacy binary-only `commands` list.
 - **Never allowlist an interpreter** (`bash`, `sh`, `cmd.exe`, `powershell`) or a flexible
   tool (`env`, `xargs`, `find`, `cat`) — that turns `shell.execute` into arbitrary code
   execution and defeats the sandbox.
+
+## Terminal sessions
+
+The acknowledged terminal transport is opt-in at both registration and capability layers. Register
+`AddRynShell(...)` with a narrow command policy, then `AddRynTerminal()`, and grant only the terminal commands
+the frontend needs:
+
+```json
+"terminal": {
+  "allow": ["create", "attach", "read", "ack", "write", "detach", "terminate", "checkpoint", "claimResize", "resize", "releaseResize", "status"]
+},
+"shell": {
+  "scopedCommands": [ { "name": "my-terminal-program", "args": [] } ]
+}
+```
+
+The `terminal` grant authorizes access to the session protocol; it does not bypass the `ShellOptions` and
+`shell.scopedCommands` executable/argument policy applied at process creation. Session, attachment, and resize
+lease handles are opaque capabilities bound to the host-observed originating window. Never persist or expose
+the create result's access token to unrelated pages. Default retention is memory-only; in-process sessions do
+not survive host process exit.
 
 ## Shell `open`
 

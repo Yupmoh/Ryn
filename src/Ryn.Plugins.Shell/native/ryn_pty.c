@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -12,6 +14,14 @@
 #else
 #include <pty.h>
 #endif
+
+int ryn_pty_resize(int fd, unsigned short rows, unsigned short cols)
+{
+    struct winsize ws = {0};
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    return ioctl(fd, TIOCSWINSZ, &ws);
+}
 
 /*
  * Spawns a child with a PTY. argv/envp/cwd are fully prepared by the parent;
@@ -52,6 +62,16 @@ int ryn_pty_spawn(
     int flags = fcntl(master, F_GETFD, 0);
     if (flags != -1)
         (void)fcntl(master, F_SETFD, flags | FD_CLOEXEC);
+
+    int status_flags = fcntl(master, F_GETFL, 0);
+    if (status_flags == -1 || fcntl(master, F_SETFL, status_flags | O_NONBLOCK) == -1)
+    {
+        int error = errno;
+        kill(pid, SIGKILL);
+        close(master);
+        while (waitpid(pid, NULL, 0) == -1 && errno == EINTR) {}
+        return -error;
+    }
 
     *master_fd = master;
     *child_pid = (int)pid;

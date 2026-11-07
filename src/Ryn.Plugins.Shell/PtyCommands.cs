@@ -19,20 +19,28 @@ public sealed class PtyCommands : IDisposable
     private const int MaxPtyWriteBytes = 8 * 1024 * 1024;
 
     private readonly IRynWebView _webView;
-    private readonly ShellExecutionPolicy _policy;
+    private readonly TerminalSessionService _terminal;
+    private readonly bool _ownsTerminal;
 
-    // Sessions are keyed by a process-monotonic id, not the OS pid. A pid is recyclable: once a child is reaped,
-    // the kernel can hand the same number to an unrelated process, and since this id is also the JS handle and the
-    // event-channel suffix, pid keying would let a stale handle alias a fresh session's channels. The monotonic id
-    // is never reused for the lifetime of the process.
-    private readonly ConcurrentDictionary<long, PtySession> _sessions = new();
+    // Kept local to this legacy facade so public numeric handles and event names remain unchanged. The owned
+    // native session itself comes from TerminalSessionService, which is shared with terminal.*.
+    private readonly ConcurrentDictionary<long, LegacySession> _sessions = new();
     private long _nextSessionId;
 
     public PtyCommands(IRynWebView webView, ShellExecutionPolicy policy)
     {
         ArgumentNullException.ThrowIfNull(policy);
         _webView = webView;
-        _policy = policy;
+        _terminal = new TerminalSessionService(policy, new TerminalOptions());
+        _ownsTerminal = true;
+    }
+
+    public PtyCommands(IRynWebView webView, ShellExecutionPolicy policy, TerminalSessionService terminal)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(terminal);
+        _webView = webView;
+        _terminal = terminal;
     }
 
     [RynCommand("shell.pty")]
@@ -41,109 +49,30 @@ public sealed class PtyCommands : IDisposable
         if (cols <= 0 || rows <= 0 || cols > 500 || rows > 500)
             throw new ArgumentOutOfRangeException(nameof(cols), "PTY dimensions must be between 1 and 500.");
 
-        var parsed = ShellExecutionPolicy.ParseArgs(argsJson);
-        var resolvedCommand = _policy.ValidateInvocation(command, parsed);
-
-        string[] args;
-        if (parsed.Length == 0)
-        {
-            args = [resolvedCommand];
-        }
-        else
-        {
-            args = new string[parsed.Length + 1];
-            args[0] = resolvedCommand;
-            Array.Copy(parsed, 0, args, 1, parsed.Length);
-        }
-
-        var sessionId = Interlocked.Increment(ref _nextSessionId);
-        var sessionIdStr = sessionId.ToString(CultureInfo.InvariantCulture);
-        var environment = _policy.BuildProcessEnvironment();
-
-        PtySession session = OperatingSystem.IsWindows()
-            ? CreateWindowsSession(sessionId, sessionIdStr, resolvedCommand, args, environment, cols, rows)
-            : CreateUnixSession(sessionId, sessionIdStr, resolvedCommand, args, environment, cols, rows);
-
-        _sessions[sessionId] = session;
-
-        var token = session.Cts.Token;
-        _ = Task.Run(() => ReadLoop(session, sessionIdStr, token), CancellationToken.None);
-
-        return sessionId;
-    }
-
-    private PtySessionUnix CreateUnixSession(
-        long sessionId,
-        string sessionIdStr,
-        string resolvedCommand,
-        string[] args,
-        IReadOnlyDictionary<string, string> environment,
-        int cols,
-        int rows)
-    {
-        var masterFd = PtyNative.ForkWithPty(
-            resolvedCommand,
-            args,
-            environment,
-            _policy.Options.WorkingDirectory,
-            (ushort)cols,
-            (ushort)rows,
-            out var childPid);
-
-#pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionUnix, disposed in exit/kill/Dispose
-        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
-        var cts = new CancellationTokenSource();
+#pragma warning disable CA2000 // The shared service read loop becomes the sole native lifetime owner immediately below.
+        var native = _terminal.SpawnNative(command, argsJson, cols, rows);
 #pragma warning restore CA2000
-
-        return new PtySessionUnix(sessionId, childPid, masterFd, stdoutBatcher, cts);
-    }
-
-    private PtySessionWindows CreateWindowsSession(
-        long sessionId,
-        string sessionIdStr,
-        string resolvedCommand,
-        string[] args,
-        IReadOnlyDictionary<string, string> environment,
-        int cols,
-        int rows)
-    {
-        var commandLine = QuoteWindowsCommandLine(resolvedCommand, args);
-        var conPty = PtyNativeWindows.CreateConPty(
-            commandLine,
-            (ushort)cols,
-            (ushort)rows,
-            _policy.Options.WorkingDirectory,
-            environment);
-
-#pragma warning disable CA2000 // Batcher + CTS are owned by PtySessionWindows, disposed in exit/kill/Dispose
-        var stdoutBatcher = new EventBatcher(_webView, $"shell.pty.stdout.{sessionIdStr}");
-        var cts = new CancellationTokenSource();
+        var id = Interlocked.Increment(ref _nextSessionId);
+#pragma warning disable CA2000 // LegacySession owns and disposes the batcher from the read-loop completion path.
+        var legacy = new LegacySession(id, native, new EventBatcher(_webView, $"shell.pty.stdout.{id}"));
 #pragma warning restore CA2000
+        _sessions[id] = legacy;
 
-        return new PtySessionWindows(sessionId, conPty, stdoutBatcher, cts);
+        _terminal.StartLegacyRead(native, bytes => EmitOutput(legacy, bytes), exit => Finish(legacy, exit));
+        return id;
     }
+
 
     [RynCommand("shell.ptyWrite")]
     public bool PtyWrite(long sessionId, string base64Data)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
-
         ArgumentNullException.ThrowIfNull(base64Data);
-
-        // Reject before allocating/decoding: a base64 string of length N decodes to ~3N/4 bytes, so cap the
-        // encoded length too. This bounds both the managed decode buffer and the blocking write that follows.
         if ((long)base64Data.Length / 4 * 3 > MaxPtyWriteBytes)
             return false;
-
         var bytes = Convert.FromBase64String(base64Data);
-        if (bytes.Length > MaxPtyWriteBytes)
-            return false;
-
-        // The per-session transport lock serializes this short native write against the transport close that
-        // the ReadLoop performs when the session ends, so we can never write into a closed (and possibly reused)
-        // fd/handle. Write returns false once the transport is closed.
-        return session.Write(bytes);
+        return bytes.Length <= MaxPtyWriteBytes && session.Native.Write(bytes);
     }
 
     [RynCommand("shell.ptyResize")]
@@ -151,195 +80,117 @@ public sealed class PtyCommands : IDisposable
     {
         if (cols <= 0 || rows <= 0 || cols > 500 || rows > 500)
             return false;
-
-        if (!_sessions.TryGetValue(sessionId, out var session))
-            return false;
-
-        return session.Resize((ushort)cols, (ushort)rows);
+        return _sessions.TryGetValue(sessionId, out var session)
+            && session.Native.Resize((ushort)cols, (ushort)rows);
     }
 
     [RynCommand("shell.ptyMetrics")]
     public string PtyMetrics()
     {
-        var entries = new List<ProcessMetrics>();
-        foreach (var kvp in _sessions)
-        {
-            var s = kvp.Value;
-            entries.Add(new ProcessMetrics(
-                s.ChildPid,
-                s.StdoutBatcher.AddedCount,
-                s.StdoutBatcher.FlushedCount,
-                s.StdoutBatcher.DroppedCount));
-        }
+        var entries = _sessions.Values.Select(session => new ProcessMetrics(
+            session.Native.ChildPid,
+            session.StdoutBatcher.AddedCount,
+            session.StdoutBatcher.FlushedCount,
+            session.StdoutBatcher.DroppedCount)).ToList();
         return JsonSerializer.Serialize(entries, ShellJsonContext.Default.ListProcessMetrics);
     }
 
     [RynCommand("shell.ptySignal")]
-    public bool PtySignal(long sessionId, int signal)
-    {
-        if (!_sessions.TryGetValue(sessionId, out var session))
-            return false;
-
-        return session.Signal(signal);
-    }
+    public bool PtySignal(long sessionId, int signal) =>
+        _sessions.TryGetValue(sessionId, out var session) && session.Native.Signal(signal);
 
     [RynCommand("shell.ptyKill")]
     public bool PtyKill(long sessionId)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
             return false;
-
-        // Kill is fire-and-forget: the ReadLoop owns transport closure after child exit.
-        session.RequestKill();
+        session.Native.RequestKill();
         return true;
     }
 
-    private void ReadLoop(PtySession session, string sessionIdStr, CancellationToken token)
-    {
-        var buf = new byte[4096];
 
+    private static void EmitOutput(LegacySession session, ReadOnlyMemory<byte> bytes)
+    {
+        var chunk = Convert.ToBase64String(bytes.Span);
+        session.StdoutBatcher.Add(JsonSerializer.Serialize(chunk, ShellJsonContext.Default.String));
+    }
+
+    private void Finish(LegacySession session, int exitCode)
+    {
+        _sessions.TryRemove(session.Id, out _);
+        session.StdoutBatcher.FlushNow();
         try
         {
-            while (!token.IsCancellationRequested)
-            {
-                var bytesRead = session.Read(buf);
-                if (bytesRead <= 0)
-                    break; // EOF or error — child exited (or was killed)
-
-                var chunk = Convert.ToBase64String(buf, 0, bytesRead);
-                var json = JsonSerializer.Serialize(chunk, ShellJsonContext.Default.String);
-                session.StdoutBatcher.Add(json);
-            }
+            _webView.EmitEvent($"shell.pty.exit.{session.Id}",
+                exitCode.ToString(CultureInfo.InvariantCulture));
         }
-        catch (OperationCanceledException)
+        catch (Exception exception) when (exception is ObjectDisposedException or InvalidOperationException)
         {
-            // Expected on cancellation
+            // The webview may already be gone during orderly host teardown; the PTY lifetime still completes.
         }
-
-        // The ReadLoop is the sole owner of the transport's lifetime: it is the last code that can call read(),
-        // so it is the only place that may close the fd/handle. Remove from the dictionary first so no new
-        // command resolves this session, then flush, emit exit once, and close the transport.
-        _sessions.TryRemove(session.Id, out _);
-
-        session.StdoutBatcher.FlushNow();
-
-        var exitCode = session.WaitForExit();
-        EmitExitOnce(session, sessionIdStr, exitCode);
-
-        session.CloseTransport();
-        session.DisposeManaged();
-    }
-
-    private void EmitExitOnce(PtySession session, string sessionIdStr, int exitCode)
-    {
-        if (!session.TryClaimExitEmit())
-            return;
-
-        _webView.EmitEvent($"shell.pty.exit.{sessionIdStr}",
-            exitCode.ToString(CultureInfo.InvariantCulture));
-    }
-
-    private static string QuoteWindowsCommandLine(string command, string[] args)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.Append(QuoteWindowsArg(command));
-        for (var i = 1; i < args.Length; i++)
-        {
-            sb.Append(' ');
-            sb.Append(QuoteWindowsArg(args[i]));
-        }
-        return sb.ToString();
-    }
-
-    private static string QuoteWindowsArg(string arg)
-    {
-        if (arg.Length > 0 && !arg.AsSpan().ContainsAny(' ', '\t', '"'))
-            return arg;
-
-        var sb = new System.Text.StringBuilder(arg.Length + 2);
-        sb.Append('"');
-        var backslashes = 0;
-        foreach (var c in arg)
-        {
-            if (c == '\\')
-            {
-                backslashes++;
-            }
-            else if (c == '"')
-            {
-                sb.Append('\\', backslashes * 2 + 1);
-                sb.Append('"');
-                backslashes = 0;
-            }
-            else
-            {
-                sb.Append('\\', backslashes);
-                sb.Append(c);
-                backslashes = 0;
-            }
-        }
-        sb.Append('\\', backslashes * 2);
-        sb.Append('"');
-        return sb.ToString();
+        session.StdoutBatcher.Dispose();
     }
 
     public void Dispose()
     {
-        // Kill every live session. We do not close transports here: each session has a running ReadLoop that
-        // owns its transport and will close it once the kill unblocks its read(). Closing fds from here would
-        // reintroduce the close-vs-read race this design removes.
-        foreach (var kvp in _sessions)
-            kvp.Value.RequestKill();
+        foreach (var session in _sessions.Values)
+            session.Native.RequestKill();
+        if (_ownsTerminal)
+            _terminal.Dispose();
     }
+
+    private sealed record LegacySession(long Id, PtySession Native, EventBatcher StdoutBatcher);
 }
 
 /// <summary>
-/// Base type for a live PTY session. Encapsulates the platform transport (Unix master fd / Windows ConPTY
-/// handles) and the per-session lock that makes the transport's lifetime race-free: writes/resizes take the
-/// lock and short-circuit once the transport is closed, and the owning <c>ReadLoop</c> is the only caller that
-/// closes the transport (after its loop — and therefore the last possible <c>read()</c> — has exited).
+/// Race-free native PTY lifetime. The sole read loop closes the native transport after its final read; writes
+/// and resizes share the transport lock and can never target a recycled descriptor or handle.
 /// </summary>
-internal abstract class PtySession
+internal abstract class PtySession : IDisposable
 {
     private readonly Lock _transportLock = new();
-    private bool _transportClosed;
-    private int _exitEmitted;
+    private readonly Lock _lifecycleLock = new();
+#pragma warning disable CA2213 // The sole read loop disposes this after its final native read.
+    private readonly CancellationTokenSource _cts = new();
+#pragma warning restore CA2213
+    private volatile bool _transportClosed;
+    private bool _killRequested;
+    private int _lifetimeCompleted;
 
-    protected PtySession(long id, EventBatcher stdoutBatcher, CancellationTokenSource cts)
-    {
-        Id = id;
-        StdoutBatcher = stdoutBatcher;
-        Cts = cts;
-    }
+    protected PtySession(long id) => Id = id;
 
-    /// <summary>Process-monotonic id; also the JS handle and the event-channel suffix.</summary>
     public long Id { get; }
-
-    /// <summary>The OS process id of the child (for metrics only — never used as a dictionary key).</summary>
     public abstract int ChildPid { get; }
+    public CancellationToken CancellationToken => _cts.Token;
 
-    public EventBatcher StdoutBatcher { get; }
-    public CancellationTokenSource Cts { get; }
-
-    /// <summary>One-shot guard so the exit event is emitted exactly once across kill and natural-exit paths.</summary>
-    public bool TryClaimExitEmit() => Interlocked.Exchange(ref _exitEmitted, 1) == 0;
-
-    /// <summary>SIGKILLs the child (idempotent) and cancels the read loop. Does NOT close the transport.</summary>
     public void RequestKill()
     {
-        try { Cts.Cancel(); }
-        catch (ObjectDisposedException) { /* loop already finished and disposed the CTS */ }
-
-        KillChild();
+        lock (_lifecycleLock)
+        {
+            if (_transportClosed || _killRequested)
+                return;
+            _killRequested = true;
+            try { _cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+            // Do not wait for _transportLock: a native stdin write can block until killing the child unblocks it.
+            KillChild();
+        }
     }
 
-    /// <summary>Blocking read into <paramref name="buffer"/>. Called only from the owning ReadLoop.</summary>
     public abstract int Read(byte[] buffer);
-
-    /// <summary>Waits for the child to exit and returns its exit code (-1 on failure).</summary>
+    public abstract bool WaitReadable(int timeoutMilliseconds);
+    public abstract int Read(byte[] buffer, int count, int timeoutMilliseconds);
     public abstract int WaitForExit();
-    /// <summary>Sends a platform signal to the child. Windows supports terminate semantics only.</summary>
-    public abstract bool Signal(int signal);
+
+    public bool Signal(int signal)
+    {
+        lock (_lifecycleLock)
+        {
+            if (_transportClosed)
+                return false;
+            return SignalLocked(signal);
+        }
+    }
 
     public bool Write(byte[] bytes)
     {
@@ -360,27 +211,27 @@ internal abstract class PtySession
             return ResizeLocked(cols, rows);
         }
     }
-
-    /// <summary>Closes the platform transport exactly once. Only the owning ReadLoop calls this.</summary>
-    public void CloseTransport()
+    public void CompleteLifetime()
     {
-        lock (_transportLock)
+        if (Interlocked.Exchange(ref _lifetimeCompleted, 1) != 0)
+            return;
+        lock (_lifecycleLock)
         {
-            if (_transportClosed)
-                return;
             _transportClosed = true;
-            CloseTransportLocked();
+            lock (_transportLock)
+                CloseTransportLocked();
         }
+        _cts.Dispose();
     }
 
-    /// <summary>Disposes the managed helpers (CTS, batcher). Transport is closed separately via CloseTransport.</summary>
-    public void DisposeManaged()
+    public void Dispose()
     {
-        StdoutBatcher.Dispose();
-        Cts.Dispose();
+        RequestKill();
+        GC.SuppressFinalize(this);
     }
 
     protected abstract void KillChild();
+    protected abstract bool SignalLocked(int signal);
     protected abstract bool WriteLocked(byte[] bytes);
     protected abstract bool ResizeLocked(ushort cols, ushort rows);
     protected abstract void CloseTransportLocked();
@@ -391,37 +242,48 @@ internal sealed class PtySessionUnix : PtySession
     private readonly int _childPid;
     private readonly int _masterFd;
 
-    internal PtySessionUnix(long id, int childPid, int masterFd, EventBatcher stdoutBatcher, CancellationTokenSource cts)
-        : base(id, stdoutBatcher, cts)
+    internal PtySessionUnix(long id, int childPid, int masterFd)
+        : base(id)
     {
         _childPid = childPid;
         _masterFd = masterFd;
     }
 
     public override int ChildPid => _childPid;
-
     public override int Read(byte[] buffer) => PtyNative.Read(_masterFd, buffer, buffer.Length);
-
+    public override int Read(byte[] buffer, int count, int timeoutMilliseconds) =>
+        PtyNative.Read(_masterFd, buffer, count, timeoutMilliseconds);
+    public override bool WaitReadable(int timeoutMilliseconds) =>
+        PtyNative.WaitReadable(_masterFd, timeoutMilliseconds);
     public override int WaitForExit() => PtyNative.WaitForExit(_childPid);
-
-    protected override void KillChild() => _ = PtyNative.Kill(_childPid, 9); // SIGKILL
-
-    public override bool Signal(int signal) => PtyNative.Kill(_childPid, signal) == 0;
+    protected override void KillChild() => _ = PtyNative.Kill(_childPid, 9);
+    protected override bool SignalLocked(int signal) => PtyNative.Kill(_childPid, signal) == 0;
 
     protected override bool WriteLocked(byte[] bytes)
     {
         var offset = 0;
         while (offset < bytes.Length)
         {
+            if (CancellationToken.IsCancellationRequested) return false;
             var written = PtyNative.Write(_masterFd, bytes, offset, bytes.Length - offset);
-            if (written <= 0) return false;
+            if (written < 0)
+            {
+                var error = Marshal.GetLastPInvokeError();
+                if (error == 4) continue;
+                if (error == (OperatingSystem.IsMacOS() ? 35 : 11))
+                {
+                    PtyNative.WaitWritable(_masterFd, 50);
+                    continue;
+                }
+                return false;
+            }
+            if (written == 0) return false;
             offset += written;
         }
         return true;
     }
 
     protected override bool ResizeLocked(ushort cols, ushort rows) => PtyNative.SetWindowSize(_masterFd, rows, cols);
-
     protected override void CloseTransportLocked() => _ = PtyNative.Close(_masterFd);
 }
 
@@ -429,25 +291,21 @@ internal sealed class PtySessionWindows : PtySession
 {
     private readonly PtyNativeWindows.ConPtySession _conPty;
 
-    internal PtySessionWindows(long id, PtyNativeWindows.ConPtySession conPty, EventBatcher stdoutBatcher, CancellationTokenSource cts)
-        : base(id, stdoutBatcher, cts)
-    {
-        _conPty = conPty;
-    }
+    internal PtySessionWindows(long id, PtyNativeWindows.ConPtySession conPty)
+        : base(id) => _conPty = conPty;
 
     public override int ChildPid => _conPty.ProcessId;
-
     public override int Read(byte[] buffer) => PtyNativeWindows.Read(_conPty.OutputReadHandle, buffer, buffer.Length);
-
+    public override int Read(byte[] buffer, int count, int timeoutMilliseconds) =>
+        PtyNativeWindows.Read(_conPty.OutputReadHandle, buffer, count, timeoutMilliseconds);
+    public override bool WaitReadable(int timeoutMilliseconds) =>
+        PtyNativeWindows.WaitReadable(_conPty.OutputReadHandle, timeoutMilliseconds);
     public override int WaitForExit() => PtyNativeWindows.WaitForExit(_conPty.ProcessHandle);
-
     protected override void KillChild() => PtyNativeWindows.Kill(_conPty.ProcessHandle);
 
-    public override bool Signal(int signal)
+    protected override bool SignalLocked(int signal)
     {
-        if (signal is not (9 or 15))
-            return false;
-
+        if (signal is not (9 or 15)) return false;
         PtyNativeWindows.Kill(_conPty.ProcessHandle);
         return true;
     }
@@ -464,8 +322,8 @@ internal sealed class PtySessionWindows : PtySession
         return true;
     }
 
-    protected override bool ResizeLocked(ushort cols, ushort rows) => PtyNativeWindows.Resize(_conPty.PseudoConsole, cols, rows);
-
+    protected override bool ResizeLocked(ushort cols, ushort rows) =>
+        PtyNativeWindows.Resize(_conPty.PseudoConsole, cols, rows);
     protected override void CloseTransportLocked() => _conPty.Dispose();
 }
 
@@ -475,22 +333,22 @@ internal sealed class PtySessionWindows : PtySession
 /// </summary>
 internal static partial class PtyNative
 {
-    // TIOCSWINSZ differs per platform
-    private static readonly ulong TIOCSWINSZ = OperatingSystem.IsMacOS()
-        ? 0x80087467UL
-        : 0x5414UL; // Linux
+    private const short PollIn = 0x0001;
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct WinSize
+    private struct PollFd
     {
-        public ushort ws_row;
-        public ushort ws_col;
-        public ushort ws_xpixel;
-        public ushort ws_ypixel;
+        public int fd;
+        public short events;
+        public short revents;
     }
+
 
     [DllImport("libc", EntryPoint = "read", SetLastError = true)]
     private static extern nint libc_read(int fd, byte[] buf, nint count);
+
+    [DllImport("libc", EntryPoint = "poll", SetLastError = true)]
+    private static extern int libc_poll(ref PollFd fds, nuint count, int timeoutMilliseconds);
 
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
     private static extern int libc_close(int fd);
@@ -498,8 +356,9 @@ internal static partial class PtyNative
     [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
     private static extern int libc_kill(int pid, int sig);
 
-    [DllImport("libc", EntryPoint = "ioctl", SetLastError = true)]
-    private static extern int libc_ioctl(int fd, ulong request, ref WinSize ws);
+    // ioctl is variadic; its argument ABI differs on Apple Silicon.
+    [DllImport("ryn-pty", EntryPoint = "ryn_pty_resize", SetLastError = true)]
+    private static extern int NativeResize(int fd, ushort rows, ushort cols);
 
     [DllImport("libc", EntryPoint = "waitpid", SetLastError = true)]
     private static extern int libc_waitpid(int pid, out int status, int options);
@@ -588,11 +447,33 @@ internal static partial class PtyNative
             var error = Marshal.GetLastPInvokeError();
             if (error == 4) // EINTR: retry after an interrupted system call.
                 continue;
+            if (error == (OperatingSystem.IsMacOS() ? 35 : 11)) return -2;
             if (error == 5) // EIO: PTY masters report EOF this way after the slave closes.
                 return 0;
             return -1;
         }
     }
+
+    internal static bool WaitReadable(int fd, int timeoutMilliseconds)
+    {
+        var descriptor = new PollFd { fd = fd, events = PollIn };
+        int ready;
+        do
+        {
+            ready = libc_poll(ref descriptor, 1, timeoutMilliseconds);
+        }
+        while (ready < 0 && Marshal.GetLastPInvokeError() == 4);
+        return ready > 0;
+    }
+
+    internal static void WaitWritable(int fd, int timeoutMilliseconds)
+    {
+        var descriptor = new PollFd { fd = fd, events = 0x0004 };
+        _ = libc_poll(ref descriptor, 1, timeoutMilliseconds);
+    }
+
+    internal static int Read(int fd, byte[] buf, int count, int timeoutMilliseconds) =>
+        WaitReadable(fd, timeoutMilliseconds) ? Read(fd, buf, count) : -2;
 
     internal static unsafe int Write(int fd, byte[] buf, int offset, int count)
     {
@@ -617,14 +498,7 @@ internal static partial class PtyNative
 
     internal static bool SetWindowSize(int fd, ushort rows, ushort cols)
     {
-        var ws = new WinSize
-        {
-            ws_row = rows,
-            ws_col = cols,
-            ws_xpixel = 0,
-            ws_ypixel = 0,
-        };
-        return libc_ioctl(fd, TIOCSWINSZ, ref ws) == 0;
+        return NativeResize(fd, rows, cols) == 0;
     }
 
     /// <summary>

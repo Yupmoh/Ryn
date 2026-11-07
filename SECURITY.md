@@ -78,6 +78,29 @@ binary-only `commands` list:
 - `ShellOptions` also offers `WorkingDirectory` and `ScrubEnvironmentVariables` (defaults strip common
   secret markers like `*TOKEN*`, `*SECRET*`, `AWS_*`) so spawned tools can't leak host secrets.
 
+## Terminal sessions
+
+The acknowledged `terminal.*` API is a separate privileged capability from `shell.*`. Register it explicitly
+with `AddRynTerminal()` after configuring `AddRynShell(...)`, and grant a narrow `terminal` allow-list in
+`ryn.json`. Process creation still passes through the shell executable and argv policy; granting `terminal`
+does not authorize an otherwise denied executable.
+
+Session access tokens, attachment IDs/generations, and resize leases are opaque capabilities. The host binds
+each attachment to the originating `IRynWindow.Id`; renderer-supplied window IDs are never accepted. Detaching
+or closing a view revokes its input and resize authority, and stale generations cannot ACK, write, checkpoint,
+or resize a replacement attachment. Terminal output and renderer-produced checkpoint payloads remain
+untrusted data: checkpoints are bounded opaque envelopes and never become terminal input or host commands.
+
+Terminal authority is scoped to the window, not to the document loaded in it. A reload or same-window
+navigation does not revoke existing attachments, so a page that kept an earlier document's session and
+attachment IDs can keep using that session. Load only trusted content into windows whose origins are granted
+`terminal`, and detach or terminate sessions before such a window navigates to anything else.
+
+Output retention is bounded memory only. Streaming sessions evict controller-acknowledged raw bytes;
+reattachable sessions require a valid consumed-offset checkpoint before older bytes can be evicted and apply
+backpressure instead of silently dropping history. These sessions live only inside the running Ryn host and do
+not survive process exit.
+
 ## IPC transport
 
 - The default transport is the in-process `ryn://` scheme handler — not reachable by other processes.

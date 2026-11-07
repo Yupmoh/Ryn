@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Ryn.Core;
 using Ryn.Ipc;
 
@@ -10,21 +11,41 @@ public static class ShellServiceCollectionExtensions
     {
         var options = new ShellOptions();
         configure?.Invoke(options);
-        services.AddSingleton(sp =>
+        services.TryAddSingleton(sp =>
         {
             var caps = sp.GetService<RynCapabilities>();
             if (caps is not null)
                 CapabilityScopeMerger.MergeShellScope(caps, options);
             return options;
         });
-        // Per-application execution policy (allowlist + argument/process rules). Each app's DI container
-        // holds its own, so multiple apps in one process don't share one global shell policy.
-        services.AddSingleton<ShellExecutionPolicy>();
+        services.TryAddSingleton<ShellExecutionPolicy>();
         services.AddSingleton<ShellPlugin>();
-        services.AddSingleton<IRynPlugin>(sp => sp.GetRequiredService<ShellPlugin>());
-        services.AddShellCommands(); // generated
-        services.AddSpawnCommands(); // generated
-        services.AddPtyCommands(); // generated
+        services.AddSingleton<IRynPlugin>(provider => provider.GetRequiredService<ShellPlugin>());
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(ShellCommands)))
+            services.AddShellCommands();
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(SpawnCommands)))
+            services.AddSpawnCommands();
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(PtyCommands)))
+            services.AddPtyCommands();
+        return services;
+    }
+
+    /// <summary>
+    /// Adds the acknowledged <c>terminal.*</c> transport. Call <see cref="AddRynShell"/> first to configure
+    /// the executable allowlist, and explicitly grant the <c>terminal</c> capability in <c>ryn.json</c>.
+    /// </summary>
+    public static IServiceCollection AddRynTerminal(
+        this IServiceCollection services,
+        Action<TerminalOptions>? configure = null)
+    {
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(ShellExecutionPolicy)))
+            throw new InvalidOperationException("Call AddRynShell before AddRynTerminal so terminal sessions use the configured shell policy.");
+        var options = new TerminalOptions();
+        configure?.Invoke(options);
+        services.TryAddSingleton(options);
+        services.TryAddSingleton<TerminalSessionService>();
+        if (!services.Any(descriptor => descriptor.ServiceType == typeof(TerminalCommands)))
+            services.AddTerminalCommands();
         return services;
     }
 }
